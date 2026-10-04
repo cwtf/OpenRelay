@@ -1,4 +1,5 @@
 import type {
+  Community,
   CommentNode,
   PostDetail,
   PostMedia,
@@ -160,6 +161,27 @@ export function normalizeComments(children: Raw[] = []): {
       }),
   };
 }
+/** Normalize a `t5` subreddit from a subscription listing; skips user profiles. */
+export function normalizeCommunity(s: Raw): Community | null {
+  const name = String(s?.display_name ?? "");
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/.test(name) ||
+    s.subreddit_type === "user" ||
+    name.startsWith("u_")
+  )
+    return null;
+  const icon = safeUrl(s.community_icon) || safeUrl(s.icon_img);
+  const color = [s.primary_color, s.key_color].find(
+    (value) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value),
+  );
+  return {
+    name,
+    ...(icon ? { icon } : {}),
+    ...(color ? { color } : {}),
+    ...(typeof s.subscribers === "number" ? { subscribers: s.subscribers } : {}),
+    nsfw: Boolean(s.over18),
+  };
+}
 export type PageRoute = {
   sub: string;
   sort: FeedSort;
@@ -225,7 +247,7 @@ export function allowedJsonPath(path: unknown): path is string {
     return false;
   const url = new URL(path, "https://www.reddit.com");
   if (url.origin !== "https://www.reddit.com") return false;
-  return /^\/(?:r\/[\w+]+\/)?(?:(?:hot|best|new|top|rising|controversial|search|about)\.json|comments\/[a-z0-9]+\.json)$/i.test(
+  return /^\/(?:(?:r\/[\w+]+\/)?(?:(?:hot|best|new|top|rising|controversial|search|about)\.json|comments\/[a-z0-9]+\.json)|subreddits\/mine\/subscriber\.json)$/i.test(
     url.pathname,
   );
 }

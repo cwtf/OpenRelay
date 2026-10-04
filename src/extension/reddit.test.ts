@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   allowedJsonPath,
+  normalizeCommunity,
   normalizePost,
   normalizeComments,
   parseRoute,
@@ -38,6 +39,7 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/r/test/new.json?after=t3_abc",
     "/comments/abc.json?comment=def",
     "/r/test/about.json",
+    "/subreddits/mine/subscriber.json?limit=100&after=t5_abc",
   ])
     assert.ok(allowedJsonPath(path), path);
   for (const path of [
@@ -48,6 +50,8 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/r/test/../../api/me.json",
     "/\\evil.test/hot.json",
     "/r/%2f/api.json",
+    "/subreddits/mine/moderator.json",
+    "/r/test/subreddits/mine/subscriber.json",
   ])
     assert.equal(allowedJsonPath(path), false, path);
 });
@@ -122,4 +126,37 @@ test("preserves nested comments and missing-reply markers", () => {
   assert.equal(result.more, true);
   assert.equal(result.comments[0]!.moreReplies, true);
   assert.equal(result.comments[0]!.replies[0]!.parentId, "t1_c1");
+});
+test("normalizes subscribed communities and skips user profiles", () => {
+  assert.deepEqual(
+    normalizeCommunity({
+      display_name: "typescript",
+      community_icon: "https://styles.redditmedia.com/t5_1/icon.png?width=256&amp;s=x",
+      icon_img: "",
+      primary_color: "#0079d3",
+      subscribers: 1234,
+      over18: false,
+    }),
+    {
+      name: "typescript",
+      icon: "https://styles.redditmedia.com/t5_1/icon.png?width=256&s=x",
+      color: "#0079d3",
+      subscribers: 1234,
+      nsfw: false,
+    },
+  );
+  assert.deepEqual(
+    normalizeCommunity({
+      display_name: "pics",
+      community_icon: "javascript:alert(1)",
+      key_color: "red",
+      over18: true,
+    }),
+    { name: "pics", nsfw: true },
+  );
+  assert.equal(
+    normalizeCommunity({ display_name: "u_someone", subreddit_type: "user" }),
+    null,
+  );
+  assert.equal(normalizeCommunity({ display_name: "../api" }), null);
 });

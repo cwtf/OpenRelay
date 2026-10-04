@@ -55,9 +55,13 @@ const PATHS = {
   collapse: 'M7 9l5-5 5 5M7 15l5 5 5-5',
   op: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20a7.5 7.5 0 0 1 15 0M17 4l2 2 3-3',
   thread: 'M6 4v8a4 4 0 0 0 4 4h8M14 12l4 4-4 4',
+  star: 'M12 3.6l2.6 5.2 5.8.9-4.2 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7-4.2-4.1 5.8-.9z',
+  starFilled: 'M12 3.6l2.6 5.2 5.8.9-4.2 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7-4.2-4.1 5.8-.9z',
+  globe:
+    'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3.5 9h17M3.5 15h17M12 3c-2.5 2.6-3.6 5.6-3.6 9s1.1 6.4 3.6 9M12 3c2.5 2.6 3.6 5.6 3.6 9s-1.1 6.4-3.6 9',
 } as const;
 
-const FILLED = new Set<IconName>(['play']);
+const FILLED = new Set<IconName>(['play', 'starFilled']);
 const DOTS = new Set<IconName>(['more']);
 
 export type IconName = keyof typeof PATHS;

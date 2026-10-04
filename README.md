@@ -20,7 +20,8 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - Initially reads posts already present in the loaded page; supports current Reddit's `shreddit-post` and old Reddit's post markup.
 - Direct post and search URLs, feed sorting and time ranges, search and pagination through Reddit's same-origin JSON endpoints.
 - Post Markdown, nested comments, collapse, comment search/navigation, and additional replies where Reddit returns them.
-- OpenRelay image/gallery/video presentation, NSFW/spoiler blur, local read/hidden markers, and settings.
+- OpenRelay image/gallery/video presentation, NSFW/spoiler blur, local read/hidden markers, and settings. Settings changes save automatically and apply to every open Reddit tab.
+- Your subscribed communities load automatically into the drawer, alphabetically, in a Relay-style list: round community icons, collapsible Feeds / Favourites / Recent / Subscriptions sections, a star to pin favourites, a re-sync button, and a search pill that filters the list or opens a typed community. The list is kept for 30 minutes between syncs.
 - Cards, Compact and List layouts; Auto, Light, Dark and Black themes.
 - One-click restoration of Reddit's original page. Unsupported pages (settings, login, profiles, messages, moderation) stay native. Recognized challenge screens stay native too.
 
@@ -32,7 +33,7 @@ If the control is absent, disabled, inaccessible, or does not change state, an e
 
 A Manifest V3 content script runs only on the three Reddit hosts above. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and validated single-click vote forwarding for a specific post/comment ID. Page-origin messages cannot invoke these operations.
 
-No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. Requests use the Reddit tab's normal same-origin session. Nothing is sent to an OpenRelay server. Preferences and read/hidden markers are kept in the reader's local storage.
+No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. Requests use the Reddit tab's normal same-origin session; the subscription list comes from Reddit's read-only `/subreddits/mine/subscriber.json` and needs you to be signed in to Reddit. Nothing is sent to an OpenRelay server. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
 
 Chrome's content-script model is documented at:
 [Content scripts — Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts).
@@ -54,7 +55,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 23 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 27 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -66,7 +67,9 @@ Set `PLAYWRIGHT_MODULE` to a Playwright module URL or `CHROMIUM_PATH` to an inst
 
 Vote tests additionally cover initial selection, undo/switch, rapid-click suppression, exact nested-comment ownership, disabled/missing controls, unconfirmed changes, delayed rollbacks, and rejection of page-origin spoofed messages. All vote tests use instrumented fixtures; they cast no votes on Reddit.
 
-Validated: injection, loaded-page feeds, nested comments, direct posts, layouts, themes, toolbar restore/reopen, excluded pages, JSON-denied fallback. A live public Reddit check reached Reddit's humanity challenge, so live signed-in behavior has not been verified.
+The browser test profile blocks third-party cookies, to check that settings and favourites survive a reload.
+
+Validated: injection, loaded-page feeds, settings persistence, the subscriptions drawer, nested comments, direct posts, layouts, themes, toolbar restore/reopen, excluded pages, JSON-denied fallback. A live public Reddit check reached Reddit's humanity challenge, so live signed-in behavior has not been verified.
 
 ## Source layout
 

@@ -25,7 +25,15 @@ window.addEventListener("message", (event) => {
   if (!task) return;
   pending.delete(event.data.id);
   clearTimeout(task.timer);
-  if (event.data.error) task.reject(new Error(String(event.data.error)));
+  // The reader loads straight from disk, but Chrome keeps the old page script
+  // until the extension is reloaded, so newer requests are rejected.
+  if (event.data.error === "Unsupported request")
+    task.reject(
+      new Error(
+        "OpenRelay was updated. Reload it in chrome://extensions, then refresh this Reddit tab.",
+      ),
+    );
+  else if (event.data.error) task.reject(new Error(String(event.data.error)));
   else task.resolve(event.data.value);
 });
 export function bridge<T>(

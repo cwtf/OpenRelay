@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const { chromium } = await import(
@@ -7,8 +7,18 @@ const { chromium } = await import(
 );
 const out = resolve("test-results");
 await mkdir(out, { recursive: true });
+const profile = await mkdtemp(resolve(out, "browser-profile-"));
+// Block third-party cookies: Chrome then denies localStorage to the reader's
+// extension frame, so settings must persist through chrome.storage.
+await mkdir(resolve(profile, "Default"));
+await writeFile(
+  resolve(profile, "Default/Preferences"),
+  JSON.stringify({
+    profile: { cookie_controls_mode: 1, block_third_party_cookies: true },
+  }),
+);
 const context = await chromium.launchPersistentContext(
-  await mkdtemp(resolve(out, "browser-profile-")),
+  profile,
   {
     channel: "chromium",
     headless: true,
@@ -92,7 +102,24 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         contentType: "application/json",
         body: "{}",
       });
-    const body = url.pathname.includes("/comments/")
+    const body = url.pathname === "/subreddits/mine/subscriber.json"
+      ? {
+          data: {
+            after: null,
+            children: [
+              { kind: "t5", data: { display_name: "zebra", over18: false } },
+              {
+                kind: "t5",
+                data: { display_name: "Apple", primary_color: "#336699" },
+              },
+              {
+                kind: "t5",
+                data: { display_name: "u_someone", subreddit_type: "user" },
+              },
+            ],
+          },
+        }
+      : url.pathname.includes("/comments/")
       ? [
           { data: { children: [{ kind: "t3", data: post }] } },
           { data: { children: [comment] } },
@@ -162,6 +189,38 @@ try {
   await page.screenshot({ path: resolve(out, "settings.png") });
   await app.locator("body").press("Escape");
   await app.locator(".has-sheet").waitFor({ state: "detached" });
+  // Subscriptions load automatically, alphabetically, without user profiles.
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.locator(".sub-row-main", { hasText: "zebra" }).waitFor();
+  assert.deepEqual(
+    await app
+      .locator(".sub-row-main .label")
+      .evaluateAll((els) => els.map((el) => el.textContent)),
+    ["Home", "Popular", "All", "Apple", "zebra"],
+  );
+  await app.getByRole("button", { name: "Add r/zebra to Favourites" }).click();
+  await app.getByRole("button", { name: "Collapse Favourites" }).waitFor();
+  await page.screenshot({ path: resolve(out, "drawer.png") });
+  await app.getByLabel("Search or go to a community").fill("zeb");
+  assert.deepEqual(
+    await app
+      .locator(".sub-row-main .label")
+      .evaluateAll((els) => els.map((el) => el.textContent)),
+    ["Go to r/zeb", "zebra"],
+  );
+  await page.screenshot({ path: resolve(out, "drawer-search.png") });
+  await app.getByLabel("Search or go to a community").press("Escape");
+  await app.locator("body").press("Escape");
+  await app.locator(".has-drawer").waitFor({ state: "detached" });
+  // Settings and favourites survive a reload with third-party storage blocked.
+  await page.reload();
+  app = await reader();
+  assert.equal(await app.locator("html").getAttribute("data-theme"), "dark");
+  assert.ok(await app.locator('.feed[data-layout="compact"]').count());
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.getByRole("button", { name: "Remove r/zebra from Favourites" }).first().waitFor();
+  await app.locator("body").press("Escape");
+  await app.locator(".has-drawer").waitFor({ state: "detached" });
   // Toggle through the real service worker, as a toolbar click does.
   const worker =
     context.serviceWorkers()[0] ||
@@ -203,7 +262,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, settings persistence with third-party storage blocked, subscriptions drawer, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

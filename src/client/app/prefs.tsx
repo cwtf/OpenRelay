@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { DEFAULT_PREFS, type Prefs } from '../../shared/api';
 import { savePrefsRemote } from '../lib/api';
-import { readJson, writeJson } from '../lib/storage';
+import { readJson, watchKey, writeJson } from '../lib/storage';
 
 type PrefsContextValue = {
   prefs: Prefs;
@@ -54,6 +54,15 @@ export const PrefsProvider = ({
 }) => {
   const [prefs, setPrefs] = useState<Prefs>(loadCachedPrefs);
   const syncTimer = useRef<number | undefined>(undefined);
+
+  // Follow changes saved from other Reddit tabs.
+  useEffect(
+    () =>
+      watchKey('prefs', (value) =>
+        setPrefs({ ...DEFAULT_PREFS, ...(value as Partial<Prefs>) })
+      ),
+    []
+  );
 
   useEffect(() => {
     applyPrefsToDocument(prefs);

@@ -243,7 +243,7 @@ export const SettingsSheet = ({
           >
             {synced
               ? "Settings sync to your Reddit account across devices."
-              : "Settings are saved on this device."}
+              : "Changes are saved automatically in this browser."}
           </p>
         </>
       )}

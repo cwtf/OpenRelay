@@ -2,6 +2,7 @@ import type {
   AboutResponse,
   CommentNode,
   CommentSort,
+  Community,
   FeedResponse,
   FeedSort,
   InitResponse,
@@ -13,6 +14,7 @@ import type {
 } from "../../shared/api";
 import { bridge, pageUrl } from "../../extension/bridge";
 import {
+  normalizeCommunity,
   normalizeComments,
   normalizePost,
   parseRoute,
@@ -232,5 +234,28 @@ export async function fetchAbout(sub: string): Promise<AboutResponse> {
       nsfw: Boolean(d.over18),
     },
   };
+}
+/** Every community the signed-in viewer subscribes to, alphabetically. */
+export async function fetchSubscriptions(): Promise<Community[]> {
+  const found = new Map<string, Community>();
+  let after: string | null = null;
+  // Reddit pages at 100; stop at 1,000 communities.
+  for (let page = 0; page < 10; page++) {
+    const data = await json(
+      "/subreddits/mine/subscriber.json" + query({ limit: 100, after }),
+    );
+    const children = data?.data?.children;
+    if (!Array.isArray(children))
+      throw new ApiFailure("Reddit did not return your subscriptions.");
+    for (const child of children) {
+      const community = child?.kind === "t5" && normalizeCommunity(child.data);
+      if (community) found.set(community.name.toLowerCase(), community);
+    }
+    after = typeof data.data.after === "string" ? data.data.after : null;
+    if (!after) break;
+  }
+  return [...found.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
 }
 export const savePrefsRemote = async (prefs: Prefs) => ({ prefs });

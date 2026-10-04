@@ -24,6 +24,7 @@ import { resolveLink } from "../lib/links";
 import { openUrl } from "../lib/platform";
 import { installRipple } from "../lib/ripple";
 import { recentCommunities } from "../lib/storage";
+import { ensureSubscriptions } from "../lib/subscriptions";
 import { FeedScreen } from "../screens/FeedScreen";
 import { PostScreen } from "../screens/PostScreen";
 import { SearchScreen } from "../screens/SearchScreen";
@@ -178,6 +179,9 @@ const Reader = ({ init }: { init: InitResponse }) => {
   }, [init.prefs, hydrate]);
 
   useEffect(() => installRipple(), []);
+
+  // Load the viewer's subscribed communities in the background for the drawer.
+  useEffect(() => ensureSubscriptions(), []);
 
   useEffect(() => {
     const onToast = (event: Event) => {

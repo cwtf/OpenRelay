@@ -138,6 +138,17 @@ export type SubredditAbout = {
   createdAt?: number;
 };
 
+/** A community the signed-in viewer subscribes to. */
+export type Community = {
+  name: string;
+  /** Community icon, when Reddit provides one. */
+  icon?: string;
+  /** Community key colour (hex), used behind the letter fallback. */
+  color?: string;
+  subscribers?: number;
+  nsfw: boolean;
+};
+
 export type Prefs = {
   theme: "system" | "dark" | "black" | "light";
   layout: "cards" | "compact" | "list";
