@@ -1,6 +1,6 @@
-import { memo, useState, type CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
 import type { CommentNode } from '../../shared/api';
-import { age, compact, fullDate } from '../lib/format';
+import { age, fullDate } from '../lib/format';
 import { useLongPress } from '../lib/gestures';
 import { Markdown } from '../lib/markdown';
 import { Icon } from './Icon';
@@ -46,14 +46,8 @@ export const CommentRow = memo(
     onActions,
   }: CommentRowProps) => {
     const press = useLongPress(() => onActions(node));
-    // Only a comment that is being re-expanded cross-fades its body in;
-    // rows rendered on first load appear without animation.
-    const [wasCollapsed, setWasCollapsed] = useState(collapsed);
-    const [expanding, setExpanding] = useState(false);
-    if (wasCollapsed !== collapsed) {
-      setWasCollapsed(collapsed);
-      setExpanding(!collapsed);
-    }
+    // Like Relay, collapsing hides only the replies; the comment stays whole.
+    const collapsible = node.replies.length > 0 || node.moreReplies;
     const d = visualDepth(depth);
     const style = {
       '--depth': d,
@@ -78,18 +72,22 @@ export const CommentRow = memo(
         data-anim-key={node.id}
         style={style}
         role="article"
-        aria-expanded={!collapsed}
-        aria-label={`Comment by ${node.author}${collapsed ? ', collapsed' : ''}`}
+        aria-expanded={collapsible ? !collapsed : undefined}
+        aria-label={`Comment by ${node.author}${collapsed ? ', replies collapsed' : ''}`}
         tabIndex={0}
         onClick={(event) => {
           if (press.consumeClick()) return;
           if ((event.target as Element).closest('a, button, .md-spoiler'))
             return;
           if (window.getSelection()?.toString()) return;
-          onToggle(node.id);
+          if (collapsible) onToggle(node.id);
         }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && event.target === event.currentTarget)
+          if (
+            event.key === 'Enter' &&
+            event.target === event.currentTarget &&
+            collapsible
+          )
             onToggle(node.id);
         }}
         {...press.handlers}
@@ -112,23 +110,15 @@ export const CommentRow = memo(
           {node.distinguished === 'moderator' ? (
             <span className="badge mod">MOD</span>
           ) : null}
-          {node.authorFlair && !collapsed ? (
-            <FlairChip flair={node.authorFlair} />
-          ) : null}
-          {collapsed ? (
-            <span className="score" title={`${node.score} points`}>
-              {compact(node.score)}
-            </span>
-          ) : (
-            <VoteLinks
-              thingId={node.id}
-              permalink={node.permalink}
-              score={node.score}
-              vote={node.vote}
-              kind="comment"
-              variant="inline"
-            />
-          )}
+          {node.authorFlair ? <FlairChip flair={node.authorFlair} /> : null}
+          <VoteLinks
+            thingId={node.id}
+            permalink={node.permalink}
+            score={node.score}
+            vote={node.vote}
+            kind="comment"
+            variant="inline"
+          />
           <time
             dateTime={new Date(node.createdAt).toISOString()}
             title={fullDate(node.createdAt)}
@@ -139,28 +129,29 @@ export const CommentRow = memo(
           {node.stickied ? <Icon name="pin" className="pinned" /> : null}
           {node.locked ? <Icon name="lock" /> : null}
           <span className="grow" />
-          {collapsed && hiddenCount > 0 ? (
-            <span className="collapsed-count">+{hiddenCount}</span>
-          ) : null}
-          {!collapsed ? (
-            <button
-              type="button"
-              className="comment-more"
-              aria-label="Comment actions"
-              onClick={(event) => {
-                event.stopPropagation();
-                onActions(node);
-              }}
+          {collapsed ? (
+            <span
+              className="collapsed-count"
+              title={`${hiddenCount || 'More'} hidden ${hiddenCount === 1 ? 'reply' : 'replies'}`}
             >
-              <Icon name="more" />
-            </button>
+              +{hiddenCount || '…'}
+            </span>
           ) : null}
+          <button
+            type="button"
+            className="comment-more"
+            aria-label="Comment actions"
+            onClick={(event) => {
+              event.stopPropagation();
+              onActions(node);
+            }}
+          >
+            <Icon name="more" />
+          </button>
         </div>
-        {!collapsed ? (
-          <div className={`comment-body${expanding ? ' is-expanding' : ''}`}>
-            <Markdown source={node.body} />
-          </div>
-        ) : null}
+        <div className="comment-body">
+          <Markdown source={node.body} />
+        </div>
       </div>
     );
   }

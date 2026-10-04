@@ -1191,12 +1191,6 @@
   color: var(--mod);
 }
 
-.comment-head .score {
-  color: var(--score);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 .comment-head .grow {
   flex: 1;
 }
@@ -1217,16 +1211,18 @@
   color: var(--mod);
 }
 
+/* Relay's hidden-replies badge: white "+N" on green, 8px corners. */
 .comment-head .collapsed-count {
   display: inline-flex;
   align-items: center;
   height: 20px;
-  padding: 0 7px;
-  border-radius: 10px;
-  background: var(--surface-3);
-  color: var(--text-2);
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--collapsed-badge);
+  color: #fff;
   font-weight: 600;
   font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .comment-head .comment-more {
@@ -1249,11 +1245,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Re-expanding a comment cross-fades its body like a list "change". */
-.comment-body.is-expanding {
-  animation: body-in var(--dur-item-move) var(--ease-in-out);
-}
-
 @keyframes body-in {
   from {
     opacity: 0;
@@ -1263,18 +1254,6 @@
 .comment-body .md {
   font-size: calc(14.5px * var(--ts));
   line-height: 1.5;
-}
-
-.comment.is-collapsed {
-  padding-bottom: 9px;
-}
-
-.comment.is-collapsed .comment-head .author {
-  color: var(--text-3);
-}
-
-.comment.is-collapsed .comment-rail {
-  opacity: 0.55;
 }
 
 .comment-actions {

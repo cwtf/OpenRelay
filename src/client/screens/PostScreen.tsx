@@ -318,7 +318,6 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
     const test = new RegExp(escapeRegExp(query), "i");
     return rows.flatMap((row) =>
       row.type === "comment" &&
-      !row.collapsed &&
       test.test(decodeEntities(row.node.body))
         ? [row.node.id]
         : [],
@@ -746,7 +745,13 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
               className="btn is-text"
               onClick={() => {
                 captureLayout();
-                setCollapsed(new Set(tree.map((node) => node.id)));
+                setCollapsed(
+                  new Set(
+                    tree
+                      .filter((node) => node.replies.length || node.moreReplies)
+                      .map((node) => node.id),
+                  ),
+                );
               }}
             >
               Collapse all

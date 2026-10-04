@@ -175,6 +175,25 @@ try {
     .waitFor();
   await app.getByText("A nested reply", { exact: true }).waitFor();
   await app.locator(".screen.is-entering").waitFor({ state: "detached" });
+  // Collapsing hides only the replies; the comment itself stays, like Relay.
+  await app.getByText("A nested reply", { exact: true }).click(); // Leaf: no-op.
+  await app.getByText("A nested reply", { exact: true }).waitFor();
+  await app.getByText("An actual nested comment fixture", { exact: true }).click();
+  await app
+    .getByText("A nested reply", { exact: true })
+    .waitFor({ state: "detached" });
+  await app.getByText("An actual nested comment fixture", { exact: true }).waitFor();
+  assert.equal(
+    await app.locator('[data-cid="t1_c1"] .collapsed-count').textContent(),
+    "+1",
+  );
+  assert.equal(
+    await app.locator('[data-cid="t1_c1"] .vote[data-thing-id="t1_c1"]').count(),
+    1,
+  );
+  await page.screenshot({ path: resolve(out, "collapsed.png") });
+  await app.getByText("An actual nested comment fixture", { exact: true }).click();
+  await app.getByText("A nested reply", { exact: true }).waitFor();
   await page.screenshot({ path: resolve(out, "comments.png") });
   await app.getByRole("button", { name: "Back", exact: true }).click();
   await app
@@ -262,7 +281,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, settings persistence with third-party storage blocked, subscriptions drawer, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

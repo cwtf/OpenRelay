@@ -31,6 +31,7 @@
   --upvote: #de714e;
   --downvote: #7b5cb1;
   --vote-neutral: #74777f;
+  --collapsed-badge: #2d9567;
   --mod: #1c8a4e;
   --admin: #c62f3b;
   --nsfw: #c8264f;
@@ -113,6 +114,7 @@
   --upvote: #ce6543;
   --downvote: #6e50a4;
   --vote-neutral: #8e9099;
+  --collapsed-badge: #19885b;
   --mod: #62d394;
   --admin: #ff7a83;
   --nsfw: #ff6b8d;
@@ -136,6 +138,7 @@
   --bg: #000000;
   --upvote: #b45231;
   --downvote: #5a3c8f;
+  --collapsed-badge: #0d724b;
   --surface: #0b0c0e;
   --surface-2: #141619;
   --surface-3: #202328;
