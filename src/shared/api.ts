@@ -234,6 +234,8 @@ export type Community = {
   color?: string;
   subscribers?: number;
   nsfw: boolean;
+  /** Whether the viewer subscribes, when Reddit reports it (search results). */
+  subscribed?: boolean;
 };
 
 /** The signed-in Reddit account, as far as the reader needs it. */

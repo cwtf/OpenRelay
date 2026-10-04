@@ -19,7 +19,9 @@ import {
   useSubscriptions,
 } from "../lib/subscriptions";
 import { ensureAccount, useAccount } from "../lib/account";
-import { promptLogin } from "../lib/platform";
+import { runAction, searchCommunities } from "../lib/api";
+import { compact as compactNumber } from "../lib/format";
+import { promptLogin, toast } from "../lib/platform";
 import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
@@ -160,6 +162,133 @@ const CommunityRow = ({
   );
 };
 
+// ------------------------------------------------------------------ live search
+// As in Relay, the search pill queries Reddit while you type and lists the
+// matches in a results card, each with a subscribe button.
+
+const searchCache = new Map<string, Community[]>();
+
+/** Reddit's community suggestions for `text`, debounced while typing. */
+const useCommunitySearch = (text: string) => {
+  const key = text.trim().toLowerCase();
+  const [state, setState] = useState<{
+    key: string;
+    results: Community[];
+    loading: boolean;
+    error: string;
+  }>({ key: "", results: [], loading: false, error: "" });
+  useEffect(() => {
+    if (key.length < 2) {
+      setState({ key, results: [], loading: false, error: "" });
+      return;
+    }
+    const cached = searchCache.get(key);
+    if (cached) {
+      setState({ key, results: cached, loading: false, error: "" });
+      return;
+    }
+    setState((current) => ({ ...current, key, loading: true, error: "" }));
+    let live = true;
+    const timer = window.setTimeout(() => {
+      searchCommunities(key)
+        .then((results) => {
+          searchCache.set(key, results);
+          if (live) setState({ key, results, loading: false, error: "" });
+        })
+        .catch((error: unknown) => {
+          if (live)
+            setState({
+              key,
+              results: [],
+              loading: false,
+              error: error instanceof Error ? error.message : "Search failed",
+            });
+        });
+    }, 250);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [key]);
+  // Results for an older query stay visible until the new ones arrive.
+  return state;
+};
+
+/** Relay's double-line search result: icon, name, details and subscribe. */
+const SearchResultRow = ({
+  community,
+  active,
+  onGo,
+  canSubscribe,
+}: {
+  community: Community;
+  active: boolean;
+  onGo: (name: string) => void;
+  canSubscribe: boolean;
+}) => {
+  const [subscribed, setSubscribed] = useState(community.subscribed ?? false);
+  const [busy, setBusy] = useState(false);
+  const details = [
+    community.subscribers !== undefined
+      ? `${compactNumber(community.subscribers)} members`
+      : "",
+  ].filter(Boolean);
+  const toggle = () => {
+    if (busy) return;
+    setBusy(true);
+    runAction("subscribe", {
+      action: subscribed ? "unsub" : "sub",
+      sr: community.name,
+    })
+      .then(() => {
+        community.subscribed = !subscribed;
+        setSubscribed(!subscribed);
+        toast(subscribed ? `Left r/${community.name}` : `Joined r/${community.name}`);
+        void refreshSubscriptions();
+      })
+      .catch((error: unknown) =>
+        toast(error instanceof Error ? error.message : "Reddit could not do that."),
+      )
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className={`sub-row is-double${active ? " is-active" : ""}`}>
+      <button
+        type="button"
+        className="sub-row-main"
+        data-ripple
+        onClick={() => onGo(community.name)}
+      >
+        <CommunityIcon name={community.name} info={community} />
+        <span className="lines">
+          <span className="label">{community.name}</span>
+          <span className="detail">
+            r/{community.name}
+            {details.length ? ` · ${details.join(" · ")}` : ""}
+            {community.nsfw ? <span className="sub-nsfw">NSFW</span> : null}
+          </span>
+        </span>
+      </button>
+      {canSubscribe ? (
+        <button
+          type="button"
+          className={`icon-btn sub-star${subscribed ? " is-on" : ""}`}
+          aria-pressed={subscribed}
+          aria-label={
+            subscribed
+              ? `Unsubscribe from r/${community.name}`
+              : `Subscribe to r/${community.name}`
+          }
+          disabled={busy}
+          onClick={toggle}
+        >
+          <Icon name={subscribed ? "checkCircle" : "addCircle"} size={22} />
+        </button>
+      ) : null}
+    </div>
+  );
+};
+
 type SectionId = "feeds" | "favourites" | "recent" | "subscriptions";
 
 const SectionHeader = ({
@@ -249,9 +378,11 @@ export const CommunityList = ({
   autoFocus?: boolean;
 }) => {
   const { session, current } = useNav();
+  const account = useAccount();
   const subscriptions = useSubscriptions();
   const favourites = useFavourites();
   const [query, setQuery] = useState("");
+  const remote = useCommunitySearch(query.trim().replace(/^\/?r\//i, ""));
   const [collapsed, setCollapsed] = useState<
     Partial<Record<SectionId, boolean>>
   >(() => readJson("drawer-collapsed", {}));
@@ -313,9 +444,16 @@ export const CommunityList = ({
           Number(!b.toLowerCase().startsWith(needle)) || byName(a, b),
     );
   }
+  // Reddit's suggestions, minus communities already listed above them.
+  const listed = new Set(matches.map((name) => name.toLowerCase()));
+  const found = remote.results.filter(
+    (community) => !listed.has(community.name.toLowerCase()),
+  );
+  const searching = needle.length >= 2 && (remote.loading || remote.key !== needle);
   const showTyped =
     NAME_RE.test(typed) &&
-    !matches.some((name) => name.toLowerCase() === needle);
+    !matches.some((name) => name.toLowerCase() === needle) &&
+    !found.some((community) => community.name.toLowerCase() === needle);
 
   const subsOpen = !collapsed.subscriptions;
   const syncing = subscriptions.status === "loading";
@@ -327,7 +465,8 @@ export const CommunityList = ({
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          const target = showTyped ? typed : matches[0];
+          // Enter opens the first row shown.
+          const target = showTyped ? typed : (matches[0] ?? found[0]?.name);
           if (target) onGo(target);
         }}
       >
@@ -349,6 +488,9 @@ export const CommunityList = ({
           spellCheck={false}
           enterKeyHint="go"
         />
+        {searching ? (
+          <span className="spinner search-progress" aria-label="Searching" />
+        ) : null}
         {query ? (
           <button
             type="button"
@@ -373,8 +515,35 @@ export const CommunityList = ({
                 starrable={false}
               />
             ) : null}
+            {matches.length ? (
+              <div className="sub-label">Your communities</div>
+            ) : null}
             {matches.slice(0, 60).map(row)}
-            {!showTyped && !matches.length ? (
+            {needle.length >= 2 ? (
+              <div className="search-results" aria-live="polite">
+                <div className="sub-label">Communities on Reddit</div>
+                {found.map((community) => (
+                  <SearchResultRow
+                    key={community.name}
+                    community={community}
+                    active={isActive(community.name)}
+                    onGo={onGo}
+                    canSubscribe={Boolean(account)}
+                  />
+                ))}
+                {searching && !found.length ? <SkeletonRows /> : null}
+                {!searching && remote.error ? (
+                  <p className="sub-hint">{remote.error}</p>
+                ) : null}
+                {!searching && !remote.error && !found.length ? (
+                  <p className="sub-hint">
+                    {matches.length
+                      ? "No other communities found."
+                      : "No communities found."}
+                  </p>
+                ) : null}
+              </div>
+            ) : !showTyped && !matches.length ? (
               <p className="sub-hint">No matching communities.</p>
             ) : null}
           </>

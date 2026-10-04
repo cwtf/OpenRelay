@@ -354,6 +354,32 @@ export async function fetchModListing(
   );
   return { items: normalizeListing(data?.data?.children), after: data?.data?.after ?? null };
 }
+const communities = (data: any): Community[] =>
+  Array.isArray(data?.data?.children)
+    ? data.data.children
+        .map((child: any) => (child?.kind === "t5" ? normalizeCommunity(child.data) : null))
+        .filter((community: Community | null): community is Community => Boolean(community))
+    : [];
+
+/**
+ * Communities matching a partial name, as Reddit's own search box suggests
+ * them; falls back to community search if autocomplete is unavailable.
+ */
+export async function searchCommunities(text: string): Promise<Community[]> {
+  try {
+    return communities(
+      await json(
+        "/api/subreddit_autocomplete_v2.json" +
+          query({ query: text, include_over_18: "true", include_profiles: "false", limit: 10 }),
+      ),
+    );
+  } catch {
+    return communities(
+      await json("/subreddits/search.json" + query({ q: text, include_over_18: "on", limit: 10 })),
+    );
+  }
+}
+
 /** Communities the viewer moderates, alphabetically. */
 export async function fetchModerated(): Promise<string[]> {
   const data = await json("/subreddits/mine/moderator.json" + query({ limit: 100 }));

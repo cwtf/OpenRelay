@@ -79,6 +79,7 @@ const comment = {
 const fixture = `<!doctype html><html><head><title>Reddit fixture</title></head><body><h1>Original Reddit fixture</h1><shreddit-post id="t3_abc123" post-title="${post.title}" author="example_user" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="123" comment-count="2" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post></body></html>`;
 let deny = false;
 const writes = [];
+const searches = [];
 // 1x1 PNG served for profile and community pictures.
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -100,6 +101,24 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         data: { children: [{ name: "modone", date: 1500000000, mod_permissions: ["all"] }] },
       }),
     });
+  if (url.pathname === "/api/subreddit_autocomplete_v2.json") {
+    searches.push(url.searchParams.get("query"));
+    const all = [
+      { display_name: "pics", subscribers: 30000000, user_is_subscriber: false },
+      { display_name: "picture", subscribers: 1200, over18: true },
+    ];
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        kind: "Listing",
+        data: {
+          children: all
+            .filter((s) => s.display_name.startsWith(url.searchParams.get("query")))
+            .map((data) => ({ kind: "t5", data })),
+        },
+      }),
+    });
+  }
   if (url.pathname === "/r/test/wiki/index.json")
     return route.fulfill({
       contentType: "application/json",
@@ -385,6 +404,33 @@ try {
   await sheet.locator(".sub-row-main", { hasText: "Apple" }).click();
   await sheet.waitFor({ state: "detached" });
   await app.locator(".appbar-title .name", { hasText: "r/Apple" }).waitFor();
+  // As in Relay, typing searches Reddit live; results can be joined directly.
+  sheet = await titleSheet();
+  await sheet.getByLabel("Search or go to a community").fill("pic");
+  await sheet.locator(".search-results .sub-row-main", { hasText: "picture" }).waitFor();
+  assert.deepEqual(
+    await sheet.locator(".search-results .sub-row-main .label").allTextContents(),
+    ["pics", "picture"],
+  );
+  assert.match(
+    await sheet.locator(".search-results .sub-row.is-double").first().locator(".detail").textContent(),
+    /r\/pics · 30M members/,
+  );
+  assert.equal(await sheet.locator(".search-results .sub-nsfw").count(), 1);
+  assert.equal(searches.at(-1), "pic");
+  await page.screenshot({ path: resolve(out, "subreddit-live-search.png") });
+  await sheet.getByRole("button", { name: "Subscribe to r/pics" }).click();
+  await sheet.getByRole("button", { name: "Unsubscribe from r/pics" }).waitFor();
+  assert.deepEqual(writes.at(-1).body, {
+    action: "sub",
+    sr_name: "pics",
+    skip_initial_defaults: "true",
+    uh: "fixturemodhash1",
+    api_type: "json",
+  });
+  await sheet.locator(".search-results .sub-row-main", { hasText: "pics" }).first().click();
+  await sheet.waitFor({ state: "detached" });
+  await app.locator(".appbar-title .name", { hasText: "r/pics" }).waitFor();
   // Typing a name and pressing Enter opens it.
   sheet = await titleSheet();
   await sheet.getByLabel("Search or go to a community").fill("test");
@@ -448,7 +494,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

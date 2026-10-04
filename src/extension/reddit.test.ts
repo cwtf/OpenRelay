@@ -56,6 +56,8 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/prefs/friends.json",
     "/r/test/about/moderators.json",
     "/r/test/wiki/index.json",
+    "/api/subreddit_autocomplete_v2.json?query=pic&include_over_18=true",
+    "/subreddits/search.json?q=pic",
   ])
     assert.ok(allowedJsonPath(path), path);
   for (const path of [
@@ -75,6 +77,8 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/prefs/blocked.json",
     "/r/test/wiki/settings/index.json",
     "/r/test/wiki/edit.json",
+    "/api/subscribe.json",
+    "/api/subreddit_autocomplete_v2.json/../me.json",
   ])
     assert.equal(allowedJsonPath(path), false, path);
 });
@@ -303,4 +307,8 @@ test("normalizes community moderators", () => {
     [{ name: "modone", since: 1500000000000, permissions: ["all"] }],
   );
   assert.deepEqual(normalizeModerators({}), []);
+});
+test("reads whether the viewer subscribes to a search result", () => {
+  assert.equal(normalizeCommunity({ display_name: "pics", user_is_subscriber: true })?.subscribed, true);
+  assert.equal("subscribed" in normalizeCommunity({ display_name: "pics" })!, false);
 });

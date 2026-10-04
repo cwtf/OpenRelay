@@ -346,6 +346,9 @@ export function normalizeCommunity(s: Raw): Community | null {
     ...(color ? { color } : {}),
     ...(typeof s.subscribers === "number" ? { subscribers: s.subscribers } : {}),
     nsfw: Boolean(s.over18),
+    ...(typeof s.user_is_subscriber === "boolean"
+      ? { subscribed: s.user_is_subscriber }
+      : {}),
   };
 }
 /** Name and profile picture from `/api/me.json`; null when signed out. */
@@ -425,6 +428,9 @@ const READ_ROUTES = [
   /^\/message\/(?:inbox|unread|messages|comments|selfreply|sent|mentions|moderator|moderator\/unread)\.json$/i,
   /^\/r\/[\w+]+\/about\/(?:modqueue|reports|spam|edited|unmoderated|rules|moderators)\.json$/i,
   /^\/r\/\w+\/wiki\/index\.json$/i,
+  // Community search while typing (Relay's autocomplete), with a fallback.
+  /^\/api\/subreddit_autocomplete_v2\.json$/i,
+  /^\/subreddits\/search\.json$/i,
   /^\/prefs\/friends\.json$/i,
 ];
 export function allowedJsonPath(path: unknown): path is string {
