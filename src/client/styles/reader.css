@@ -3039,3 +3039,31 @@ button.appbar-title {
 .feed[data-layout='list'] .profile-head {
   border-bottom: 1px solid var(--divider);
 }
+
+/* Opened post in Compact / List: the feed row (text beside the thumbnail),
+   thumbnail on the right for Compact and on the left for List, as Relay's
+   comments header reuses its feed row. */
+.post-head.post-head-row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+
+.post-head-row .row-main {
+  gap: 8px;
+}
+
+.post-head-row[data-layout='list'] {
+  flex-direction: row-reverse;
+}
+
+.post-head-row .thumb {
+  width: 88px;
+  height: 88px;
+}
+
+.post-head-row[data-layout='list'] .thumb {
+  width: 64px;
+  height: 64px;
+}

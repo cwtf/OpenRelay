@@ -18,7 +18,13 @@ import { usePrefs } from "../app/prefs";
 import { CommentRow, MoreRow } from "../components/CommentRow";
 import { Icon, type IconName } from "../components/Icon";
 import { openPostActions } from "../components/PostActions";
-import { MediaFrame, PostFlags, PostMeta } from "../components/PostParts";
+import {
+  MediaFrame,
+  PostFlags,
+  PostMeta,
+  Thumb,
+  wantsThumb,
+} from "../components/PostParts";
 import { ReplySheet } from "../components/ReplySheet";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
@@ -125,6 +131,12 @@ const inTree = (nodes: CommentNode[], id: string): boolean =>
 export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const nav = useNav();
   const { prefs } = usePrefs();
+  /** Compact and List show the feed's thumbnail row instead of full media. */
+  const asRow = (p: PostSummary) =>
+    prefs.layout !== "cards" &&
+    prefs.showThumbnails &&
+    wantsThumb(p) &&
+    p.media.kind !== "poll";
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [post, setPost] = useState<PostDetail | PostSummary | null>(
     seed ?? null,
@@ -686,12 +698,29 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       <div className="scroller post-page" ref={scrollerRef}>
         {post ? (
           <>
-            <section className="post-head">
-              <PostMeta post={post} showSub />
-              <h1 className="post-title">{post.title}</h1>
-              <PostFlags post={post} />
-            </section>
-            {post.media.kind !== "self" ? (
+            {/* Like Relay's comments header (its feed row plus the post text),
+                the post follows the Layout setting: full media for Cards, the
+                feed's thumbnail row for Compact and List. */}
+            {asRow(post) ? (
+              <section
+                className="post-head post-head-row"
+                data-layout={prefs.layout}
+              >
+                <div className="row-main">
+                  <PostMeta post={post} showSub />
+                  <h1 className="post-title">{post.title}</h1>
+                  <PostFlags post={post} />
+                </div>
+                <Thumb post={post} />
+              </section>
+            ) : (
+              <section className="post-head">
+                <PostMeta post={post} showSub />
+                <h1 className="post-title">{post.title}</h1>
+                <PostFlags post={post} />
+              </section>
+            )}
+            {post.media.kind !== "self" && !asRow(post) ? (
               <section className="post-head-media">
                 <MediaFrame post={post} variant="detail" />
               </section>
