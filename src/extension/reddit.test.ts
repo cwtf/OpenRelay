@@ -160,3 +160,14 @@ test("normalizes subscribed communities and skips user profiles", () => {
   );
   assert.equal(normalizeCommunity({ display_name: "../api" }), null);
 });
+test("reads the viewer's vote from Reddit's likes field", () => {
+  const base = { id: "v", title: "T", created_utc: 1, permalink: "/r/t/comments/v/" };
+  assert.equal(normalizePost({ ...base, likes: true }).vote, 1);
+  assert.equal(normalizePost({ ...base, likes: false }).vote, -1);
+  assert.equal(normalizePost({ ...base, likes: null }).vote, 0);
+  assert.equal("vote" in normalizePost(base), false);
+  const tree = normalizeComments([
+    { kind: "t1", data: { id: "c", body: "x", likes: false } },
+  ]);
+  assert.equal(tree.comments[0]?.vote, -1);
+});

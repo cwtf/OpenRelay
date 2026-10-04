@@ -1,3 +1,4 @@
+import { apiVote } from "./apiVote";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, parseRoute } from "./reddit";
 import { readSnapshot } from "./snapshot";
@@ -78,7 +79,24 @@ window.addEventListener("message", async (event) => {
     let value: unknown;
     if (action === "vote") {
       if (!active) throw new Error("OpenRelay is not active");
-      value = await forwardVote(document, payload?.thingId, payload?.direction);
+      const current = payload?.current;
+      if (current !== 1 && current !== 0 && current !== -1)
+        throw new Error("Invalid vote request");
+      const clicked = await forwardVote(
+        document,
+        payload?.thingId,
+        payload?.direction,
+      );
+      // Reader-fetched content has no buttons on the page; vote via the API.
+      value =
+        clicked.status === "missing"
+          ? await apiVote(
+              fetch,
+              location.origin,
+              payload.thingId,
+              current === payload.direction ? 0 : payload.direction,
+            )
+          : clicked;
     } else if (action === "vote-status") {
       if (
         !Array.isArray(payload?.ids) ||

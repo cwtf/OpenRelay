@@ -39,7 +39,12 @@ window.addEventListener("message", (event) => {
 export function bridge<T>(
   action: "snapshot" | "json" | "vote" | "vote-status",
   path?: string,
-  payload?: { thingId?: string; direction?: number; ids?: string[] },
+  payload?: {
+    thingId?: string;
+    direction?: number;
+    current?: number;
+    ids?: string[];
+  },
 ): Promise<T> {
   const id = ++nextId;
   return new Promise((resolve, reject) => {

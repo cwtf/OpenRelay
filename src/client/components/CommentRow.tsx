@@ -124,6 +124,7 @@ export const CommentRow = memo(
               thingId={node.id}
               permalink={node.permalink}
               score={node.score}
+              vote={node.vote}
               kind="comment"
               variant="inline"
             />

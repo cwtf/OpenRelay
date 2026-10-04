@@ -27,7 +27,10 @@
   --primary-soft: #d9e7fb;
   --on-primary-soft: #0c3a78;
   --score: #c9541f;
-  --downvote: #4f5fd1;
+  /* Vote states, matching Relay: orange up, purple down, outline grey neutral. */
+  --upvote: #de714e;
+  --downvote: #7b5cb1;
+  --vote-neutral: #74777f;
   --mod: #1c8a4e;
   --admin: #c62f3b;
   --nsfw: #c8264f;
@@ -107,7 +110,9 @@
   --primary-soft: #1c2f4a;
   --on-primary-soft: #cfe1ff;
   --score: #ff9a66;
-  --downvote: #9aa6ff;
+  --upvote: #ce6543;
+  --downvote: #6e50a4;
+  --vote-neutral: #8e9099;
   --mod: #62d394;
   --admin: #ff7a83;
   --nsfw: #ff6b8d;
@@ -129,6 +134,8 @@
 
 :root[data-theme='black'] {
   --bg: #000000;
+  --upvote: #b45231;
+  --downvote: #5a3c8f;
   --surface: #0b0c0e;
   --surface-2: #141619;
   --surface-3: #202328;

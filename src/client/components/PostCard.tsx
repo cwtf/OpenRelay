@@ -36,6 +36,7 @@ const Stats = ({ post, onMore }: { post: PostSummary; onMore: () => void }) => {
         thingId={post.id}
         permalink={post.permalink}
         score={post.score}
+        vote={post.vote}
         kind="post"
         variant="stat"
       />

@@ -674,6 +674,7 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
                 thingId={post.id}
         permalink={post.permalink}
                 score={post.score}
+                vote={post.vote}
                 kind="post"
                 variant="stat"
               />

@@ -18,7 +18,8 @@ const context = await chromium.launchPersistentContext(
   },
 );
 const errors = [];
-let writes = 0;
+const writes = [];
+let signedIn = true;
 const post = {
   id: "abc",
   name: "t3_abc",
@@ -31,9 +32,10 @@ const post = {
   is_self: true,
   created_utc: 1700000000,
 };
-const comment = (id) => ({
+const comment = (id, extra = {}) => ({
   kind: "t1",
   data: {
+    ...extra,
     id,
     name: "t1_" + id,
     parent_id: "t3_abc",
@@ -82,8 +84,22 @@ for(const owner of document.querySelectorAll(".thing")){
 }
 `;
 await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
-  if (route.request().method() !== "GET") writes++;
   const url = new URL(route.request().url());
+  if (route.request().method() !== "GET") {
+    writes.push({
+      path: url.pathname,
+      body: Object.fromEntries(new URLSearchParams(route.request().postData())),
+      modhash: route.request().headers()["x-modhash"],
+    });
+    return route.fulfill({ contentType: "application/json", body: "{}" });
+  }
+  if (url.pathname === "/api/me.json")
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        signedIn ? { kind: "t2", data: { modhash: "fixturemodhash1" } } : {},
+      ),
+    });
   if (url.pathname === "/fixture.js")
     return route.fulfill({
       contentType: "application/javascript",
@@ -93,7 +109,16 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
     const body = url.pathname.includes("/comments/")
       ? [
           { data: { children: [{ kind: "t3", data: post }] } },
-          { data: { children: [comment("c1"), comment("c2")] } },
+          {
+            data: {
+              children: [
+                comment("c1"),
+                comment("c2"),
+                // Fetched by the reader only: no vote buttons on the page.
+                comment("c3", { likes: true }),
+              ],
+            },
+          },
         ]
       : url.pathname.endsWith("about.json")
         ? { data: { display_name: "test" } }
@@ -149,6 +174,14 @@ async function vote(app, id, direction) {
   await v.locator("button:disabled").first().waitFor({ state: "detached" });
   return v;
 }
+// Relay's light-theme counter colours: orange up, purple down, grey neutral.
+const counterColour = { 1: "rgb(222, 113, 78)", 0: "rgb(116, 119, 127)", "-1": "rgb(123, 92, 177)" };
+async function colour(v, dir) {
+  assert.equal(
+    await v.locator(".vote-score").evaluate((el) => getComputedStyle(el).color),
+    counterColour[dir],
+  );
+}
 async function selected(v, dir) {
   assert.equal(
     await v.locator(".is-up").getAttribute("aria-pressed"),
@@ -188,9 +221,47 @@ try {
   await page.evaluate(() =>
     document.querySelector('[thingid="t1_c1"]').shadowRoot.replaceChildren(),
   );
+  // Without page buttons the vote goes through Reddit's API, not a redirect.
   v = await vote(app, "t1_c1", "up");
-  await v.locator(".vote-fallback").waitFor();
+  await selected(v, 1);
+  assert.equal(await v.locator(".vote-fallback").count(), 0);
   assert.equal(await page.evaluate(() => window.clicks.t1_c2 || 0), 0);
+  assert.deepEqual(writes.at(-1), {
+    path: "/api/vote",
+    body: { id: "t1_c1", dir: "1", uh: "fixturemodhash1", api_type: "json" },
+    modhash: "fixturemodhash1",
+  });
+  // Reddit's reported vote (`likes`) is shown, and changing it adjusts the count.
+  v = app.locator('.vote[data-thing-id="t1_c3"]');
+  await selected(v, 1);
+  await colour(v, 1);
+  v = await vote(app, "t1_c3", "down");
+  await selected(v, -1);
+  await page.waitForTimeout(200); // Let the colour transition finish.
+  await colour(v, -1);
+  assert.equal(await v.locator(".vote-score").textContent(), "8");
+  assert.deepEqual(writes.at(-1).body.dir, "-1");
+  v = await vote(app, "t1_c3", "down");
+  await selected(v, 0);
+  assert.equal(await v.locator(".vote-score").textContent(), "9");
+  await page.waitForTimeout(200);
+  await colour(v, 0);
+  assert.equal(writes.at(-1).body.dir, "0");
+  await page.waitForTimeout(2300); // Read-only polling must not reset API votes.
+  await selected(v, 0);
+  assert.equal(context.pages().length, 2); // Still no popup or redirect.
+  const apiWrites = writes.length;
+
+  // Signed out: no write, a visible explanation, and the Reddit link as a fallback.
+  signedIn = false;
+  app = await load();
+  await app.getByRole("button", { name: post.title, exact: true }).click();
+  await app.locator('.vote[data-thing-id="t1_c3"]').waitFor();
+  v = await vote(app, "t1_c3", "up");
+  await v.locator(".vote-fallback").waitFor();
+  await app.locator(".toast", { hasText: "Sign in to Reddit to vote" }).waitFor();
+  assert.equal(writes.length, apiWrites);
+  signedIn = true;
 
   for (const mode of ["ignore", "rollback", "disabled"]) {
     app = await load(mode);
@@ -232,10 +303,12 @@ try {
   );
   await page.waitForTimeout(200);
   assert.equal(await page.evaluate(() => window.clicks.t3_abc), 2);
-  assert.equal(writes, 0);
+  // The only writes are the expected API votes.
+  assert.equal(writes.length, apiWrites);
+  assert.ok(writes.every((write) => write.path === "/api/vote"));
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: modern nested-shadow and old Reddit clicks, initial selection, undo/switch, duplicate suppression, exact comment ownership, unavailable/disabled/unconfirmed fallback, delayed rollback, spoof rejection; no direct API writes.",
+    "PASS: modern nested-shadow and old Reddit clicks, initial selection, undo/switch, duplicate suppression, exact comment ownership, API votes for reader-fetched comments with Reddit's reported vote and counts, Relay counter colours, signed-out handling, disabled/unconfirmed fallback, delayed rollback, spoof rejection; only /api/vote writes.",
   );
 } finally {
   await context.close();

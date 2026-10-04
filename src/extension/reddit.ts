@@ -8,6 +8,15 @@ import type {
 } from "../shared/api.ts";
 
 type Raw = Record<string, any>;
+/** Reddit's `likes`: true up, false down, null none; absent when signed out. */
+const viewerVote = (likes: unknown) =>
+  likes === true
+    ? { vote: 1 as const }
+    : likes === false
+      ? { vote: -1 as const }
+      : likes === null
+        ? { vote: 0 as const }
+        : {};
 export const safeUrl = (
   value: unknown,
   base = "https://www.reddit.com",
@@ -127,6 +136,7 @@ export function normalizePost(p: Raw): PostDetail {
         }
       : {}),
     ...(thumb ? { thumb } : {}),
+    ...viewerVote(p.likes),
     media,
   };
 }
@@ -154,6 +164,7 @@ export function normalizeComments(children: Raw[] = []): {
           permalink: safeUrl(c.permalink),
           replies: nested.comments,
           moreReplies: nested.more,
+          ...viewerVote(c.likes),
           ...(["moderator", "admin"].includes(c.distinguished)
             ? { distinguished: c.distinguished }
             : {}),

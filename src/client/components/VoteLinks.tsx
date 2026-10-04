@@ -9,6 +9,8 @@ type VoteLinksProps = {
   thingId: string;
   permalink: string;
   score: number;
+  /** The viewer's vote as reported by Reddit, if known. */
+  vote?: Vote | undefined;
   kind: "post" | "comment";
   variant: "stat" | "inline";
 };
@@ -16,15 +18,18 @@ export const VoteLinks = ({
   thingId,
   permalink,
   score,
+  vote,
   kind,
   variant,
 }: VoteLinksProps) => {
   const state = useVote(thingId);
+  const current: Vote = state.vote ?? vote ?? 0;
+  const shown = state.score ?? score;
   const href = new URL(redditUrl(permalink) || pageUrl.href);
   href.searchParams.set("openrelay", "off");
   const arrow = (direction: Vote) => {
     const label = direction === 1 ? "Upvote" : "Downvote";
-    const selected = state.vote === direction;
+    const selected = current === direction;
     return (
       <button
         type="button"
@@ -35,7 +40,7 @@ export const VoteLinks = ({
         data-ripple
         onClick={(event) => {
           event.stopPropagation();
-          void castVote(thingId, direction);
+          void castVote(thingId, direction, current, shown);
         }}
       >
         <Icon name={direction === 1 ? "up" : "down"} />
@@ -46,11 +51,12 @@ export const VoteLinks = ({
     <span
       className={`vote vote-${variant}`}
       data-thing-id={thingId}
+      data-vote={current}
       aria-busy={state.pending}
-      title={state.error || "Vote using Reddit’s loaded controls"}
+      title={state.error || "Vote with your Reddit account"}
     >
       {arrow(1)}
-      <span className="vote-score">{compact(state.score ?? score)}</span>
+      <span className="vote-score">{compact(shown)}</span>
       {arrow(-1)}
       {state.fallback ? (
         <a

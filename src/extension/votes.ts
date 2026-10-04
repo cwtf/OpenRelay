@@ -5,7 +5,10 @@ export type NativeVote = {
   score?: number;
 };
 export type VoteResult = NativeVote & {
-  status: "changed" | "unavailable" | "unconfirmed" | "busy";
+  /** `missing`: Reddit's vote buttons for this item are not on the page. */
+  status: "changed" | "unavailable" | "missing" | "unconfirmed" | "busy";
+  /** Set when the vote was sent through Reddit's API instead of a click. */
+  via?: "api";
 };
 export const isThingId = (value: unknown): value is string =>
   typeof value === "string" && /^t[13]_[a-z0-9]+$/i.test(value);
@@ -158,7 +161,8 @@ export async function forwardVote(
     return { ...readNativeVote(doc, thingId), status: "busy" };
   const c = controls(doc, thingId);
   const before = read(c);
-  if (!c || !before.available) return { ...before, status: "unavailable" };
+  if (!c) return { ...before, status: "missing" };
+  if (!before.available) return { ...before, status: "unavailable" };
   pending.add(thingId);
   try {
     const expected = before.vote === direction ? 0 : direction;

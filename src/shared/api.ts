@@ -77,6 +77,9 @@ export type PostMedia =
 
 export type Distinguished = "moderator" | "admin";
 
+/** The signed-in viewer's vote: 1 up, -1 down, 0 none. */
+export type ViewerVote = -1 | 0 | 1;
+
 export type PostSummary = {
   id: string;
   title: string;
@@ -102,6 +105,8 @@ export type PostSummary = {
   excerpt?: string;
   thumb?: ImageRef;
   media: PostMedia;
+  /** Present when Reddit reports the signed-in viewer's vote. */
+  vote?: ViewerVote;
 };
 
 export type PostDetail = PostSummary & {
@@ -126,6 +131,8 @@ export type CommentNode = {
   replies: CommentNode[];
   /** True when Reddit reports more replies that were not included. */
   moreReplies: boolean;
+  /** Present when Reddit reports the signed-in viewer's vote. */
+  vote?: ViewerVote;
 };
 
 export type SubredditAbout = {

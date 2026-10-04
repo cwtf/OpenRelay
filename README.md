@@ -25,13 +25,15 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - Cards, Compact and List layouts; Auto, Light, Dark and Black themes.
 - One-click restoration of Reddit's original page. Unsupported pages (settings, login, profiles, messages, moderation) stay native. Recognized challenge screens stay native too.
 
-**Vote arrows forward one click to the matching native Reddit vote control**, using the page’s signed-in session. Upvote, downvote, undo, and switching votes are supported when the native control is loaded and exposes its state. Current and old Reddit controls are supported, including open shadow roots. Buttons pause while a click is pending; the reader mirrors Reddit’s displayed selection/count and later rollbacks. This reflects Reddit’s UI, not an independent server acknowledgment.
+**Vote arrows work in place, without leaving the reader.** When Reddit's own vote control for that post or comment is on the page, the reader forwards one click to it, using the page’s signed-in session. Upvote, downvote, undo, and switching votes are supported when the native control is loaded and exposes its state. Current and old Reddit controls are supported, including open shadow roots. Buttons pause while a click is pending; the reader mirrors Reddit’s displayed selection/count and later rollbacks. This reflects Reddit’s UI, not an independent server acknowledgment.
 
-If the control is absent, disabled, inaccessible, or does not change state, an explicit **Vote on Reddit** link appears. There are no automatic retries or redirect popups. Posts/comments fetched only inside the reader may lack native controls and need this fallback. Replies still open Reddit’s editor. The extension does not read authentication tokens, send vote API requests, request OAuth access, or use Devvit's app account. Settings stay local to the browser; Reddit account preference syncing is not included.
+Posts and comments the reader fetched itself (other pages, more comments) have no control on the page. Their votes go to Reddit's `/api/vote` endpoint as a same-origin request from the Reddit tab, with your existing session and its modhash (Reddit's CSRF token, read from `/api/me.json` and held only in memory in that tab). The arrows start from the vote Reddit reports for you, and the count adjusts locally. A stale modhash is refreshed once; nothing else is retried.
+
+If you are signed out, the control is disabled (archived/locked), or Reddit does not confirm a clicked vote, the reader explains why and shows a **Vote on Reddit** link as a fallback. Replies still open Reddit’s editor. The extension does not request OAuth access, use Devvit's app account, or send any token outside the Reddit tab; `/api/vote` is the only write it makes. Settings stay local to the browser; Reddit account preference syncing is not included.
 
 ## Data and permissions
 
-A Manifest V3 content script runs only on the three Reddit hosts above. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and validated single-click vote forwarding for a specific post/comment ID. Page-origin messages cannot invoke these operations.
+A Manifest V3 content script runs only on the three Reddit hosts above. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
 
 No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. Requests use the Reddit tab's normal same-origin session; the subscription list comes from Reddit's read-only `/subreddits/mine/subscriber.json` and needs you to be signed in to Reddit. Nothing is sent to an OpenRelay server. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
 
@@ -55,7 +57,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 27 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 32 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -65,7 +67,7 @@ npm run test:browser
 
 Set `PLAYWRIGHT_MODULE` to a Playwright module URL or `CHROMIUM_PATH` to an installed Chromium executable when using shared tooling. Test profiles/screenshots are written under ignored `test-results/`.
 
-Vote tests additionally cover initial selection, undo/switch, rapid-click suppression, exact nested-comment ownership, disabled/missing controls, unconfirmed changes, delayed rollbacks, and rejection of page-origin spoofed messages. All vote tests use instrumented fixtures; they cast no votes on Reddit.
+Vote tests additionally cover initial selection, undo/switch, rapid-click suppression, exact nested-comment ownership, API votes for reader-fetched comments (request body, modhash, reported vote, counts), signed-out handling, disabled controls, unconfirmed changes, delayed rollbacks, and rejection of page-origin spoofed messages, and check that `/api/vote` is the only write. All vote tests use instrumented fixtures; they cast no votes on Reddit.
 
 The browser test profile blocks third-party cookies, to check that settings and favourites survive a reload.
 
