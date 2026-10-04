@@ -1874,6 +1874,33 @@
   color: var(--text-3);
 }
 
+/* Unread inbox count on the drawer's Inbox item. */
+.drawer-count {
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Go to user" prompt, reusing the search pill inside a sheet. */
+.drawer-search.user-go {
+  margin: 8px 20px 16px;
+  padding-right: 6px;
+}
+
+.drawer-search.user-go .btn {
+  height: 36px;
+  border-radius: 18px;
+}
+
 /* Section header: hairline divider, 48px label row, collapse chevron. */
 .sub-header {
   display: flex;
@@ -2237,3 +2264,416 @@ img.avatar {
 .vote-btn:disabled { opacity: .5; cursor: progress; }
 .vote-fallback { color: var(--link); font-size: 11px; margin-left: 6px; }
 .vote > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ------------------------------------------------------------------ account screens */
+/* Profile, Inbox, Moderator, Friends, New Post and Compose follow Relay's
+   layouts: app bar title opens the section picker, a 56px bottom app bar of
+   icon-over-label buttons with an optional FAB, and 2px-separated cards. */
+
+button.appbar-title {
+  text-align: left;
+  color: inherit;
+}
+
+.feed.has-bottom-bar,
+.compose-form.has-bottom-bar {
+  padding-bottom: 24px;
+}
+
+.bottom-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  height: 56px;
+  padding: 0 4px;
+  background: var(--surface);
+  border-top: 1px solid var(--divider);
+}
+
+.bar-btn {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 14px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.bar-btn span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-btn:hover {
+  background: var(--hover);
+}
+
+.bar-btn:disabled {
+  opacity: 0.45;
+}
+
+.fab {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  margin: -20px 8px 0;
+  border-radius: 16px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--primary-soft);
+  color: var(--on-primary-soft);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.22);
+}
+
+.fab:disabled {
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.fab.is-extended {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  margin: 0;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 0 16px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* List cards (comments outside threads, inbox, moderation) */
+.list-card,
+.listing-post {
+  margin-top: 2px;
+  background: var(--surface);
+}
+
+.list-card {
+  padding: 12px 12px 16px;
+  cursor: pointer;
+}
+
+.list-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.list-title {
+  font-size: calc(15.5px * var(--ts));
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
+.list-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: calc(13px * var(--ts));
+  color: var(--text-3);
+}
+
+.list-info .accent {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.list-info .link-btn {
+  font: inherit;
+  font-weight: 600;
+}
+
+.list-info .vote {
+  margin-right: 4px;
+}
+
+.list-body {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.list-body .md {
+  font-size: calc(14.5px * var(--ts));
+  line-height: 1.5;
+}
+
+.message-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.message-card.is-unread .message-type {
+  color: var(--primary);
+}
+
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.message-card.is-unread .list-title {
+  font-weight: 700;
+}
+
+/* Relay's swipe actions, shown inline under the selected row. */
+.action-strip {
+  display: flex;
+  justify-content: space-evenly;
+  margin: 10px -6px -8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+  animation: body-in var(--dur-item-fade) var(--ease-in-out);
+}
+
+.listing-post .action-strip,
+.listing-post .mod-block {
+  margin: 0;
+  padding: 6px 12px 8px;
+}
+
+.strip-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.strip-btn:hover {
+  background: var(--hover);
+}
+
+.mod-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.mod-state.is-approved {
+  color: var(--collapsed-badge);
+}
+
+.mod-state.is-removed,
+.mod-state.is-spam,
+.mod-reports {
+  color: var(--nsfw);
+}
+
+.mod-reports {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Profile header: 64px picture, large bold name, karma line. */
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.profile-head .avatar.is-large {
+  width: 64px;
+  height: 64px;
+  box-shadow: none;
+}
+
+.profile-meta {
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: 22px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-karma {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+/* Friends: 56px rows, purple circle, name, remove button. */
+.friends-list {
+  padding: 8px 0 24px;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+}
+
+.friend-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 0 8px 0 16px;
+  font-size: 16px;
+  text-align: left;
+}
+
+.friend-main .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar.friend-circle {
+  background: var(--downvote);
+}
+
+.friend-remove {
+  width: 48px;
+  height: 48px;
+  margin-right: 4px;
+  color: var(--text);
+}
+
+/* Forms: Relay's filled text fields with 12px corners and leading icons. */
+.compose-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 96px;
+}
+
+.compose-form .segmented {
+  margin: 0;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.field-row .field {
+  flex: 1;
+}
+
+.field {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border-bottom: 2px solid var(--outline);
+  color: var(--text-2);
+  cursor: text;
+}
+
+.field > .icon {
+  margin-top: 12px;
+  flex: none;
+}
+
+.field:focus-within {
+  border-bottom-color: var(--primary);
+}
+
+.field:focus-within .field-label {
+  color: var(--primary);
+}
+
+.field-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.field-input {
+  display: flex;
+  align-items: baseline;
+  color: var(--text);
+}
+
+.field-prefix {
+  color: var(--text-3);
+  font-size: 16px;
+}
+
+.field input,
+.field textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.field textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+.field-count {
+  position: absolute;
+  right: 12px;
+  bottom: -18px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.field.is-multiline .field-count {
+  right: 28px;
+  bottom: 6px;
+}
+
+.rules {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

@@ -259,7 +259,7 @@ try {
   await app.locator('.vote[data-thing-id="t1_c3"]').waitFor();
   v = await vote(app, "t1_c3", "up");
   await v.locator(".vote-fallback").waitFor();
-  await app.locator(".toast", { hasText: "Sign in to Reddit to vote" }).waitFor();
+  await app.locator(".toast", { hasText: "Sign in to Reddit first" }).waitFor();
   assert.equal(writes.length, apiWrites);
   signedIn = true;
 

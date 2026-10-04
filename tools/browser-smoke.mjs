@@ -96,6 +96,8 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         data: {
           name: "fixture_user",
           modhash: "fixturemodhash1",
+          is_mod: true,
+          inbox_count: 3,
           icon_img: "https://www.reddit.com/img/me.png",
         },
       }),
@@ -252,6 +254,16 @@ try {
     "https://www.reddit.com/img/test.png",
   );
   await app.getByText("Signed in as u/fixture_user").waitFor();
+  // Relay's account destinations, in order, with the unread inbox count.
+  assert.deepEqual(
+    await app
+      .locator(".drawer-body > .drawer-item .label")
+      .evaluateAll((els) => els.slice(0, 6).map((el) => el.textContent)),
+    ["Profile", "Inbox", "Moderator", "New Post", "Friends", "User"],
+  );
+  assert.equal(await app.locator(".drawer-count").textContent(), "3");
+  await page.waitForTimeout(400); // Let the drawer finish sliding in.
+  await page.screenshot({ path: resolve(out, "drawer-top.png") });
   await app.getByRole("button", { name: "Add r/zebra to Favourites" }).click();
   await app.getByRole("button", { name: "Collapse Favourites" }).waitFor();
   await page.screenshot({ path: resolve(out, "drawer.png") });
@@ -333,7 +345,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, account menu, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

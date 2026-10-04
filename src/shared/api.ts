@@ -80,6 +80,13 @@ export type Distinguished = "moderator" | "admin";
 /** The signed-in viewer's vote: 1 up, -1 down, 0 none. */
 export type ViewerVote = -1 | 0 | 1;
 
+/** Moderation details, present only in moderator listings. */
+export type ModInfo = {
+  /** "n: reason" for user reports, "u/mod: reason" for moderator reports. */
+  reports: string[];
+  state?: "approved" | "removed" | "spam";
+};
+
 export type PostSummary = {
   id: string;
   title: string;
@@ -107,6 +114,7 @@ export type PostSummary = {
   media: PostMedia;
   /** Present when Reddit reports the signed-in viewer's vote. */
   vote?: ViewerVote;
+  mod?: ModInfo;
 };
 
 export type PostDetail = PostSummary & {
@@ -135,6 +143,68 @@ export type CommentNode = {
   vote?: ViewerVote;
 };
 
+/** A comment shown outside its thread (profiles, moderator queues). */
+export type ListingComment = {
+  id: string;
+  author: string;
+  body: string;
+  score: number;
+  createdAt: number;
+  subreddit: string;
+  postId: string;
+  postTitle: string;
+  permalink: string;
+  vote?: ViewerVote;
+  mod?: ModInfo;
+};
+
+/** A profile or moderator listing entry. */
+export type ListingItem =
+  | { type: "post"; post: PostSummary }
+  | { type: "comment"; comment: ListingComment };
+
+export type ListingResponse = { items: ListingItem[]; after: string | null };
+
+export type InboxKind =
+  | "message"
+  | "comment_reply"
+  | "post_reply"
+  | "mention"
+  | "mod_message";
+
+export type InboxItem = {
+  /** Fullname: `t4_` for messages, `t1_` for comment notifications. */
+  id: string;
+  kind: InboxKind;
+  subject: string;
+  body: string;
+  author: string;
+  recipient: string;
+  createdAt: number;
+  unread: boolean;
+  subreddit?: string;
+  /** Post the comment notification belongs to, and its context link. */
+  postId?: string;
+  context?: string;
+  replies: number;
+};
+
+export type InboxResponse = { items: InboxItem[]; after: string | null };
+
+export type UserAbout = {
+  name: string;
+  icon?: string;
+  linkKarma: number;
+  commentKarma: number;
+  createdAt: number;
+  isFriend: boolean;
+  suspended: boolean;
+};
+
+export type Friend = { name: string; addedAt: number };
+
+export type SubredditRule = { title: string; description: string };
+
 export type SubredditAbout = {
   name: string;
   title?: string;
@@ -159,7 +229,14 @@ export type Community = {
 };
 
 /** The signed-in Reddit account, as far as the reader needs it. */
-export type Account = { name: string; icon?: string };
+export type Account = {
+  name: string;
+  icon?: string;
+  /** Moderates at least one community. */
+  isMod?: boolean;
+  /** Unread inbox items. */
+  inboxCount?: number;
+};
 
 export type Prefs = {
   theme: "system" | "dark" | "black" | "light";

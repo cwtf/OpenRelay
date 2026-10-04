@@ -22,6 +22,11 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - Post Markdown, nested comments, collapse, comment search/navigation, and additional replies where Reddit returns them.
 - OpenRelay image/gallery/video presentation, NSFW/spoiler blur, local read/hidden markers, and settings. Settings changes save automatically and apply to every open Reddit tab.
 - Your subscribed communities load automatically into the drawer, alphabetically, in a Relay-style list: round community icons, collapsible Feeds / Favourites / Recent / Subscriptions sections, a star to pin favourites, a re-sync button, and a search pill that filters the list or opens a typed community. The list is kept for 30 minutes between syncs.
+- Relay's account destinations, inside the reader, each with Relay's layout: an app bar whose title switches section, and a bottom bar of icon-over-label actions:
+  - **Profile** and **User** (any username): picture, karma, Overview / Comments / Posts (plus Upvoted / Downvoted / Hidden / Saved on your own profile), sorting, Friend / UnFriend and a Send Message button.
+  - **Inbox**: Inbox All, Unread, Messages, Comment and Post Replies, Sent, Mentions and Mod Mail, with an unread count in the drawer. Tap a message for User, Context, Reply, Delete, Block and Read/Unread; Read All.
+  - **Moderator** (moderators only): Modqueue, Reports, Spam, Edited and Unmoderated, filtered to posts or comments, for all moderated communities or one; reports shown on each item, with Approve, Remove, Spam and Ignore.
+  - **New Post**: text or link post with subreddit rules and options (inbox replies, NSFW, spoiler, repost). **Friends**: your friends list with remove. **New Message**: compose a private message.
 - Cards, Compact and List layouts; Auto, Light, Dark and Black themes.
 - One-click restoration of Reddit's original page. Unsupported pages (settings, login, profiles, messages, moderation) stay native. Recognized challenge screens stay native too.
 
@@ -29,13 +34,15 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 
 Posts and comments the reader fetched itself (other pages, more comments) have no control on the page. Their votes go to Reddit's `/api/vote` endpoint as a same-origin request from the Reddit tab, with your existing session and its modhash (Reddit's CSRF token, read from `/api/me.json` and held only in memory in that tab). The arrows start from the vote Reddit reports for you, and the count adjusts locally. A stale modhash is refreshed once; nothing else is retried.
 
-If you are signed out, the control is disabled (archived/locked), or Reddit does not confirm a clicked vote, the reader explains why and shows a **Vote on Reddit** link as a fallback. Replies still open Reddit’s editor. The extension does not request OAuth access, use Devvit's app account, or send any token outside the Reddit tab; `/api/vote` is the only write it makes. Settings stay local to the browser; Reddit account preference syncing is not included.
+If you are signed out, the control is disabled (archived/locked), or Reddit does not confirm a clicked vote, the reader explains why and shows a **Vote on Reddit** link as a fallback. Comment replies in threads still open Reddit’s editor. The extension does not request OAuth access, use Devvit's app account, or send any token outside the Reddit tab.
+
+**Writes** happen only when you act, through Reddit's own `/api/*` endpoints with your session: voting, and the account screens' actions (mark read/unread, read all, reply to inbox items, delete and block, compose, approve/remove/spam/ignore reports, friend/unfriend, submit). The page script accepts only this fixed list, validates every parameter (IDs, usernames, community names, lengths, http(s) URLs) before contacting Reddit, and adds the modhash itself; the reader never receives it. Deleting, blocking and removing friends ask for confirmation first. Settings stay local to the browser; Reddit account preference syncing is not included.
 
 ## Data and permissions
 
 A Manifest V3 content script runs only on the three Reddit hosts above. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
 
-No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. Requests use the Reddit tab's normal same-origin session; the subscription list comes from Reddit's read-only `/subreddits/mine/subscriber.json` and needs you to be signed in to Reddit. Nothing is sent to an OpenRelay server. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
+No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. Requests use the Reddit tab's normal same-origin session; the subscription list, profiles, inbox, moderation queues, friends and community rules come from Reddit's read-only JSON listings and need you to be signed in to Reddit. The inbox is read with `mark=false`, so opening it does not mark messages read. Nothing is sent to an OpenRelay server. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
 
 Chrome's content-script model is documented at:
 [Content scripts — Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts).
@@ -57,7 +64,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 32 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 38 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -68,6 +75,8 @@ npm run test:browser
 Set `PLAYWRIGHT_MODULE` to a Playwright module URL or `CHROMIUM_PATH` to an installed Chromium executable when using shared tooling. Test profiles/screenshots are written under ignored `test-results/`.
 
 Vote tests additionally cover initial selection, undo/switch, rapid-click suppression, exact nested-comment ownership, API votes for reader-fetched comments (request body, modhash, reported vote, counts), signed-out handling, disabled controls, unconfirmed changes, delayed rollbacks, and rejection of page-origin spoofed messages, and check that `/api/vote` is the only write. All vote tests use instrumented fixtures; they cast no votes on Reddit.
+
+The account test (`tools/account-smoke.mjs`) walks Profile, User, Compose, Inbox, Moderator, Friends and New Post against fixtures, checks each write's exact request body, and checks that only `/api/*` endpoints are written to and no tabs open.
 
 The browser test profile blocks third-party cookies, to check that settings and favourites survive a reload.
 

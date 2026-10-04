@@ -1,6 +1,11 @@
 import type {
   AboutResponse,
   Account,
+  Friend,
+  InboxResponse,
+  ListingResponse,
+  SubredditRule,
+  UserAbout,
   CommentNode,
   CommentSort,
   Community,
@@ -17,6 +22,11 @@ import { bridge, pageUrl } from "../../extension/bridge";
 import {
   safeUrl,
   normalizeCommunity,
+  normalizeFriends,
+  normalizeInbox,
+  normalizeListing,
+  normalizeRules,
+  normalizeUserAbout,
   normalizeComments,
   normalizePost,
   parseRoute,
@@ -265,4 +275,95 @@ export async function fetchSubscriptions(): Promise<Community[]> {
 /** The signed-in account's name and profile picture, or null. */
 export const fetchAccount = (): Promise<Account | null> =>
   bridge<Account | null>("me");
+// -- profile, inbox, moderation, friends, posting
+
+export type ProfileSection =
+  | "overview"
+  | "comments"
+  | "submitted"
+  | "upvoted"
+  | "downvoted"
+  | "hidden"
+  | "saved";
+export type ProfileSort = "new" | "hot" | "top" | "controversial";
+export type InboxSection =
+  | "inbox"
+  | "unread"
+  | "messages"
+  | "comments"
+  | "selfreply"
+  | "sent"
+  | "mentions"
+  | "moderator"
+  | "moderator/unread";
+export type ModSection = "modqueue" | "reports" | "spam" | "edited" | "unmoderated";
+export type ModFilter = "all" | "links" | "comments";
+
+const user = (name: string) => "/user/" + encodeURIComponent(name);
+
+export async function fetchUserAbout(name: string): Promise<UserAbout> {
+  const about = normalizeUserAbout(await json(user(name) + "/about.json?raw_json=1"));
+  if (!about) throw new ApiFailure("This account is unavailable.");
+  return about;
+}
+export async function fetchUserListing(
+  name: string,
+  section: ProfileSection,
+  sort: ProfileSort,
+  t: Timeframe,
+  after?: string | null,
+): Promise<ListingResponse> {
+  const data = await json(
+    user(name) + "/" + section + ".json" + query({ sort, t, after, limit: 25 }),
+  );
+  return { items: normalizeListing(data?.data?.children), after: data?.data?.after ?? null };
+}
+export async function fetchInbox(
+  section: InboxSection,
+  after?: string | null,
+): Promise<InboxResponse> {
+  // mark=false: opening the inbox does not mark everything read.
+  const data = await json(
+    "/message/" + section + ".json" + query({ mark: "false", after, limit: 25 }),
+  );
+  return { items: normalizeInbox(data?.data?.children), after: data?.data?.after ?? null };
+}
+export async function fetchModListing(
+  sub: string,
+  section: ModSection,
+  filter: ModFilter,
+  after?: string | null,
+): Promise<ListingResponse> {
+  const data = await json(
+    prefix(sub) +
+      "/about/" +
+      section +
+      ".json" +
+      query({ only: filter === "all" ? undefined : filter, after, limit: 25 }),
+  );
+  return { items: normalizeListing(data?.data?.children), after: data?.data?.after ?? null };
+}
+/** Communities the viewer moderates, alphabetically. */
+export async function fetchModerated(): Promise<string[]> {
+  const data = await json("/subreddits/mine/moderator.json" + query({ limit: 100 }));
+  const names: string[] = Array.isArray(data?.data?.children)
+    ? data.data.children
+        .map((child: any) => normalizeCommunity(child?.data)?.name)
+        .filter(Boolean)
+    : [];
+  return names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+export async function fetchFriends(): Promise<Friend[]> {
+  return normalizeFriends(await json("/prefs/friends.json?raw_json=1"));
+}
+export async function fetchRules(sub: string): Promise<SubredditRule[]> {
+  return normalizeRules(await json(prefix(sub) + "/about/rules.json?raw_json=1"));
+}
+
+/** A validated write performed by the Reddit tab with the viewer's session. */
+export const runAction = (
+  op: string,
+  args: Record<string, unknown> = {},
+): Promise<{ id?: string; url?: string }> => bridge("action", undefined, { op, args });
+
 export const savePrefsRemote = async (prefs: Prefs) => ({ prefs });

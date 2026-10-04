@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { apiVote, resetApiVote } from "./apiVote.ts";
+import { apiAction, apiVote, resetWrites } from "./writes.ts";
 
 type Call = { url: string; init: RequestInit | undefined };
 const json = (body: unknown, status = 200) =>
@@ -23,7 +23,7 @@ const fakeReddit = (
 const origin = "https://www.reddit.com";
 
 test("casts a same-origin vote with the session modhash", async () => {
-  resetApiVote();
+  resetWrites();
   const { calls, fetchFn } = fakeReddit((url) =>
     url.pathname === "/api/me.json"
       ? json({ data: { modhash: "abc123modhash" } })
@@ -56,7 +56,7 @@ test("casts a same-origin vote with the session modhash", async () => {
 });
 
 test("refreshes a stale modhash once after a 403", async () => {
-  resetApiVote();
+  resetWrites();
   let hashes = 0;
   let votes = 0;
   const { fetchFn } = fakeReddit((url) => {
@@ -71,15 +71,15 @@ test("refreshes a stale modhash once after a 403", async () => {
 });
 
 test("requires a signed-in session and reports Reddit's errors", async () => {
-  resetApiVote();
+  resetWrites();
   const signedOut = fakeReddit(() => json({}));
   await assert.rejects(
     apiVote(signedOut.fetchFn, origin, "t3_abc", 1),
-    /Sign in to Reddit to vote/,
+    /Sign in to Reddit first/,
   );
   assert.equal(signedOut.calls.length, 1);
 
-  resetApiVote();
+  resetWrites();
   const archived = fakeReddit((url) =>
     url.pathname === "/api/me.json"
       ? json({ data: { modhash: "abc123modhash" } })
@@ -92,7 +92,7 @@ test("requires a signed-in session and reports Reddit's errors", async () => {
 });
 
 test("rejects malformed votes before any request", async () => {
-  resetApiVote();
+  resetWrites();
   const { calls, fetchFn } = fakeReddit(() => json({}));
   for (const [id, dir] of [
     ["t2_user", 1],
@@ -101,5 +101,76 @@ test("rejects malformed votes before any request", async () => {
     [null, 0],
   ])
     await assert.rejects(apiVote(fetchFn, origin, id, dir), /Invalid vote/);
+  assert.equal(calls.length, 0);
+});
+
+const signedIn = () =>
+  fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42" } })
+      : url.pathname === "/api/submit"
+        ? json({ json: { errors: [], data: { name: "t3_new1", url: "https://www.reddit.com/r/test/comments/new1/x/" } } })
+        : json({}),
+  );
+const sent = (call: Call) => Object.fromEntries(new URLSearchParams(String(call.init?.body)));
+
+test("runs allow-listed actions with only their own parameters", async () => {
+  resetWrites();
+  const { calls, fetchFn } = signedIn();
+  await apiAction(fetchFn, origin, "read_message", { id: "t4_abc", extra: "x" });
+  assert.equal(new URL(calls[1]!.url).pathname, "/api/read_message");
+  assert.deepEqual(sent(calls[1]!), { id: "t4_abc", uh: "abc123modhash", api_type: "json" });
+
+  await apiAction(fetchFn, origin, "friend", { name: "spez" });
+  assert.deepEqual(sent(calls[2]!), {
+    name: "spez",
+    type: "friend",
+    container: "t2_me42",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+
+  const created = await apiAction(fetchFn, origin, "submit", {
+    sr: "test",
+    kind: "self",
+    title: "Hello",
+    text: "Body",
+    nsfw: true,
+  });
+  assert.deepEqual(created, {
+    id: "t3_new1",
+    url: "https://www.reddit.com/r/test/comments/new1/x/",
+  });
+  assert.deepEqual(sent(calls[3]!), {
+    sr: "test",
+    kind: "self",
+    title: "Hello",
+    text: "Body",
+    sendreplies: "true",
+    nsfw: "true",
+    spoiler: "false",
+    resubmit: "false",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+});
+
+test("rejects unknown actions and invalid parameters before any request", async () => {
+  resetWrites();
+  const { calls, fetchFn } = signedIn();
+  for (const [name, args] of [
+    ["vote", { id: "t3_a", dir: 1 }],
+    ["delete_account", {}],
+    ["__proto__", {}],
+    ["del_msg", { id: "t1_comment" }],
+    ["approve", { id: "t5_sub" }],
+    ["compose", { to: "a b", subject: "s", text: "t" }],
+    ["compose", { to: "spez", subject: "", text: "t" }],
+    ["submit", { sr: "test", kind: "link", title: "x", url: "javascript:alert(1)" }],
+    ["submit", { sr: "../api", kind: "self", title: "x" }],
+    ["submit", { sr: "test", kind: "self", title: "x".repeat(301) }],
+    ["read_message", null],
+  ] as const)
+    await assert.rejects(apiAction(fetchFn, origin, name, args), /Invalid request/, name);
   assert.equal(calls.length, 0);
 });

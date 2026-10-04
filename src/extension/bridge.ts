@@ -36,14 +36,19 @@ window.addEventListener("message", (event) => {
   else if (event.data.error) task.reject(new Error(String(event.data.error)));
   else task.resolve(event.data.value);
 });
+/** Tell the page how much of the bottom edge the reader's chrome uses. */
+export const setBottomInset = (bottom: number): void =>
+  window.parent.postMessage({ type: "openrelay:inset", bottom }, pageUrl.origin);
 export function bridge<T>(
-  action: "snapshot" | "json" | "vote" | "vote-status" | "me",
+  action: "snapshot" | "json" | "vote" | "vote-status" | "me" | "action",
   path?: string,
   payload?: {
     thingId?: string;
     direction?: number;
     current?: number;
     ids?: string[];
+    op?: string;
+    args?: Record<string, unknown>;
   },
 ): Promise<T> {
   const id = ++nextId;

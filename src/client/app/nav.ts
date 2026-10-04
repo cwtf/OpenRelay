@@ -39,6 +39,13 @@ export type Nav = {
   openPost: (post: PostSummary | string) => void;
   openCommunity: (name: string) => void;
   openSearch: () => void;
+  /** Account screens, after Relay's drawer destinations. */
+  openProfile: (user: string) => void;
+  openInbox: () => void;
+  openModerator: () => void;
+  openFriends: () => void;
+  openSubmit: (sub?: string) => void;
+  openCompose: (draft?: { to?: string; subject?: string }) => void;
   back: () => void;
   openLink: (href: string) => void;
   openMedia: (spec: ViewerSpec) => void;

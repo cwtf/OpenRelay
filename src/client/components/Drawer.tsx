@@ -19,12 +19,60 @@ import {
   useFavourites,
   useSubscriptions,
 } from "../lib/subscriptions";
-import { useAccount } from "../lib/account";
+import { ensureAccount, useAccount } from "../lib/account";
+import { promptLogin } from "../lib/platform";
 import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/;
+const USER_RE = /^[\w-]{3,20}$/;
+
+const GoToUserSheet = ({
+  onGo,
+  onClosed,
+}: {
+  onGo: (name: string) => void;
+  onClosed: () => void;
+}) => {
+  const [draft, setDraft] = useState("");
+  const name = draft.trim().replace(/^\/?u(?:ser)?\//i, "");
+  return (
+    <Sheet title="Go to user" onClosed={onClosed}>
+      {(close) => (
+        <form
+          className="drawer-search user-go"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!USER_RE.test(name)) return;
+            close();
+            onGo(name);
+          }}
+        >
+          <Icon name="user" size={20} />
+          <input
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="u/username"
+            aria-label="Username"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="go"
+          />
+          <button
+            type="submit"
+            className="btn is-tonal"
+            disabled={!USER_RE.test(name)}
+          >
+            Go
+          </button>
+        </form>
+      )}
+    </Sheet>
+  );
+};
 
 export const AboutSheet = ({
   sub,
@@ -248,7 +296,10 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
 
-  useEffect(() => ensureSubscriptions(), []);
+  useEffect(() => {
+    ensureSubscriptions();
+    ensureAccount(60 * 1000); // Keep the inbox count reasonably current.
+  }, []);
 
   const go = (name: string) => {
     close();
@@ -432,6 +483,112 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
             </>
           ) : (
             <>
+              {/* Account destinations, as in Relay's drawer. */}
+              {account ? (
+                <>
+                  <button
+                    type="button"
+                    className="drawer-item"
+                    data-ripple
+                    onClick={() => {
+                      close();
+                      nav.openProfile(account.name);
+                    }}
+                  >
+                    <Icon name="accountCircle" />
+                    <span className="label">Profile</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="drawer-item"
+                    data-ripple
+                    onClick={() => {
+                      close();
+                      nav.openInbox();
+                    }}
+                  >
+                    <Icon name="mail" />
+                    <span className="label">Inbox</span>
+                    {account.inboxCount ? (
+                      <span
+                        className="drawer-count"
+                        aria-label={`${account.inboxCount} unread`}
+                      >
+                        {account.inboxCount > 99 ? "99+" : account.inboxCount}
+                      </span>
+                    ) : null}
+                  </button>
+                  {account.isMod ? (
+                    <button
+                      type="button"
+                      className="drawer-item"
+                      data-ripple
+                      onClick={() => {
+                        close();
+                        nav.openModerator();
+                      }}
+                    >
+                      <Icon name="modShield" />
+                      <span className="label">Moderator</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="drawer-item"
+                    data-ripple
+                    onClick={() => {
+                      close();
+                      nav.openSubmit(
+                        special.has(current.toLowerCase()) ? undefined : current,
+                      );
+                    }}
+                  >
+                    <Icon name="postAdd" />
+                    <span className="label">New Post</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="drawer-item"
+                    data-ripple
+                    onClick={() => {
+                      close();
+                      nav.openFriends();
+                    }}
+                  >
+                    <Icon name="people" />
+                    <span className="label">Friends</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="drawer-item"
+                  data-ripple
+                  onClick={promptLogin}
+                >
+                  <Icon name="accountCircle" />
+                  <span className="label">Sign in to Reddit</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="drawer-item"
+                data-ripple
+                onClick={() => {
+                  close();
+                  nav.openSheet((onSheetClosed) => (
+                    <GoToUserSheet
+                      onGo={nav.openProfile}
+                      onClosed={onSheetClosed}
+                    />
+                  ));
+                }}
+              >
+                <Icon name="user" />
+                <span className="label">User</span>
+              </button>
+              <div className="drawer-sep" />
+
               {entry ? (
                 <button
                   type="button"

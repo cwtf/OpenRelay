@@ -2,6 +2,13 @@ import type {
   Account,
   Community,
   CommentNode,
+  Friend,
+  InboxItem,
+  ListingComment,
+  ListingItem,
+  ModInfo,
+  SubredditRule,
+  UserAbout,
   PostDetail,
   PostMedia,
   FeedSort,
@@ -138,8 +145,140 @@ export function normalizePost(p: Raw): PostDetail {
       : {}),
     ...(thumb ? { thumb } : {}),
     ...viewerVote(p.likes),
+    ...modInfo(p),
     media,
   };
+}
+/** Reports and approval state, present only for moderators. */
+function modInfo(t: Raw): { mod?: ModInfo } {
+  const reports: string[] = [];
+  for (const [reason, mod] of Array.isArray(t.mod_reports) ? t.mod_reports : [])
+    reports.push(`u/${String(mod ?? "mod")}: ${String(reason ?? "")}`);
+  for (const [reason, count] of Array.isArray(t.user_reports) ? t.user_reports : [])
+    reports.push(`${num(count) || 1}: ${String(reason ?? "")}`);
+  const state = t.spam
+    ? "spam"
+    : t.removed || t.banned_by
+      ? "removed"
+      : t.approved || t.approved_by
+        ? "approved"
+        : undefined;
+  return reports.length || state
+    ? { mod: { reports, ...(state ? { state } : {}) } }
+    : {};
+}
+const NAME = /^[\w-]{3,20}$/;
+const fullname = (value: unknown, prefix: string) =>
+  typeof value === "string" && /^t\d_[a-z0-9]+$/i.test(value)
+    ? value
+    : prefix + String(value ?? "");
+export function normalizeListingComment(c: Raw): ListingComment {
+  return {
+    id: fullname(c.name ?? c.id, "t1_"),
+    author: String(c.author ?? "[deleted]"),
+    body: String(c.body ?? ""),
+    score: num(c.score),
+    createdAt: num(c.created_utc) * 1000,
+    subreddit: String(c.subreddit ?? ""),
+    postId: fullname(c.link_id, "t3_"),
+    postTitle: String(c.link_title ?? ""),
+    permalink: safeUrl(c.permalink),
+    ...viewerVote(c.likes),
+    ...modInfo(c),
+  };
+}
+/** Posts and comments from profile and moderator listings. */
+export function normalizeListing(children: unknown): ListingItem[] {
+  if (!Array.isArray(children)) return [];
+  return children.flatMap((child: Raw): ListingItem[] =>
+    child?.kind === "t3"
+      ? [{ type: "post", post: normalizePost(child.data) }]
+      : child?.kind === "t1"
+        ? [{ type: "comment", comment: normalizeListingComment(child.data) }]
+        : [],
+  );
+}
+export function normalizeInbox(children: unknown): InboxItem[] {
+  if (!Array.isArray(children)) return [];
+  return children.flatMap((child: Raw): InboxItem[] => {
+    const d = child?.data;
+    if (!d || (child.kind !== "t4" && child.kind !== "t1")) return [];
+    const kind =
+      child.kind === "t4"
+        ? d.subreddit && !d.author
+          ? "mod_message"
+          : d.distinguished === "moderator" && d.subreddit
+            ? "mod_message"
+            : "message"
+        : d.type === "post_reply"
+          ? "post_reply"
+          : d.type === "username_mention"
+            ? "mention"
+            : "comment_reply";
+    const replies = d.replies?.data?.children;
+    return [
+      {
+        id: fullname(d.name ?? d.id, child.kind + "_"),
+        kind,
+        subject:
+          child.kind === "t1"
+            ? String(d.link_title ?? d.subject ?? "")
+            : String(d.subject ?? ""),
+        body: String(d.body ?? ""),
+        author: String(d.author ?? (d.subreddit ? `r/${d.subreddit}` : "[deleted]")),
+        recipient: String(d.dest ?? ""),
+        createdAt: num(d.created_utc) * 1000,
+        unread: Boolean(d.new),
+        ...(d.subreddit ? { subreddit: String(d.subreddit) } : {}),
+        ...(child.kind === "t1" && d.link_id
+          ? { postId: fullname(d.link_id, "t3_") }
+          : child.kind === "t1" && typeof d.context === "string"
+            ? {
+                postId:
+                  "t3_" + (d.context.match(/\/comments\/([a-z0-9]+)/i)?.[1] ?? ""),
+              }
+            : {}),
+        ...(typeof d.context === "string" && d.context
+          ? { context: safeUrl(d.context) }
+          : {}),
+        replies: Array.isArray(replies) ? replies.length : 0,
+      },
+    ];
+  });
+}
+export function normalizeUserAbout(raw: Raw): UserAbout | null {
+  const d = raw?.data;
+  const name = String(d?.name ?? "");
+  if (!NAME.test(name)) return null;
+  const icon = safeUrl(d.snoovatar_img) || safeUrl(d.icon_img);
+  return {
+    name,
+    ...(icon ? { icon } : {}),
+    linkKarma: num(d.link_karma),
+    commentKarma: num(d.comment_karma),
+    createdAt: num(d.created_utc) * 1000,
+    isFriend: Boolean(d.is_friend),
+    suspended: Boolean(d.is_suspended),
+  };
+}
+/** `/prefs/friends.json` returns one or more `UserList` listings. */
+export function normalizeFriends(raw: unknown): Friend[] {
+  const lists = Array.isArray(raw) ? raw : [raw];
+  const list = lists.find((entry: Raw) => entry?.kind === "UserList") ?? lists[0];
+  const children = (list as Raw)?.data?.children;
+  if (!Array.isArray(children)) return [];
+  return children
+    .filter((f: Raw) => NAME.test(String(f?.name ?? "")))
+    .map((f: Raw) => ({ name: String(f.name), addedAt: num(f.date) * 1000 }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+export function normalizeRules(raw: Raw): SubredditRule[] {
+  return Array.isArray(raw?.rules)
+    ? raw.rules.map((r: Raw) => ({
+        title: String(r.short_name ?? ""),
+        description: String(r.description ?? ""),
+      }))
+    : [];
 }
 export function normalizeComments(children: Raw[] = []): {
   comments: CommentNode[];
@@ -200,7 +339,13 @@ export function normalizeAccount(me: Raw): Account | null {
   const name = String(d?.name ?? "");
   if (!/^[\w-]{3,20}$/.test(name)) return null;
   const icon = safeUrl(d.icon_img) || safeUrl(d.snoovatar_img);
-  return { name, ...(icon ? { icon } : {}) };
+  const unread = num(d.inbox_count);
+  return {
+    name,
+    ...(icon ? { icon } : {}),
+    ...(d.is_mod === true ? { isMod: true } : {}),
+    ...(unread > 0 ? { inboxCount: Math.floor(unread) } : {}),
+  };
 }
 export type PageRoute = {
   sub: string;
@@ -257,6 +402,15 @@ export function parseRoute(href: string): PageRoute | null {
     timeframe,
   };
 }
+/** Read-only listings the reader may request through the page bridge. */
+const READ_ROUTES = [
+  /^\/(?:r\/[\w+]+\/)?(?:(?:hot|best|new|top|rising|controversial|search|about)\.json|comments\/[a-z0-9]+\.json)$/i,
+  /^\/subreddits\/mine\/(?:subscriber|moderator)\.json$/i,
+  /^\/user\/[\w-]{3,20}\/(?:about|overview|comments|submitted|upvoted|downvoted|hidden|saved)\.json$/i,
+  /^\/message\/(?:inbox|unread|messages|comments|selfreply|sent|mentions|moderator|moderator\/unread)\.json$/i,
+  /^\/r\/[\w+]+\/about\/(?:modqueue|reports|spam|edited|unmoderated|rules)\.json$/i,
+  /^\/prefs\/friends\.json$/i,
+];
 export function allowedJsonPath(path: unknown): path is string {
   if (
     typeof path !== "string" ||
@@ -267,7 +421,5 @@ export function allowedJsonPath(path: unknown): path is string {
     return false;
   const url = new URL(path, "https://www.reddit.com");
   if (url.origin !== "https://www.reddit.com") return false;
-  return /^\/(?:(?:r\/[\w+]+\/)?(?:(?:hot|best|new|top|rising|controversial|search|about)\.json|comments\/[a-z0-9]+\.json)|subreddits\/mine\/subscriber\.json)$/i.test(
-    url.pathname,
-  );
+  return READ_ROUTES.some((route) => route.test(url.pathname));
 }

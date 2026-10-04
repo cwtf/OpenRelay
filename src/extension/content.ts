@@ -1,10 +1,11 @@
-import { apiVote } from "./apiVote";
+import { apiAction, apiVote } from "./writes";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
 import { readSnapshot } from "./snapshot";
 
 let host: HTMLDivElement | null = null;
 let frame: HTMLIFrameElement | null = null;
+let exitButton: HTMLButtonElement | null = null;
 let active = false;
 let originalInert = false;
 let originalOverflow = "";
@@ -53,7 +54,7 @@ function mount() {
     chrome.runtime.getURL("reader.html") +
     "#" +
     new URLSearchParams({ source: location.href });
-  const exit = document.createElement("button");
+  const exit = (exitButton = document.createElement("button"));
   exit.textContent = "Original Reddit";
   exit.title =
     "Return to the original page. Click the extension icon to reopen OpenRelay.";
@@ -66,12 +67,16 @@ function mount() {
   show(true);
 }
 window.addEventListener("message", async (event) => {
-  if (
-    event.source !== frame?.contentWindow ||
-    event.origin !== extensionOrigin ||
-    event.data?.type !== "openrelay:request"
-  )
+  if (event.source !== frame?.contentWindow || event.origin !== extensionOrigin)
     return;
+  // Keep "Original Reddit" clear of the reader's bottom app bar.
+  if (event.data?.type === "openrelay:inset") {
+    const bottom = Number(event.data.bottom);
+    if (exitButton && Number.isFinite(bottom) && bottom >= 0 && bottom <= 200)
+      exitButton.style.bottom = `${12 + bottom}px`;
+    return;
+  }
+  if (event.data?.type !== "openrelay:request") return;
   const { id, action, path, payload } = event.data;
   const target = frame.contentWindow;
   if (!Number.isSafeInteger(id)) return;
@@ -110,6 +115,9 @@ window.addEventListener("message", async (event) => {
           readNativeVote(document, thingId),
         ]),
       );
+    } else if (action === "action") {
+      if (!active) throw new Error("OpenRelay is not active");
+      value = await apiAction(fetch, location.origin, payload?.op, payload?.args);
     } else if (action === "me") {
       // Only the name and picture reach the reader, never the session modhash.
       const response = await fetch(new URL("/api/me.json", location.origin), {

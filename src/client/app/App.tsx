@@ -30,6 +30,14 @@ import { FeedScreen } from "../screens/FeedScreen";
 import { PostScreen } from "../screens/PostScreen";
 import { SearchScreen } from "../screens/SearchScreen";
 import {
+  ComposeScreen,
+  FriendsScreen,
+  InboxScreen,
+  ModeratorScreen,
+  ProfileScreen,
+  SubmitScreen,
+} from "../screens/AccountScreens";
+import {
   NavContext,
   type Nav,
   type Session,
@@ -40,7 +48,13 @@ import { PrefsProvider, usePrefs } from "./prefs";
 
 type Route =
   | { kind: "post"; id: string; seed?: PostSummary | undefined }
-  | { kind: "search"; sub: string };
+  | { kind: "search"; sub: string }
+  | { kind: "profile"; user: string }
+  | { kind: "inbox" }
+  | { kind: "moderator" }
+  | { kind: "friends" }
+  | { kind: "submit"; sub?: string | undefined }
+  | { kind: "compose"; to?: string | undefined; subject?: string | undefined };
 type Entry = {
   key: string;
   route: Route;
@@ -380,6 +394,12 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openSearch: () => push({ kind: "search", sub: current }),
       back,
       openLink,
+      openProfile: (user) => push({ kind: "profile", user }),
+      openInbox: () => push({ kind: "inbox" }),
+      openModerator: () => push({ kind: "moderator" }),
+      openFriends: () => push({ kind: "friends" }),
+      openSubmit: (sub) => push({ kind: "submit", sub }),
+      openCompose: (draft) => push({ kind: "compose", ...draft }),
       openMedia: (spec) => setViewer(spec),
       openSheet,
       openDrawer: () => setDrawer(true),
@@ -442,8 +462,20 @@ const Reader = ({ init }: { init: InitResponse }) => {
             >
               {entry.route.kind === "post" ? (
                 <PostScreen postId={entry.route.id} seed={entry.route.seed} />
-              ) : (
+              ) : entry.route.kind === "search" ? (
                 <SearchScreen sub={entry.route.sub} />
+              ) : entry.route.kind === "profile" ? (
+                <ProfileScreen user={entry.route.user} />
+              ) : entry.route.kind === "inbox" ? (
+                <InboxScreen />
+              ) : entry.route.kind === "moderator" ? (
+                <ModeratorScreen />
+              ) : entry.route.kind === "friends" ? (
+                <FriendsScreen />
+              ) : entry.route.kind === "submit" ? (
+                <SubmitScreen sub={entry.route.sub} />
+              ) : (
+                <ComposeScreen to={entry.route.to} subject={entry.route.subject} />
               )}
             </ScreenFrame>
           );
