@@ -170,7 +170,33 @@ test("rejects unknown actions and invalid parameters before any request", async 
     ["submit", { sr: "../api", kind: "self", title: "x" }],
     ["submit", { sr: "test", kind: "self", title: "x".repeat(301) }],
     ["read_message", null],
+    ["subscribe", { action: "join", sr: "test" }],
+    ["subscribe", { action: "sub", sr: "a/b" }],
+    ["compose", { to: "/r/a/b", subject: "s", text: "t" }],
   ] as const)
     await assert.rejects(apiAction(fetchFn, origin, name, args), /Invalid request/, name);
   assert.equal(calls.length, 0);
+});
+
+test("subscribes and messages a community's moderators", async () => {
+  resetWrites();
+  const { calls, fetchFn } = signedIn();
+  await apiAction(fetchFn, origin, "subscribe", { action: "sub", sr: "typescript" });
+  assert.equal(new URL(calls[1]!.url).pathname, "/api/subscribe");
+  assert.deepEqual(sent(calls[1]!), {
+    action: "sub",
+    sr_name: "typescript",
+    skip_initial_defaults: "true",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+  await apiAction(fetchFn, origin, "subscribe", { action: "unsub", sr: "typescript" });
+  assert.deepEqual(sent(calls[2]!), {
+    action: "unsub",
+    sr_name: "typescript",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+  await apiAction(fetchFn, origin, "compose", { to: "/r/typescript", subject: "Hi", text: "Mods" });
+  assert.equal(sent(calls[3]!).to, "/r/typescript");
 });

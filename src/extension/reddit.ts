@@ -7,6 +7,7 @@ import type {
   ListingComment,
   ListingItem,
   ModInfo,
+  Moderator,
   SubredditRule,
   UserAbout,
   PostDetail,
@@ -272,6 +273,20 @@ export function normalizeFriends(raw: unknown): Friend[] {
     .map((f: Raw) => ({ name: String(f.name), addedAt: num(f.date) * 1000 }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
+export function normalizeModerators(raw: Raw): Moderator[] {
+  const children = raw?.data?.children;
+  return Array.isArray(children)
+    ? children
+        .filter((m: Raw) => NAME.test(String(m?.name ?? "")))
+        .map((m: Raw) => ({
+          name: String(m.name),
+          since: num(m.date) * 1000,
+          permissions: Array.isArray(m.mod_permissions)
+            ? m.mod_permissions.map(String)
+            : [],
+        }))
+    : [];
+}
 export function normalizeRules(raw: Raw): SubredditRule[] {
   return Array.isArray(raw?.rules)
     ? raw.rules.map((r: Raw) => ({
@@ -408,7 +423,8 @@ const READ_ROUTES = [
   /^\/subreddits\/mine\/(?:subscriber|moderator)\.json$/i,
   /^\/user\/[\w-]{3,20}\/(?:about|overview|comments|submitted|upvoted|downvoted|hidden|saved)\.json$/i,
   /^\/message\/(?:inbox|unread|messages|comments|selfreply|sent|mentions|moderator|moderator\/unread)\.json$/i,
-  /^\/r\/[\w+]+\/about\/(?:modqueue|reports|spam|edited|unmoderated|rules)\.json$/i,
+  /^\/r\/[\w+]+\/about\/(?:modqueue|reports|spam|edited|unmoderated|rules|moderators)\.json$/i,
+  /^\/r\/\w+\/wiki\/index\.json$/i,
   /^\/prefs\/friends\.json$/i,
 ];
 export function allowedJsonPath(path: unknown): path is string {

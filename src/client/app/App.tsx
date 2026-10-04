@@ -53,7 +53,7 @@ type Route =
   | { kind: "inbox" }
   | { kind: "moderator" }
   | { kind: "friends" }
-  | { kind: "submit"; sub?: string | undefined }
+  | { kind: "submit"; sub?: string | undefined; post?: "self" | "link" | undefined }
   | { kind: "compose"; to?: string | undefined; subject?: string | undefined };
 type Entry = {
   key: string;
@@ -398,7 +398,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openInbox: () => push({ kind: "inbox" }),
       openModerator: () => push({ kind: "moderator" }),
       openFriends: () => push({ kind: "friends" }),
-      openSubmit: (sub) => push({ kind: "submit", sub }),
+      openSubmit: (sub, post) => push({ kind: "submit", sub, post }),
       openCompose: (draft) => push({ kind: "compose", ...draft }),
       openMedia: (spec) => setViewer(spec),
       openSheet,
@@ -473,7 +473,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
               ) : entry.route.kind === "friends" ? (
                 <FriendsScreen />
               ) : entry.route.kind === "submit" ? (
-                <SubmitScreen sub={entry.route.sub} />
+                <SubmitScreen sub={entry.route.sub} kind={entry.route.post} />
               ) : (
                 <ComposeScreen to={entry.route.to} subject={entry.route.subject} />
               )}

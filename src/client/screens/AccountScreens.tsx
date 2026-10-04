@@ -769,9 +769,15 @@ const OptionsSheet = ({
   );
 };
 
-export const SubmitScreen = ({ sub }: { sub?: string | undefined }) => {
+export const SubmitScreen = ({
+  sub,
+  kind: initialKind = "self",
+}: {
+  sub?: string | undefined;
+  kind?: "self" | "link" | undefined;
+}) => {
   const nav = useNav();
-  const [kind, setKind] = useState<"self" | "link">("self");
+  const [kind, setKind] = useState<"self" | "link">(initialKind);
   const [sr, setSr] = useState(sub ?? "");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -869,7 +875,7 @@ export const SubmitScreen = ({ sub }: { sub?: string | undefined }) => {
   );
 };
 
-const RulesSheet = ({ sub, onClosed }: { sub: string; onClosed: () => void }) => {
+export const RulesSheet = ({ sub, onClosed }: { sub: string; onClosed: () => void }) => {
   const [rules, setRules] = useState<{ title: string; description: string }[] | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -917,8 +923,12 @@ export const ComposeScreen = ({
   const [title, setTitle] = useState(subject ?? "");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const name = recipient.trim().replace(/^\/?u(?:ser)?\//i, "");
-  const ready = USER_RE.test(name) && title.trim() && message.trim();
+  const toCommunity = /^\/?r\/([A-Za-z0-9][A-Za-z0-9_]{1,20})$/i.exec(recipient.trim());
+  const name = toCommunity
+    ? `/r/${toCommunity[1]}`
+    : recipient.trim().replace(/^\/?u(?:ser)?\//i, "");
+  const ready =
+    (toCommunity || USER_RE.test(name)) && title.trim() && message.trim();
 
   const send = () => {
     if (!ready || sending) return;
@@ -934,7 +944,11 @@ export const ComposeScreen = ({
       <ScreenHeader title="New Message" />
       <div className="scroller">
         <div className="compose-form">
-          <Field icon="user" label="Username" prefix="u/" value={recipient} onChange={setRecipient} autoFocus={!to} />
+          {toCommunity ? (
+            <Field icon="modShield" label="Moderators of" value={recipient} onChange={setRecipient} />
+          ) : (
+            <Field icon="user" label="Username" prefix="u/" value={recipient} onChange={setRecipient} autoFocus={!to} />
+          )}
           <Field icon="text" label="Title" value={title} onChange={setTitle} max={100} />
           <Field icon="mail" label="Message" value={message} onChange={setMessage} multiline max={10000} autoFocus={Boolean(to)} />
         </div>

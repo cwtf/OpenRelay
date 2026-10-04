@@ -9,7 +9,6 @@ import {
 import type { Community } from "../../shared/api";
 import { useNav } from "../app/nav";
 import { compact, hueOf } from "../lib/format";
-import { Markdown } from "../lib/markdown";
 import { readJson, recentCommunities, writeJson } from "../lib/storage";
 import {
   ensureSubscriptions,
@@ -69,42 +68,6 @@ const GoToUserSheet = ({
             Go
           </button>
         </form>
-      )}
-    </Sheet>
-  );
-};
-
-export const AboutSheet = ({
-  sub,
-  onClosed,
-}: {
-  sub: string;
-  onClosed: () => void;
-}) => {
-  const about = useAbout(sub);
-  return (
-    <Sheet title={about?.title || `r/${sub}`} onClosed={onClosed}>
-      {() => (
-        <div className="about-body">
-          <p style={{ color: "var(--text-2)", marginTop: 0, fontSize: 13.5 }}>
-            r/{sub}
-            {about?.subscribers !== undefined
-              ? ` · ${compact(about.subscribers)} members`
-              : ""}
-            {about?.createdAt
-              ? ` · since ${new Date(about.createdAt).getFullYear()}`
-              : ""}
-          </p>
-          {about?.description ? (
-            <Markdown source={about.description} />
-          ) : about ? (
-            <p style={{ color: "var(--text-3)" }}>
-              This community has no description.
-            </p>
-          ) : (
-            <div className="spinner" />
-          )}
-        </div>
       )}
     </Sheet>
   );
@@ -580,16 +543,9 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
   // Keep the inbox count reasonably current.
   useEffect(() => ensureAccount(60 * 1000), []);
 
-  const go = (name: string) => {
-    close();
-    nav.openCommunity(name);
-  };
-  const isActive = (name: string) =>
-    name.toLowerCase() === current.toLowerCase();
   const special = new Set(
     feedNames(session.featured).map((name) => name.toLowerCase()),
   );
-  const entry = special.has(session.home.toLowerCase()) ? null : session.home;
   const item = (
     icon: IconName,
     label: string,
@@ -668,87 +624,60 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
             ) : null}
           </div>
         </div>
-        <CommunityList
-          onGo={go}
-          bodyClassName="drawer-body"
-          before={
+        {/* Relay's navigation drawer: account destinations and Settings.
+            Communities are in the sheet that opens from the feed title. */}
+        <div className="drawer-body">
+          {/* Account destinations, as in Relay's drawer. */}
+          {account ? (
             <>
-              {/* Account destinations, as in Relay's drawer. */}
-              {account ? (
-                <>
-                  {item("accountCircle", "Profile", () =>
-                    nav.openProfile(account.name),
-                  )}
-                  {item(
-                    "mail",
-                    "Inbox",
-                    nav.openInbox,
-                    account.inboxCount ? (
-                      <span
-                        className="drawer-count"
-                        aria-label={`${account.inboxCount} unread`}
-                      >
-                        {account.inboxCount > 99 ? "99+" : account.inboxCount}
-                      </span>
-                    ) : null,
-                  )}
-                  {account.isMod
-                    ? item("modShield", "Moderator", nav.openModerator)
-                    : null}
-                  {item("postAdd", "New Post", () =>
-                    nav.openSubmit(
-                      special.has(current.toLowerCase()) ? undefined : current,
-                    ),
-                  )}
-                  {item("people", "Friends", nav.openFriends)}
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="drawer-item"
-                  data-ripple
-                  onClick={promptLogin}
-                >
-                  <Icon name="accountCircle" />
-                  <span className="label">Sign in to Reddit</span>
-                </button>
+              {item("accountCircle", "Profile", () =>
+                nav.openProfile(account.name),
               )}
-              {item("user", "User", () =>
-                nav.openSheet((onSheetClosed) => (
-                  <GoToUserSheet
-                    onGo={nav.openProfile}
-                    onClosed={onSheetClosed}
-                  />
-                )),
+              {item(
+                "mail",
+                "Inbox",
+                nav.openInbox,
+                account.inboxCount ? (
+                  <span
+                    className="drawer-count"
+                    aria-label={`${account.inboxCount} unread`}
+                  >
+                    {account.inboxCount > 99 ? "99+" : account.inboxCount}
+                  </span>
+                ) : null,
               )}
-              <div className="drawer-sep" />
-
-              {entry ? (
-                <button
-                  type="button"
-                  className={`drawer-item${isActive(entry) ? " is-active" : ""}`}
-                  data-ripple
-                  onClick={() => go(entry)}
-                >
-                  <Avatar name={entry} size="small" />
-                  <span className="label">r/{entry}</span>
-                </button>
-              ) : null}
-              {item("info", `About r/${current}`, () =>
-                nav.openSheet((onSheetClosed) => (
-                  <AboutSheet sub={current} onClosed={onSheetClosed} />
-                )),
+              {account.isMod
+                ? item("modShield", "Moderator", nav.openModerator)
+                : null}
+              {item("postAdd", "New Post", () =>
+                nav.openSubmit(
+                  special.has(current.toLowerCase()) ? undefined : current,
+                ),
               )}
-              {item("search", `Search r/${current}`, nav.openSearch)}
+              {item("people", "Friends", nav.openFriends)}
             </>
-          }
-          after={
-            <>
-              <div className="drawer-sep" />
-              {item("tune", "Settings", nav.openSettings)}
-            </>
-          }
-        />
+          ) : (
+            <button
+              type="button"
+              className="drawer-item"
+              data-ripple
+              onClick={promptLogin}
+            >
+              <Icon name="accountCircle" />
+              <span className="label">Sign in to Reddit</span>
+            </button>
+          )}
+          {item("user", "User", () =>
+            nav.openSheet((onSheetClosed) => (
+              <GoToUserSheet
+                onGo={nav.openProfile}
+                onClosed={onSheetClosed}
+              />
+            )),
+          )}
+          <div className="drawer-sep" />
+          {item("tune", "Settings", nav.openSettings)}
+        </div>
         <div className="drawer-foot">
           {account
             ? `Signed in as u/${account.name}`

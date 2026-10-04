@@ -6,6 +6,7 @@ import {
   normalizeFriends,
   normalizeInbox,
   normalizeListing,
+  normalizeModerators,
   normalizeUserAbout,
   normalizeCommunity,
   normalizePost,
@@ -53,6 +54,8 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/r/mod/about/modqueue.json?only=links",
     "/r/test/about/rules.json",
     "/prefs/friends.json",
+    "/r/test/about/moderators.json",
+    "/r/test/wiki/index.json",
   ])
     assert.ok(allowedJsonPath(path), path);
   for (const path of [
@@ -70,6 +73,8 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/r/test/about/banned.json",
     "/r/test/about/edit.json",
     "/prefs/blocked.json",
+    "/r/test/wiki/settings/index.json",
+    "/r/test/wiki/edit.json",
   ])
     assert.equal(allowedJsonPath(path), false, path);
 });
@@ -284,4 +289,18 @@ test("normalizes user profiles and friends", () => {
     ]),
     [{ name: "amy", addedAt: 1000 }, { name: "zed", addedAt: 2000 }],
   );
+});
+test("normalizes community moderators", () => {
+  assert.deepEqual(
+    normalizeModerators({
+      data: {
+        children: [
+          { name: "modone", date: 1500000000, mod_permissions: ["all"] },
+          { name: "<bad>", date: 1 },
+        ],
+      },
+    }),
+    [{ name: "modone", since: 1500000000000, permissions: ["all"] }],
+  );
+  assert.deepEqual(normalizeModerators({}), []);
 });

@@ -19,6 +19,12 @@ import {
 import { useNav } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { Icon, type IconName } from "../components/Icon";
+import {
+  CommunityMenu,
+  SidebarPanel,
+  SubscribeButton,
+  isCommunity,
+} from "../components/CommunityPanels";
 import { SubredditSheet } from "../components/Drawer";
 import { PostCard } from "../components/PostCard";
 import { Sheet, SheetItem } from "../components/Sheet";
@@ -110,9 +116,25 @@ export const useFeedPicture = (
   return sub === "Home" ? account?.icon : about?.icon;
 };
 
+const aboutListeners = new Set<() => void>();
+/** Change cached community info (e.g. after subscribing) and re-render users. */
+export const updateAbout = (sub: string, patch: Partial<SubredditAbout>) => {
+  const key = sub.toLowerCase();
+  const info = aboutCache.get(key);
+  if (info) aboutCache.set(key, { ...info, ...patch });
+  for (const listener of aboutListeners) listener();
+};
+
 export const useAbout = (sub: string): SubredditAbout | null => {
   const key = sub.toLowerCase();
   const [, setLoaded] = useState(0);
+  useEffect(() => {
+    const listener = () => setLoaded((n) => n + 1);
+    aboutListeners.add(listener);
+    return () => {
+      aboutListeners.delete(listener);
+    };
+  }, []);
   useEffect(() => {
     if (aboutCache.has(key)) return;
     let live = true;
@@ -497,18 +519,68 @@ export const FeedScreen = ({
       >
         <div className="appbar-spacer" />
         <div className="feed" data-layout={prefs.layout} ref={feedRef}>
-          <div className="feed-banner">
-            <Avatar name={sub} src={picture} />
-            <div className="meta">
-              <div className="title">{about?.title || `r/${sub}`}</div>
-              <div className="stats">
-                {about?.subscribers !== undefined
-                  ? `${compact(about.subscribers)} members`
-                  : "Community"}
-                {about?.active ? ` · ${compact(about.active)} online` : ""}
+          {/* Relay's community header: banner, 72px icon, title, member
+              count and description, with Subscribe and the ⋮ menu. */}
+          <div className={`feed-banner${isCommunity(sub) ? " is-community" : ""}`}>
+            {isCommunity(sub) ? (
+              <div
+                className="community-banner"
+                style={
+                  about?.banner
+                    ? { backgroundImage: `url("${about.banner.replaceAll('"', "%22")}")` }
+                    : { ["--hue" as string]: hueOf(sub.toLowerCase()) }
+                }
+                aria-hidden
+              />
+            ) : null}
+            <div className="community-row">
+              <Avatar name={sub} src={picture} size={isCommunity(sub) ? "large" : undefined} />
+              <div className="meta">
+                <div className="title">{about?.title || `r/${sub}`}</div>
+                <div className="stats">
+                  {isCommunity(sub) ? <Icon name="people" size={15} /> : null}
+                  {about?.subscribers !== undefined
+                    ? `${compact(about.subscribers)} members`
+                    : isCommunity(sub)
+                      ? `r/${sub}`
+                      : "Feed"}
+                  {about?.active ? ` · ${compact(about.active)} online` : ""}
+                </div>
               </div>
+              {refreshing ? <div className="spinner" /> : null}
+              {isCommunity(sub) ? (
+                <div className="header-actions">
+                  <button
+                    type="button"
+                    className="header-action"
+                    data-ripple
+                    aria-label={`r/${sub} menu`}
+                    title="More"
+                    onClick={() =>
+                      nav.openSheet((onClosed) => (
+                        <CommunityMenu sub={sub} onClosed={onClosed} />
+                      ))
+                    }
+                  >
+                    <Icon name="more" />
+                  </button>
+                  <SubscribeButton sub={sub} />
+                </div>
+              ) : null}
             </div>
-            {refreshing ? <div className="spinner" /> : null}
+            {isCommunity(sub) && about?.description ? (
+              <button
+                type="button"
+                className="community-description"
+                onClick={() =>
+                  nav.openSheet((onClosed) => (
+                    <SidebarPanel sub={sub} onClosed={onClosed} />
+                  ))
+                }
+              >
+                {about.description}
+              </button>
+            ) : null}
           </div>
           <nav className="sort-strip" aria-label="Sort posts">
             {FEED_SORTS.map((option) => (

@@ -107,6 +107,11 @@ const thing = (value: unknown, kinds: string): string =>
     : fail();
 const user = (value: unknown): string =>
   typeof value === "string" && /^[\w-]{3,20}$/.test(value) ? value : fail();
+/** A username, or `/r/name` to message a community's moderators. */
+const recipient = (value: unknown): string =>
+  typeof value === "string" && /^\/r\/[A-Za-z0-9][A-Za-z0-9_]{1,20}$/.test(value)
+    ? value
+    : user(value);
 const community = (value: unknown): string =>
   typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/.test(value)
     ? value
@@ -132,7 +137,7 @@ const ACTIONS: Record<string, Action> = {
   compose: {
     path: "/api/compose",
     params: (a) => ({
-      to: user(a.to),
+      to: recipient(a.to),
       subject: text(a.subject, 100),
       text: text(a.text, 10000),
     }),
@@ -141,6 +146,15 @@ const ACTIONS: Record<string, Action> = {
   comment: {
     path: "/api/comment",
     params: (a) => ({ thing_id: thing(a.parent, "134"), text: text(a.text, 10000) }),
+  },
+  // Communities
+  subscribe: {
+    path: "/api/subscribe",
+    params: (a) => ({
+      action: a.action === "unsub" ? "unsub" : a.action === "sub" ? "sub" : fail(),
+      sr_name: community(a.sr),
+      ...(a.action === "sub" ? { skip_initial_defaults: "true" } : {}),
+    }),
   },
   // Moderation
   approve: { path: "/api/approve", params: (a) => ({ id: thing(a.id, "13") }) },

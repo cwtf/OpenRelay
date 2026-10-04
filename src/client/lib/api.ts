@@ -3,6 +3,7 @@ import type {
   Account,
   Friend,
   InboxResponse,
+  Moderator,
   ListingResponse,
   SubredditRule,
   UserAbout,
@@ -25,6 +26,7 @@ import {
   normalizeFriends,
   normalizeInbox,
   normalizeListing,
+  normalizeModerators,
   normalizeRules,
   normalizeUserAbout,
   normalizeComments,
@@ -237,10 +239,19 @@ export async function fetchAbout(sub: string): Promise<AboutResponse> {
   const d = result?.data;
   if (!d) throw new ApiFailure("Community information unavailable");
   const icon = safeUrl(d.community_icon) || safeUrl(d.icon_img);
+  const banner =
+    safeUrl(d.banner_background_image) || safeUrl(d.banner_img) || safeUrl(d.mobile_banner_image);
   return {
     about: {
       name: d.display_name ?? sub,
       ...(icon ? { icon } : {}),
+      ...(banner ? { banner } : {}),
+      ...(typeof d.description === "string" && d.description
+        ? { sidebar: d.description }
+        : {}),
+      ...(typeof d.user_is_subscriber === "boolean"
+        ? { subscribed: d.user_is_subscriber }
+        : {}),
       title: d.title,
       description: d.public_description,
       subscribers: d.subscribers,
@@ -358,6 +369,15 @@ export async function fetchFriends(): Promise<Friend[]> {
 }
 export async function fetchRules(sub: string): Promise<SubredditRule[]> {
   return normalizeRules(await json(prefix(sub) + "/about/rules.json?raw_json=1"));
+}
+
+export async function fetchModerators(sub: string): Promise<Moderator[]> {
+  return normalizeModerators(await json(prefix(sub) + "/about/moderators.json?raw_json=1"));
+}
+/** The community wiki's index page as Markdown ("" when there is none). */
+export async function fetchWiki(sub: string): Promise<string> {
+  const data = await json(prefix(sub) + "/wiki/index.json?raw_json=1");
+  return typeof data?.data?.content_md === "string" ? data.data.content_md : "";
 }
 
 /** A validated write performed by the Reddit tab with the viewer's session. */

@@ -205,11 +205,19 @@ export type Friend = { name: string; addedAt: number };
 
 export type SubredditRule = { title: string; description: string };
 
+export type Moderator = { name: string; since: number; permissions: string[] };
+
 export type SubredditAbout = {
   name: string;
   title?: string;
   /** Community icon, when Reddit provides one. */
   icon?: string;
+  /** Header banner image. */
+  banner?: string;
+  /** Full sidebar Markdown (old Reddit's "description"). */
+  sidebar?: string;
+  /** Whether the signed-in viewer subscribes; absent when unknown. */
+  subscribed?: boolean;
   description?: string;
   subscribers?: number;
   active?: number;
