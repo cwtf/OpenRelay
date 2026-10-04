@@ -19,6 +19,7 @@ import {
 import { useNav } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { Icon, type IconName } from "../components/Icon";
+import { SubredditSheet } from "../components/Drawer";
 import { PostCard } from "../components/PostCard";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { useAccount } from "../lib/account";
@@ -440,13 +441,18 @@ export const FeedScreen = ({
         <button
           type="button"
           className="appbar-title"
+          data-ripple
+          aria-label={`${sub === "Home" ? "Home" : `r/${sub}`}, ${subtitle}. Subreddit search`}
+          // As in Relay, the title opens the subscriptions / search sheet.
           onClick={() =>
-            scrollerRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+            nav.openSheet((onClosed) => <SubredditSheet onClosed={onClosed} />)
           }
-          aria-label={`r/${sub}, ${subtitle}. Scroll to top`}
         >
           <span className="name">{sub === "Home" ? "Home" : `r/${sub}`}</span>
-          <span className="sub">{subtitle}</span>
+          <span className="sub">
+            {subtitle}
+            <Icon name="chevronDown" size={16} />
+          </span>
         </button>
         <button
           type="button"

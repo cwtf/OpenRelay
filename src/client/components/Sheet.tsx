@@ -14,6 +14,7 @@ type SheetProps = {
   onClosed: () => void;
   children: (close: () => void) => ReactNode;
   label?: string;
+  className?: string;
 };
 
 /** Modal bottom sheet with scrim, drag-to-dismiss and exit animation. */
@@ -23,6 +24,7 @@ export const Sheet = ({
   onClosed,
   children,
   label,
+  className,
 }: SheetProps) => {
   const [closing, setClosing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -38,7 +40,9 @@ export const Sheet = ({
   const close = useCallback(() => setClosing(true), []);
 
   useEffect(() => {
-    sheetRef.current?.focus({ preventScroll: true });
+    // Keep focus a child already took (an autofocused search field).
+    if (!sheetRef.current?.contains(document.activeElement))
+      sheetRef.current?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
@@ -97,7 +101,7 @@ export const Sheet = ({
       <div className="scrim" onClick={close} />
       <div
         ref={sheetRef}
-        className="sheet"
+        className={className ? `sheet ${className}` : 'sheet'}
         role="dialog"
         aria-modal="true"
         aria-label={label ?? (typeof title === 'string' ? title : undefined)}

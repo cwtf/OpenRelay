@@ -263,48 +263,37 @@ const feedLabel = (name: string) =>
 const byName = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
-type DrawerProps = { onClosed: () => void };
+/** Home plus the featured feeds (Popular, All), which are not communities. */
+const feedNames = (featured: string[]) => [...new Set(["Home", ...featured])];
 
-export const Drawer = ({ onClosed }: DrawerProps) => {
-  const nav = useNav();
-  const { session, current } = nav;
-  const about = useAbout(current);
-  const picture = useFeedPicture(current, about);
-  const account = useAccount();
+/**
+ * Relay's community list: the "Subreddit search…" pill, then Feeds,
+ * Favourites, Recent and Subscriptions. Typing filters every known community
+ * or offers to open the typed name. Used by the drawer and by the sheet that
+ * opens from the feed title. `before`/`after` add rows around the sections.
+ */
+export const CommunityList = ({
+  onGo,
+  bodyClassName,
+  before,
+  after,
+  autoFocus,
+}: {
+  onGo: (name: string) => void;
+  bodyClassName: string;
+  before?: ReactNode;
+  after?: ReactNode;
+  autoFocus?: boolean;
+}) => {
+  const { session, current } = useNav();
   const subscriptions = useSubscriptions();
   const favourites = useFavourites();
-  const [closing, setClosing] = useState(false);
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<
     Partial<Record<SectionId, boolean>>
   >(() => readJson("drawer-collapsed", {}));
-  const panel = useRef<HTMLElement>(null);
-  const drag = useRef<{ x: number; dx: number } | null>(null);
 
-  const close = useCallback(() => setClosing(true), []);
-  useEffect(() => {
-    if (!closing) return;
-    const timer = window.setTimeout(onClosed, 320);
-    return () => window.clearTimeout(timer);
-  }, [closing, onClosed]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
-
-  useEffect(() => {
-    ensureSubscriptions();
-    ensureAccount(60 * 1000); // Keep the inbox count reasonably current.
-  }, []);
-
-  const go = (name: string) => {
-    close();
-    nav.openCommunity(name);
-  };
+  useEffect(() => ensureSubscriptions(), []);
 
   const toggle = (id: SectionId) =>
     setCollapsed((state) => {
@@ -323,12 +312,11 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
   const isActive = (name: string) =>
     name.toLowerCase() === current.toLowerCase();
 
-  const feeds = [...new Set(["Home", ...session.featured])];
+  const feeds = feedNames(session.featured);
   const special = new Set(feeds.map((name) => name.toLowerCase()));
   const recent = recentCommunities
     .values()
     .filter((name) => !special.has(name.toLowerCase()));
-  const entry = special.has(session.home.toLowerCase()) ? null : session.home;
 
   const row = (name: string) => (
     <CommunityRow
@@ -336,7 +324,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
       name={name}
       info={info(name)}
       active={isActive(name)}
-      onGo={go}
+      onGo={onGo}
     />
   );
 
@@ -368,6 +356,260 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
 
   const subsOpen = !collapsed.subscriptions;
   const syncing = subscriptions.status === "loading";
+
+  return (
+    <>
+      <form
+        className="drawer-search"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const target = showTyped ? typed : matches[0];
+          if (target) onGo(target);
+        }}
+      >
+        <Icon name="search" size={20} />
+        <input
+          value={query}
+          autoFocus={autoFocus}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !query) return;
+            // Clear the search first; a second Escape closes the panel.
+            event.nativeEvent.stopImmediatePropagation();
+            setQuery("");
+          }}
+          placeholder="Subreddit search…"
+          aria-label="Search or go to a community"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="go"
+        />
+        {query ? (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Clear community search"
+            onClick={() => setQuery("")}
+          >
+            <Icon name="close" size={20} />
+          </button>
+        ) : null}
+      </form>
+      <div className={bodyClassName}>
+        {needle ? (
+          <>
+            {showTyped ? (
+              <CommunityRow
+                name={typed}
+                info={info(typed)}
+                active={isActive(typed)}
+                onGo={onGo}
+                label={`Go to r/${typed}`}
+                starrable={false}
+              />
+            ) : null}
+            {matches.slice(0, 60).map(row)}
+            {!showTyped && !matches.length ? (
+              <p className="sub-hint">No matching communities.</p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {before}
+
+            <SectionHeader
+              id="feeds"
+              title="Feeds"
+              open={!collapsed.feeds}
+              onToggle={toggle}
+            />
+            {!collapsed.feeds
+              ? feeds.map((name) => (
+                  <CommunityRow
+                    key={name}
+                    name={name}
+                    active={isActive(name)}
+                    onGo={onGo}
+                    label={feedLabel(name)}
+                    feedIcon={FEED_ICONS[name.toLowerCase()] ?? "people"}
+                    starrable={false}
+                  />
+                ))
+              : null}
+
+            {favourites.length ? (
+              <>
+                <SectionHeader
+                  id="favourites"
+                  title="Favourites"
+                  count={favourites.length}
+                  open={!collapsed.favourites}
+                  onToggle={toggle}
+                />
+                {!collapsed.favourites ? favourites.map(row) : null}
+              </>
+            ) : null}
+
+            {recent.length ? (
+              <>
+                <SectionHeader
+                  id="recent"
+                  title="Recent"
+                  open={!collapsed.recent}
+                  onToggle={toggle}
+                />
+                {!collapsed.recent ? recent.map(row) : null}
+              </>
+            ) : null}
+
+            <SectionHeader
+              id="subscriptions"
+              title="Subscriptions"
+              count={subscriptions.items.length}
+              open={subsOpen}
+              onToggle={toggle}
+              action={
+                subscriptions.status !== "signed-out" ? (
+                  <button
+                    type="button"
+                    className={`icon-btn sub-sync${syncing ? " is-syncing" : ""}`}
+                    aria-label="Re-sync subscriptions"
+                    title="Re-sync subscriptions"
+                    disabled={syncing}
+                    onClick={() => void refreshSubscriptions()}
+                  >
+                    <Icon name="refresh" size={20} />
+                  </button>
+                ) : null
+              }
+            />
+            {subsOpen ? (
+              subscriptions.items.length ? (
+                subscriptions.items.map((item) => row(item.name))
+              ) : subscriptions.status === "loading" ||
+                subscriptions.status === "idle" ? (
+                <SkeletonRows />
+              ) : subscriptions.status === "signed-out" ? (
+                <p className="sub-hint">
+                  Sign in to Reddit in this browser to see your subscribed
+                  communities here.{" "}
+                  <button
+                    type="button"
+                    className="sub-link"
+                    onClick={() => void refreshSubscriptions()}
+                  >
+                    Check again
+                  </button>
+                </p>
+              ) : subscriptions.status === "error" ? (
+                <p className="sub-hint">
+                  {subscriptions.error ?? "Could not load subscriptions."}{" "}
+                  <button
+                    type="button"
+                    className="sub-link"
+                    onClick={() => void refreshSubscriptions()}
+                  >
+                    Retry
+                  </button>
+                </p>
+              ) : (
+                <p className="sub-hint">
+                  You are not subscribed to any communities yet.
+                </p>
+              )
+            ) : null}
+          </>
+        )}
+        {after}
+      </div>
+    </>
+  );
+};
+
+/**
+ * Relay's subscriptions bottom sheet, opened by tapping the feed title:
+ * the search pill on top and the community list below it.
+ */
+export const SubredditSheet = ({ onClosed }: { onClosed: () => void }) => {
+  const nav = useNav();
+  return (
+    <Sheet label="Subreddit search" className="is-tall" onClosed={onClosed}>
+      {(close) => (
+        <CommunityList
+          autoFocus
+          bodyClassName="subs-sheet-body"
+          onGo={(name) => {
+            close();
+            nav.openCommunity(name);
+          }}
+        />
+      )}
+    </Sheet>
+  );
+};
+
+type DrawerProps = { onClosed: () => void };
+
+export const Drawer = ({ onClosed }: DrawerProps) => {
+  const nav = useNav();
+  const { session, current } = nav;
+  const about = useAbout(current);
+  const picture = useFeedPicture(current, about);
+  const account = useAccount();
+  const [closing, setClosing] = useState(false);
+  const panel = useRef<HTMLElement>(null);
+  const drag = useRef<{ x: number; dx: number } | null>(null);
+
+  const close = useCallback(() => setClosing(true), []);
+  useEffect(() => {
+    if (!closing) return;
+    const timer = window.setTimeout(onClosed, 320);
+    return () => window.clearTimeout(timer);
+  }, [closing, onClosed]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
+
+  // Keep the inbox count reasonably current.
+  useEffect(() => ensureAccount(60 * 1000), []);
+
+  const go = (name: string) => {
+    close();
+    nav.openCommunity(name);
+  };
+  const isActive = (name: string) =>
+    name.toLowerCase() === current.toLowerCase();
+  const special = new Set(
+    feedNames(session.featured).map((name) => name.toLowerCase()),
+  );
+  const entry = special.has(session.home.toLowerCase()) ? null : session.home;
+  const item = (
+    icon: IconName,
+    label: string,
+    onClick: () => void,
+    extra?: ReactNode,
+  ) => (
+    <button
+      type="button"
+      className="drawer-item"
+      data-ripple
+      onClick={() => {
+        close();
+        onClick();
+      }}
+    >
+      <Icon name={icon} />
+      <span className="label">{label}</span>
+      {extra}
+    </button>
+  );
 
   return (
     <div className={`layer has-drawer${closing ? " is-closing" : ""}`}>
@@ -426,138 +668,39 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
             ) : null}
           </div>
         </div>
-        <form
-          className="drawer-search"
-          role="search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const target = showTyped ? typed : matches[0];
-            if (target) go(target);
-          }}
-        >
-          <Icon name="search" size={20} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || !query) return;
-              // Clear the search first; a second Escape closes the drawer.
-              event.nativeEvent.stopImmediatePropagation();
-              setQuery("");
-            }}
-            placeholder="Subreddit search…"
-            aria-label="Search or go to a community"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="go"
-          />
-          {query ? (
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="Clear community search"
-              onClick={() => setQuery("")}
-            >
-              <Icon name="close" size={20} />
-            </button>
-          ) : null}
-        </form>
-        <div className="drawer-body">
-          {needle ? (
-            <>
-              {showTyped ? (
-                <CommunityRow
-                  name={typed}
-                  info={info(typed)}
-                  active={isActive(typed)}
-                  onGo={go}
-                  label={`Go to r/${typed}`}
-                  starrable={false}
-                />
-              ) : null}
-              {matches.slice(0, 60).map(row)}
-              {!showTyped && !matches.length ? (
-                <p className="sub-hint">No matching communities.</p>
-              ) : null}
-            </>
-          ) : (
+        <CommunityList
+          onGo={go}
+          bodyClassName="drawer-body"
+          before={
             <>
               {/* Account destinations, as in Relay's drawer. */}
               {account ? (
                 <>
-                  <button
-                    type="button"
-                    className="drawer-item"
-                    data-ripple
-                    onClick={() => {
-                      close();
-                      nav.openProfile(account.name);
-                    }}
-                  >
-                    <Icon name="accountCircle" />
-                    <span className="label">Profile</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="drawer-item"
-                    data-ripple
-                    onClick={() => {
-                      close();
-                      nav.openInbox();
-                    }}
-                  >
-                    <Icon name="mail" />
-                    <span className="label">Inbox</span>
-                    {account.inboxCount ? (
+                  {item("accountCircle", "Profile", () =>
+                    nav.openProfile(account.name),
+                  )}
+                  {item(
+                    "mail",
+                    "Inbox",
+                    nav.openInbox,
+                    account.inboxCount ? (
                       <span
                         className="drawer-count"
                         aria-label={`${account.inboxCount} unread`}
                       >
                         {account.inboxCount > 99 ? "99+" : account.inboxCount}
                       </span>
-                    ) : null}
-                  </button>
-                  {account.isMod ? (
-                    <button
-                      type="button"
-                      className="drawer-item"
-                      data-ripple
-                      onClick={() => {
-                        close();
-                        nav.openModerator();
-                      }}
-                    >
-                      <Icon name="modShield" />
-                      <span className="label">Moderator</span>
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="drawer-item"
-                    data-ripple
-                    onClick={() => {
-                      close();
-                      nav.openSubmit(
-                        special.has(current.toLowerCase()) ? undefined : current,
-                      );
-                    }}
-                  >
-                    <Icon name="postAdd" />
-                    <span className="label">New Post</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="drawer-item"
-                    data-ripple
-                    onClick={() => {
-                      close();
-                      nav.openFriends();
-                    }}
-                  >
-                    <Icon name="people" />
-                    <span className="label">Friends</span>
-                  </button>
+                    ) : null,
+                  )}
+                  {account.isMod
+                    ? item("modShield", "Moderator", nav.openModerator)
+                    : null}
+                  {item("postAdd", "New Post", () =>
+                    nav.openSubmit(
+                      special.has(current.toLowerCase()) ? undefined : current,
+                    ),
+                  )}
+                  {item("people", "Friends", nav.openFriends)}
                 </>
               ) : (
                 <button
@@ -570,23 +713,14 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
                   <span className="label">Sign in to Reddit</span>
                 </button>
               )}
-              <button
-                type="button"
-                className="drawer-item"
-                data-ripple
-                onClick={() => {
-                  close();
-                  nav.openSheet((onSheetClosed) => (
-                    <GoToUserSheet
-                      onGo={nav.openProfile}
-                      onClosed={onSheetClosed}
-                    />
-                  ));
-                }}
-              >
-                <Icon name="user" />
-                <span className="label">User</span>
-              </button>
+              {item("user", "User", () =>
+                nav.openSheet((onSheetClosed) => (
+                  <GoToUserSheet
+                    onGo={nav.openProfile}
+                    onClosed={onSheetClosed}
+                  />
+                )),
+              )}
               <div className="drawer-sep" />
 
               {entry ? (
@@ -600,151 +734,21 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
                   <span className="label">r/{entry}</span>
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="drawer-item"
-                data-ripple
-                onClick={() => {
-                  close();
-                  nav.openSheet((onSheetClosed) => (
-                    <AboutSheet sub={current} onClosed={onSheetClosed} />
-                  ));
-                }}
-              >
-                <Icon name="info" />
-                <span className="label">About r/{current}</span>
-              </button>
-              <button
-                type="button"
-                className="drawer-item"
-                data-ripple
-                onClick={() => {
-                  close();
-                  nav.openSearch();
-                }}
-              >
-                <Icon name="search" />
-                <span className="label">Search r/{current}</span>
-              </button>
-
-              <SectionHeader
-                id="feeds"
-                title="Feeds"
-                open={!collapsed.feeds}
-                onToggle={toggle}
-              />
-              {!collapsed.feeds
-                ? feeds.map((name) => (
-                    <CommunityRow
-                      key={name}
-                      name={name}
-                      active={isActive(name)}
-                      onGo={go}
-                      label={feedLabel(name)}
-                      feedIcon={FEED_ICONS[name.toLowerCase()] ?? "people"}
-                      starrable={false}
-                    />
-                  ))
-                : null}
-
-              {favourites.length ? (
-                <>
-                  <SectionHeader
-                    id="favourites"
-                    title="Favourites"
-                    count={favourites.length}
-                    open={!collapsed.favourites}
-                    onToggle={toggle}
-                  />
-                  {!collapsed.favourites ? favourites.map(row) : null}
-                </>
-              ) : null}
-
-              {recent.length ? (
-                <>
-                  <SectionHeader
-                    id="recent"
-                    title="Recent"
-                    open={!collapsed.recent}
-                    onToggle={toggle}
-                  />
-                  {!collapsed.recent ? recent.map(row) : null}
-                </>
-              ) : null}
-
-              <SectionHeader
-                id="subscriptions"
-                title="Subscriptions"
-                count={subscriptions.items.length}
-                open={subsOpen}
-                onToggle={toggle}
-                action={
-                  subscriptions.status !== "signed-out" ? (
-                    <button
-                      type="button"
-                      className={`icon-btn sub-sync${syncing ? " is-syncing" : ""}`}
-                      aria-label="Re-sync subscriptions"
-                      title="Re-sync subscriptions"
-                      disabled={syncing}
-                      onClick={() => void refreshSubscriptions()}
-                    >
-                      <Icon name="refresh" size={20} />
-                    </button>
-                  ) : null
-                }
-              />
-              {subsOpen ? (
-                subscriptions.items.length ? (
-                  subscriptions.items.map((item) => row(item.name))
-                ) : subscriptions.status === "loading" ||
-                  subscriptions.status === "idle" ? (
-                  <SkeletonRows />
-                ) : subscriptions.status === "signed-out" ? (
-                  <p className="sub-hint">
-                    Sign in to Reddit in this browser to see your subscribed
-                    communities here.{" "}
-                    <button
-                      type="button"
-                      className="sub-link"
-                      onClick={() => void refreshSubscriptions()}
-                    >
-                      Check again
-                    </button>
-                  </p>
-                ) : subscriptions.status === "error" ? (
-                  <p className="sub-hint">
-                    {subscriptions.error ?? "Could not load subscriptions."}{" "}
-                    <button
-                      type="button"
-                      className="sub-link"
-                      onClick={() => void refreshSubscriptions()}
-                    >
-                      Retry
-                    </button>
-                  </p>
-                ) : (
-                  <p className="sub-hint">
-                    You are not subscribed to any communities yet.
-                  </p>
-                )
-              ) : null}
+              {item("info", `About r/${current}`, () =>
+                nav.openSheet((onSheetClosed) => (
+                  <AboutSheet sub={current} onClosed={onSheetClosed} />
+                )),
+              )}
+              {item("search", `Search r/${current}`, nav.openSearch)}
             </>
-          )}
-
-          <div className="drawer-sep" />
-          <button
-            type="button"
-            className="drawer-item"
-            data-ripple
-            onClick={() => {
-              close();
-              nav.openSettings();
-            }}
-          >
-            <Icon name="tune" />
-            <span className="label">Settings</span>
-          </button>
-        </div>
+          }
+          after={
+            <>
+              <div className="drawer-sep" />
+              {item("tune", "Settings", nav.openSettings)}
+            </>
+          }
+        />
         <div className="drawer-foot">
           {account
             ? `Signed in as u/${account.name}`

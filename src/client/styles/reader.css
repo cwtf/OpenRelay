@@ -2677,3 +2677,30 @@ button.appbar-title {
   flex-direction: column;
   gap: 12px;
 }
+
+/* Relay's subscriptions sheet (feed title): search pill fixed on top,
+   community list scrolling underneath. */
+.sheet.is-tall {
+  height: 88%;
+}
+
+.sheet.is-tall .sheet-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.sheet.is-tall .drawer-search {
+  margin-top: 4px;
+}
+
+.subs-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0 16px;
+}

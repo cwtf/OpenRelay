@@ -287,6 +287,31 @@ try {
   await app.getByRole("button", { name: "Remove r/zebra from Favourites" }).first().waitFor();
   await app.locator("body").press("Escape");
   await app.locator(".has-drawer").waitFor({ state: "detached" });
+  // As in Relay, the feed title opens the subreddit search sheet.
+  await app.getByRole("button", { name: /Subreddit search$/ }).click();
+  const sheet = app.getByRole("dialog", { name: "Subreddit search" });
+  await sheet.waitFor();
+  assert.equal(
+    await app.evaluate(() => document.activeElement?.getAttribute("aria-label")),
+    "Search or go to a community",
+  );
+  assert.deepEqual(
+    await sheet.locator(".sub-header-label").evaluateAll((els) =>
+      els.map((el) => el.childNodes[0].textContent),
+    ),
+    ["Feeds", "Favourites", "Subscriptions"],
+  );
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: resolve(out, "subreddit-sheet.png") });
+  await sheet.locator(".sub-row-main", { hasText: "Apple" }).click();
+  await sheet.waitFor({ state: "detached" });
+  await app.locator(".appbar-title .name", { hasText: "r/Apple" }).waitFor();
+  // Typing a name and pressing Enter opens it.
+  await app.getByRole("button", { name: /Subreddit search$/ }).click();
+  await app.getByLabel("Search or go to a community").fill("test");
+  await app.getByLabel("Search or go to a community").press("Enter");
+  await app.locator(".appbar-title .name", { hasText: "r/test" }).waitFor();
+  await app.getByRole("dialog", { name: "Subreddit search" }).waitFor({ state: "detached" });
   // Toggle through the real service worker, as a toolbar click does.
   const worker =
     context.serviceWorkers()[0] ||
@@ -345,7 +370,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, account menu, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, subreddit search sheet, account menu, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();
