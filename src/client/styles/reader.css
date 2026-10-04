@@ -2103,7 +2103,11 @@ img.avatar {
   width: 100%;
   height: 100%;
   display: grid;
+  /* Fixed tracks so percentage limits resolve against the screen. */
+  grid-template: 100% / 100%;
   place-items: center;
+  /* Lets media size itself from the stage's width and height (cqw / cqh). */
+  container-type: size;
   will-change: transform;
 }
 
@@ -2115,6 +2119,17 @@ img.avatar {
   height: auto;
   object-fit: contain;
   pointer-events: none;
+}
+
+/* Once the aspect ratio is known, fit the whole screen on whichever axis
+   runs out first (scaling up or down), as Relay's viewer does. */
+.viewer-stage img.is-fit,
+.viewer-stage video.is-fit {
+  width: min(100cqw, 100cqh * var(--ratio));
+  height: auto;
+  aspect-ratio: var(--ratio);
+  max-width: none;
+  max-height: none;
 }
 
 .viewer-stage video {

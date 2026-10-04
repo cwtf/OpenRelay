@@ -8,7 +8,7 @@
     "type-check": "tsc --noEmit",
     "test": "node --experimental-strip-types --test src/extension/*.test.ts src/client/lib/*.test.ts",
     "check": "npm run type-check && npm test && npm run build",
-    "test:browser": "node tools/browser-smoke.mjs && node tools/vote-smoke.mjs && node tools/account-smoke.mjs"
+    "test:browser": "node tools/browser-smoke.mjs && node tools/vote-smoke.mjs && node tools/account-smoke.mjs && node tools/media-smoke.mjs"
   },
   "engines": {
     "node": ">=24"

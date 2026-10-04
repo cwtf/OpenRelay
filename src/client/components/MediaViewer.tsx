@@ -66,6 +66,12 @@ const ImagePage = ({
   const tapTimer = useRef<number | undefined>(undefined);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [isZoomed, setIsZoomed] = useState(false);
+  // Width / height, from Reddit's metadata until the image reports its own.
+  const [ratio, setRatio] = useState(
+    item.kind === 'image' && item.width && item.height
+      ? item.width / item.height
+      : 0,
+  );
 
   const setTransform = useCallback(
     (next: Transform, animate = false) => {
@@ -279,7 +285,13 @@ const ImagePage = ({
           alt=""
           decoding="async"
           draggable={false}
-          onLoad={() => setState('ready')}
+          className={ratio ? 'is-fit' : undefined}
+          style={ratio ? { ['--ratio' as string]: ratio } : undefined}
+          onLoad={(event) => {
+            const { naturalWidth: w, naturalHeight: h } = event.currentTarget;
+            if (w && h) setRatio(w / h);
+            setState('ready');
+          }}
           onError={() => setState('error')}
         />
       ) : null}
@@ -316,6 +328,10 @@ const VideoPage = ({
 }) => {
   const ref = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
+  // Width / height, from Reddit's metadata until the video reports its own.
+  const [ratio, setRatio] = useState(
+    item.width > 0 && item.height > 0 ? item.width / item.height : 0,
+  );
   const nativeHls = (() => {
     try {
       return (
@@ -353,7 +369,12 @@ const VideoPage = ({
           playsInline
           preload="auto"
           onError={() => setFailed(true)}
-          style={{ aspectRatio: `${item.width} / ${item.height}` }}
+          onLoadedMetadata={(event) => {
+            const { videoWidth: w, videoHeight: h } = event.currentTarget;
+            if (w && h) setRatio(w / h);
+          }}
+          className={ratio ? 'is-fit' : undefined}
+          style={ratio ? { ['--ratio' as string]: ratio } : undefined}
         />
       ) : (
         <div className="viewer-error">
