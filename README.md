@@ -26,7 +26,7 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - The drawer is Relay's navigation drawer: the community header, then Profile, Inbox, Moderator, New Post, Friends, User and Settings.
 - Relay's account destinations, inside the reader, each with Relay's layout: an app bar whose title switches section, and a bottom bar of icon-over-label actions:
   - **Profile** and **User** (any username): picture, karma, Overview / Comments / Posts (plus Upvoted / Downvoted / Hidden / Saved on your own profile), sorting, Friend / UnFriend and a Send Message button.
-  - **Inbox**: Inbox All, Unread, Messages, Comment and Post Replies, Sent, Mentions and Mod Mail, with an unread count in the drawer. Tap a message for User, Context, Reply, Delete, Block and Read/Unread; Read All.
+  - **Inbox**: Inbox All, Unread, Messages, Comment and Post Replies, Sent, Mentions and Mod Mail, with an unread count in the drawer. Tap a message for User, Context, Reply, Delete, Block and Read/Unread; Read All. **Context** opens the comment's thread (Reddit's context view: the comment, its parents and replies), scrolls to the comment and keeps it highlighted, with **View all comments** for the full thread. Comments on profiles open the same way.
   - **Moderator** (moderators only): Modqueue, Reports, Spam, Edited and Unmoderated, filtered to posts or comments, for all moderated communities or one; reports shown on each item, with Approve, Remove, Spam and Ignore.
   - **New Post**: text or link post with subreddit rules and options (inbox replies, NSFW, spoiler, repost). **Friends**: your friends list with remove. **New Message**: compose a private message.
 - Cards, Compact and List layouts; Auto, Light, Dark and Black themes.

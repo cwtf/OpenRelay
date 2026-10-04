@@ -40,6 +40,10 @@ const comment = (id, body, extra = {}) => ({
   },
 });
 const listing = (children) => ({ kind: "Listing", data: { after: null, children } });
+// Reddit's context view for the inbox reply r1: a long parent, then r1.
+const threadWithReply = comment("c0", Array.from({ length: 80 }, (_, i) => "Parent line " + i).join("\n\n"), {
+  replies: listing([comment("r1", "A reply to you", { author: "carol", parent_id: "t1_c0" })]),
+});
 const json = {
   "/api/me.json": { data: { name: "fixture_user", id: "u1", modhash: "fixturemodhash1", is_mod: true, inbox_count: 2 } },
   "/r/test/hot.json": listing([post("p1", "Profile post")]),
@@ -80,7 +84,16 @@ await context.route(/^https:\/\/www\.reddit\.com\//, async (route) => {
       body: JSON.stringify(
         json[url.pathname] ??
           (url.pathname.startsWith("/comments/")
-            ? [listing([post(url.pathname.split("/")[2].replace(".json", ""), "Opened post")]), listing([])]
+            ? [
+                listing([post(url.pathname.split("/")[2].replace(".json", ""), "Opened post")]),
+                listing(
+                  url.searchParams.get("comment") === "r1"
+                    ? [threadWithReply]
+                    : Array.from({ length: 12 }, (_, i) =>
+                        comment("top" + i, "Top-level comment " + i, { link_id: "t3_p1" }),
+                      ),
+                ),
+              ]
             : listing([])),
       ),
     });
@@ -187,6 +200,27 @@ try {
   await app.locator(".toast", { hasText: "All messages marked read" }).waitFor();
   assert.equal(lastWrite().path, "/api/read_all_messages");
   assert.equal(await top().locator(".message-card.is-unread").count(), 0);
+  // Context opens the reply's thread, scrolled to and highlighting the reply.
+  const reply = top().locator('[data-mid="t1_r1"]');
+  await reply.getByText("A reply to you").click();
+  await reply.locator(".strip-btn", { hasText: "Context" }).click();
+  const target = app.locator('.comment.is-context[data-cid="t1_r1"]');
+  await target.waitFor();
+  await app.getByText("Single comment thread").waitFor();
+  await app.waitForFunction(() => {
+    const el = document.querySelector('.comment.is-context[data-cid="t1_r1"]');
+    const box = el?.getBoundingClientRect();
+    return box && box.top >= 0 && box.bottom <= window.innerHeight;
+  }); // Scrolled into view below the 80-line parent.
+  assert.ok(
+    (await app.locator('[data-cid="t1_c0"]').evaluate((el) => el.getBoundingClientRect().top)) < 0,
+  );
+  await settle();
+  await page.screenshot({ path: resolve(out, "account-context.png") });
+  await app.getByRole("button", { name: "View all comments" }).click();
+  await app.getByText("Top-level comment 0").waitFor();
+  assert.equal(await app.getByText("Single comment thread").count(), 0);
+  await back(); // Post -> Inbox
   await back();
 
   // Moderator: queue with reports and approve/remove/spam/ignore actions.
@@ -243,7 +277,7 @@ try {
   assert.equal(context.pages().length, 2); // No tabs opened for these screens.
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: in-reader Profile (sections, karma), User (friend, message), Compose, Inbox (read, reply, read all), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
+    "PASS: in-reader Profile (sections, karma), User (friend, message), Compose, Inbox (read, reply, read all, context scrolls to the comment), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
   );
 } finally {
   await context.close();

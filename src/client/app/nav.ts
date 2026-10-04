@@ -36,7 +36,8 @@ export type Nav = {
   session: Session;
   /** Community currently shown in the base feed. */
   current: string;
-  openPost: (post: PostSummary | string) => void;
+  /** `focus` (a `t1_` id) opens that comment's context and scrolls to it. */
+  openPost: (post: PostSummary | string, focus?: string) => void;
   openCommunity: (name: string) => void;
   openSearch: () => void;
   /** Account screens, after Relay's drawer destinations. */

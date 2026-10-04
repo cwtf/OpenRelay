@@ -58,7 +58,7 @@ export const ModBlock = ({ mod }: { mod?: ModInfo | undefined }) =>
     </div>
   ) : null;
 
-/** A comment outside its thread; tapping opens the post. */
+/** A comment outside its thread; tapping opens it in context. */
 export const CommentCard = ({
   comment,
   children,
@@ -74,11 +74,11 @@ export const CommentCard = ({
       tabIndex={0}
       onClick={(event) => {
         if ((event.target as Element).closest("a, button, .md-spoiler")) return;
-        nav.openPost(comment.postId);
+        nav.openPost(comment.postId, comment.id);
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter" && event.target === event.currentTarget)
-          nav.openPost(comment.postId);
+          nav.openPost(comment.postId, comment.id);
       }}
     >
       <div className="list-title">{comment.postTitle || "Comment"}</div>

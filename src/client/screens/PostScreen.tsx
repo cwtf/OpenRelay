@@ -22,7 +22,7 @@ import { MediaFrame, PostFlags, PostMeta } from "../components/PostParts";
 import { ReplySheet } from "../components/ReplySheet";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
-import { fetchPost, fetchReplies, entryRoute } from "../lib/api";
+import { fetchContext, fetchPost, fetchReplies, entryRoute } from "../lib/api";
 import {
   animateLayout,
   fadeOutRows,
@@ -114,9 +114,15 @@ const escapeRegExp = (text: string) =>
 type PostScreenProps = {
   postId: string;
   seed?: PostSummary | undefined;
+  /** A `t1_` comment to show in context, scroll to and highlight. */
+  focus?: string | undefined;
 };
 
-export const PostScreen = ({ postId, seed }: PostScreenProps) => {
+/** True when `id` is anywhere in the loaded comment tree. */
+const inTree = (nodes: CommentNode[], id: string): boolean =>
+  nodes.some((node) => node.id === id || inTree(node.replies, id));
+
+export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const nav = useNav();
   const { prefs } = usePrefs();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -146,6 +152,9 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
     query: "",
   });
   const [matchIndex, setMatchIndex] = useState(-1);
+  // Context mode: only the focused comment's thread, until "View all".
+  const [thread, setThread] = useState(focus ?? null);
+  const focused = useRef(false);
 
   // List animations: snapshot row positions before a tree change, then play
   // fade/move animations once React has committed the new rows.
@@ -166,7 +175,14 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
   const load = useCallback(
     (nextSort: CommentSort, nextLimit: number, fresh: boolean) => {
       const id = ++requestId.current;
-      return fetchPost(postId, nextSort, nextLimit, fresh).then(
+      const request = thread
+        ? fetchContext(postId, thread, nextSort).catch(() => {
+            // Context unavailable (deleted parent etc.): use the full thread.
+            setThread(null);
+            return fetchPost(postId, nextSort, nextLimit, fresh);
+          })
+        : fetchPost(postId, nextSort, nextLimit, fresh);
+      return request.then(
         (data) => {
           if (id !== requestId.current) return;
           setPost(data.post);
@@ -186,7 +202,7 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
         },
       );
     },
-    [postId, captureLayout],
+    [postId, thread, captureLayout],
   );
 
   useEffect(() => {
@@ -349,6 +365,15 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
     el.classList.add("is-focus");
     window.setTimeout(() => el.classList.remove("is-focus"), 1200);
   }, []);
+
+  // Opened from Inbox "Context" (or a profile comment): bring the comment
+  // into view once it has rendered and the screen has slid in.
+  useEffect(() => {
+    if (!focus || focused.current || !tree || !inTree(tree, focus)) return;
+    focused.current = true;
+    const timer = window.setTimeout(() => scrollToComment(focus), 380);
+    return () => window.clearTimeout(timer);
+  }, [tree, focus, scrollToComment]);
 
   const jump = (direction: 1 | -1) => {
     const scroller = scrollerRef.current;
@@ -769,6 +794,23 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
                 </div>
               ))
             : null}
+          {thread && tree ? (
+            <div className="context-bar" role="status">
+              <Icon name="thread" />
+              <span className="grow">Single comment thread</span>
+              <button
+                type="button"
+                className="btn is-text"
+                onClick={() => {
+                  focused.current = false; // Find the comment again in the full thread.
+                  setThread(null);
+                  setStatus("loading");
+                }}
+              >
+                View all comments
+              </button>
+            </div>
+          ) : null}
           {notice ? (
             <div className="feed-end" role="status">
               {notice}
@@ -795,6 +837,7 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
                 depth={row.depth}
                 collapsed={row.collapsed}
                 hiddenCount={row.hidden}
+                focused={row.node.id === focus}
                 onToggle={toggle}
                 onActions={commentActions}
               />

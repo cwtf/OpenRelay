@@ -186,6 +186,31 @@ export function fetchPost(
   value.catch(() => memo.delete(key));
   return value;
 }
+/**
+ * A single comment thread: the comment with up to `context` parents above it
+ * and its replies below, as Reddit's "context" links show it.
+ */
+export async function fetchContext(
+  id: string,
+  comment: string,
+  sort: CommentSort,
+  context = 3,
+): Promise<PostResponse> {
+  const result = await json(
+    "/comments/" +
+      id.replace(/^t3_/, "") +
+      ".json" +
+      query({ comment: comment.replace(/^t1_/, ""), context, sort, limit: 100 }),
+  );
+  if (!result?.[0]?.data?.children?.[0]?.data)
+    throw new Error("This post is unavailable.");
+  const tree = normalizeComments(result[1]?.data?.children);
+  return {
+    post: normalizePost(result[0].data.children[0].data),
+    comments: tree.comments,
+    moreComments: false,
+  };
+}
 function findComment(
   nodes: CommentNode[],
   id: string,

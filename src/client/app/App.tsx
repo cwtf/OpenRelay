@@ -47,7 +47,12 @@ import {
 import { PrefsProvider, usePrefs } from "./prefs";
 
 type Route =
-  | { kind: "post"; id: string; seed?: PostSummary | undefined }
+  | {
+      kind: "post";
+      id: string;
+      seed?: PostSummary | undefined;
+      focus?: string | undefined;
+    }
   | { kind: "search"; sub: string }
   | { kind: "profile"; user: string }
   | { kind: "inbox" }
@@ -359,12 +364,12 @@ const Reader = ({ init }: { init: InitResponse }) => {
   );
 
   const openPost = useCallback(
-    (post: PostSummary | string) => {
+    (post: PostSummary | string, focus?: string) => {
       if (typeof post === "string") {
         const id = post.startsWith("t3_") ? post : `t3_${post}`;
-        push({ kind: "post", id });
+        push({ kind: "post", id, focus });
       } else {
-        push({ kind: "post", id: post.id, seed: post });
+        push({ kind: "post", id: post.id, seed: post, focus });
       }
     },
     [push],
@@ -461,7 +466,11 @@ const Reader = ({ init }: { init: InitResponse }) => {
               onSwiped={onSwiped}
             >
               {entry.route.kind === "post" ? (
-                <PostScreen postId={entry.route.id} seed={entry.route.seed} />
+                <PostScreen
+                  postId={entry.route.id}
+                  seed={entry.route.seed}
+                  focus={entry.route.focus}
+                />
               ) : entry.route.kind === "search" ? (
                 <SearchScreen sub={entry.route.sub} />
               ) : entry.route.kind === "profile" ? (

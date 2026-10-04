@@ -32,6 +32,8 @@ type CommentRowProps = {
   depth: number;
   collapsed: boolean;
   hiddenCount: number;
+  /** The comment a context link points at; stays highlighted. */
+  focused?: boolean;
   onToggle: (id: string) => void;
   onActions: (node: CommentNode) => void;
 };
@@ -42,6 +44,7 @@ export const CommentRow = memo(
     depth,
     collapsed,
     hiddenCount,
+    focused,
     onToggle,
     onActions,
   }: CommentRowProps) => {
@@ -65,7 +68,7 @@ export const CommentRow = memo(
 
     return (
       <div
-        className={`comment${collapsed ? ' is-collapsed' : ''}`}
+        className={`comment${collapsed ? ' is-collapsed' : ''}${focused ? ' is-context' : ''}`}
         data-depth={d}
         data-level={depth}
         data-cid={node.id}

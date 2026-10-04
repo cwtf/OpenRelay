@@ -322,7 +322,15 @@ export const InboxScreen = () => {
       ? [{ icon: "user", label: "User", onClick: () => nav.openProfile(item.author) } as BarAction]
       : []),
     ...(item.postId
-      ? [{ icon: "comment", label: "Context", onClick: () => nav.openPost(item.postId!) } as BarAction]
+      ? [
+          {
+            icon: "comment",
+            label: "Context",
+            // Comment notifications open the thread at that comment.
+            onClick: () =>
+              nav.openPost(item.postId!, item.id.startsWith("t1_") ? item.id : undefined),
+          } as BarAction,
+        ]
       : []),
     {
       icon: "reply",
