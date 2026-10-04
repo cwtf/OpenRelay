@@ -2988,3 +2988,39 @@ button.appbar-title {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Profile, Inbox and Moderator lists follow the Layout setting, as Relay's
+   comment and message listings do: rounded cards with gaps, or flat rows. */
+.feed[data-layout='cards'] .list-card,
+.feed[data-layout='cards'] .listing-post,
+.feed[data-layout='cards'] .profile-head {
+  margin-top: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* The post inside a listing wrapper is part of the wrapper's card. */
+.feed[data-layout='cards'] .listing-post .post {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.feed[data-layout='compact'] .list-card,
+.feed[data-layout='list'] .list-card,
+.feed[data-layout='compact'] .listing-post,
+.feed[data-layout='list'] .listing-post {
+  margin-top: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+}
+
+.feed[data-layout='compact'] .listing-post .post,
+.feed[data-layout='list'] .listing-post .post {
+  border-bottom: 0;
+}
+
+.feed[data-layout='compact'] .profile-head,
+.feed[data-layout='list'] .profile-head {
+  border-bottom: 1px solid var(--divider);
+}

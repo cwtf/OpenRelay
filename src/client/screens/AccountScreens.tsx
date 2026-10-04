@@ -129,6 +129,7 @@ const TIMES: Choice<Timeframe>[] = (
 
 export const ProfileScreen = ({ user }: { user: string }) => {
   const nav = useNav();
+  const { prefs } = usePrefs();
   const account = useAccount();
   const own = account?.name.toLowerCase() === user.toLowerCase();
   const [about, setAbout] = useState<UserAbout | null>(null);
@@ -232,7 +233,7 @@ export const ProfileScreen = ({ user }: { user: string }) => {
         onTitle={pickSection}
       />
       <div className="scroller">
-        <div className="feed has-bottom-bar">
+        <div className="feed has-bottom-bar" data-layout={prefs.layout}>
           <div className="profile-head">
             <Avatar name={user} size="large" src={about?.icon} />
             <div className="profile-meta">
@@ -294,6 +295,7 @@ const INBOX_SECTIONS: Choice<InboxSection>[] = [
 
 export const InboxScreen = () => {
   const nav = useNav();
+  const { prefs } = usePrefs();
   const account = useAccount();
   const [section, setSection] = useState<InboxSection>("inbox");
   const [open, setOpen] = useState<string | null>(null);
@@ -303,14 +305,16 @@ export const InboxScreen = () => {
     list.update((items) =>
       items.map((item) => (item.id === id ? { ...item, unread } : item)),
     );
-  const markRead = (item: InboxItem, unread: boolean) =>
+  // Update at once, as Relay does; restore the old state if Reddit refuses.
+  const markRead = (item: InboxItem, unread: boolean) => {
+    setUnread(item.id, unread);
     void attempt(() =>
       runAction(unread ? "unread_message" : "read_message", { id: item.id }),
     ).then((ok) => {
-      if (!ok) return;
-      setUnread(item.id, unread);
-      ensureAccount(0); // Update the drawer's unread count.
+      if (ok) ensureAccount(0); // Update the drawer's unread count.
+      else setUnread(item.id, item.unread);
     });
+  };
 
   const toggle = (item: InboxItem) => {
     setOpen((current) => (current === item.id ? null : item.id));
@@ -427,7 +431,7 @@ export const InboxScreen = () => {
         onTitle={pickSection}
       />
       <div className="scroller">
-        <div className="feed has-bottom-bar">
+        <div className="feed has-bottom-bar" data-layout={prefs.layout}>
           {list.items.map((item) => (
             <MessageCard
               key={item.id}
@@ -491,6 +495,7 @@ const itemId = (item: ListingItem) =>
 
 export const ModeratorScreen = () => {
   const nav = useNav();
+  const { prefs } = usePrefs();
   const [sub, setSub] = useState("mod");
   const [section, setSection] = useState<ModSection>("modqueue");
   const [filter, setFilter] = useState<ModFilter>("all");
@@ -569,7 +574,7 @@ export const ModeratorScreen = () => {
         onTitle={pickSection}
       />
       <div className="scroller">
-        <div className="feed has-bottom-bar">
+        <div className="feed has-bottom-bar" data-layout={prefs.layout}>
           <ListingRows
             items={list.items}
             extra={(item) => (

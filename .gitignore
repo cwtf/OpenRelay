@@ -3,3 +3,6 @@ dist/
 test-results/
 *.tsbuildinfo
 *.zip
+# Packed extension and its private signing key (never commit the key)
+dist.crx
+dist.pem

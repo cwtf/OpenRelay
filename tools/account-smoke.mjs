@@ -145,6 +145,30 @@ try {
   assert.match(await top().locator(".appbar-title .sub").textContent(), /^Saved · New/);
   await back();
 
+  // Profile posts follow the Layout setting: cards by default, then List.
+  const profilePosts = async () => {
+    await drawer("Profile");
+    await top().locator(".listing-post").first().waitFor();
+    return top().locator(".feed");
+  };
+  let feed = await profilePosts();
+  assert.equal(await feed.getAttribute("data-layout"), "cards");
+  assert.notEqual(
+    await feed.locator(".listing-post").first().evaluate((el) => getComputedStyle(el).borderTopLeftRadius),
+    "0px",
+  );
+  await back();
+  await drawer("Settings");
+  await app.getByRole("radio", { name: "List", exact: true }).click();
+  await app.locator("body").press("Escape");
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  feed = await profilePosts();
+  assert.equal(await feed.getAttribute("data-layout"), "list");
+  await feed.locator(".listing-post .row").first().waitFor(); // List row markup.
+  await settle();
+  await page.screenshot({ path: resolve(out, "account-profile-list.png") });
+  await back();
+
   // User: another profile with Friend and a Send Message FAB that composes.
   await drawer("User");
   await app.getByLabel("Username").fill("spez");
@@ -207,14 +231,16 @@ try {
   const target = app.locator('.comment.is-context[data-cid="t1_r1"]');
   await target.waitFor();
   await app.getByText("Single comment thread").waitFor();
+  // Scrolled into view below the 80-line parent (which has scrolled away).
   await app.waitForFunction(() => {
-    const el = document.querySelector('.comment.is-context[data-cid="t1_r1"]');
-    const box = el?.getBoundingClientRect();
-    return box && box.top >= 0 && box.bottom <= window.innerHeight;
-  }); // Scrolled into view below the 80-line parent.
-  assert.ok(
-    (await app.locator('[data-cid="t1_c0"]').evaluate((el) => el.getBoundingClientRect().top)) < 0,
-  );
+    const box = document
+      .querySelector('.comment.is-context[data-cid="t1_r1"]')
+      ?.getBoundingClientRect();
+    const parent = document.querySelector('[data-cid="t1_c0"]')?.getBoundingClientRect();
+    return (
+      box && parent && parent.top < 0 && box.top >= 0 && box.bottom <= window.innerHeight
+    );
+  });
   await settle();
   await page.screenshot({ path: resolve(out, "account-context.png") });
   await app.getByRole("button", { name: "View all comments" }).click();
@@ -277,7 +303,7 @@ try {
   assert.equal(context.pages().length, 2); // No tabs opened for these screens.
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: in-reader Profile (sections, karma), User (friend, message), Compose, Inbox (read, reply, read all, context scrolls to the comment), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
+    "PASS: in-reader Profile (sections, karma, follows Layout), User (friend, message), Compose, Inbox (read, reply, read all, context scrolls to the comment), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
   );
 } finally {
   await context.close();

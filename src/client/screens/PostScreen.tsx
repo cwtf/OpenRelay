@@ -360,6 +360,20 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       44;
     const reduced = document.documentElement.dataset.motion === "reduced";
     scroller.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
+    // Comments off screen use estimated heights (content-visibility), so the
+    // target moves as they render. Once the scroll ends, re-measure and
+    // correct until it holds (bounded, e.g. at the end of the thread).
+    const offset = () =>
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 44;
+    const correct = (attempt: number) => {
+      const delta = offset();
+      if (Math.abs(delta) <= 2 || attempt >= 8) return;
+      const before = scroller.scrollTop;
+      scroller.scrollBy({ top: delta });
+      if (scroller.scrollTop === before) return; // Cannot scroll any further.
+      requestAnimationFrame(() => correct(attempt + 1));
+    };
+    window.setTimeout(() => correct(0), reduced ? 0 : 500);
     el.classList.remove("is-focus");
     void el.offsetWidth;
     el.classList.add("is-focus");
