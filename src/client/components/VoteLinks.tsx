@@ -1,57 +1,74 @@
-import type { MouseEvent } from 'react';
-import { compact } from '../lib/format';
-import { openUrl, redditUrl } from '../lib/platform';
-import { Icon } from './Icon';
+import { pageUrl } from "../../extension/bridge";
+import { compact } from "../lib/format";
+import { redditUrl } from "../lib/platform";
+import { castVote, useVote } from "../lib/votes";
+import type { Vote } from "../../extension/votes";
+import { Icon } from "./Icon";
 
 type VoteLinksProps = {
+  thingId: string;
   permalink: string;
   score: number;
-  kind: 'post' | 'comment';
-  variant: 'stat' | 'inline';
+  kind: "post" | "comment";
+  variant: "stat" | "inline";
 };
-
-/**
- * Devvit apps can't vote on a user's behalf, so the vote arrows link to the
- * post or comment on Reddit, where the user can vote. They always open on
- * Reddit (never inside the reader), even for permalinks the reader could
- * otherwise show itself.
- */
 export const VoteLinks = ({
+  thingId,
   permalink,
   score,
   kind,
   variant,
 }: VoteLinksProps) => {
-  const href = redditUrl(permalink);
-  const open = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    openUrl(href);
+  const state = useVote(thingId);
+  const href = new URL(redditUrl(permalink) || pageUrl.href);
+  href.searchParams.set("openrelay", "off");
+  const arrow = (direction: Vote) => {
+    const label = direction === 1 ? "Upvote" : "Downvote";
+    const selected = state.vote === direction;
+    return (
+      <button
+        type="button"
+        className={`vote-btn is-${direction === 1 ? "up" : "down"}${selected ? " is-selected" : ""}`}
+        aria-label={`${selected ? "Undo " + label.toLowerCase() : label} this ${kind}`}
+        aria-pressed={selected}
+        disabled={state.pending}
+        data-ripple
+        onClick={(event) => {
+          event.stopPropagation();
+          void castVote(thingId, direction);
+        }}
+      >
+        <Icon name={direction === 1 ? "up" : "down"} />
+      </button>
+    );
   };
   return (
     <span
       className={`vote vote-${variant}`}
-      title={`${score.toLocaleString()} points · vote on Reddit`}
+      data-thing-id={thingId}
+      aria-busy={state.pending}
+      title={state.error || "Vote using Reddit’s loaded controls"}
     >
-      <a
-        className="vote-btn is-up"
-        href={href}
-        data-ripple
-        aria-label={`Upvote this ${kind} on Reddit`}
-        onClick={open}
-      >
-        <Icon name="up" />
-      </a>
-      <span className="vote-score">{compact(score)}</span>
-      <a
-        className="vote-btn is-down"
-        href={href}
-        data-ripple
-        aria-label={`Downvote this ${kind} on Reddit`}
-        onClick={open}
-      >
-        <Icon name="down" />
-      </a>
+      {arrow(1)}
+      <span className="vote-score">{compact(state.score ?? score)}</span>
+      {arrow(-1)}
+      {state.fallback ? (
+        <a
+          className="vote-fallback"
+          href={href.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => event.stopPropagation()}
+          aria-label={`Vote on Reddit: ${kind}`}
+        >
+          Vote on Reddit
+        </a>
+      ) : null}
+      {state.error ? (
+        <span className="sr-only" role="status">
+          {state.error}
+        </span>
+      ) : null}
     </span>
   );
 };

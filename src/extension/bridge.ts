@@ -29,8 +29,9 @@ window.addEventListener("message", (event) => {
   else task.resolve(event.data.value);
 });
 export function bridge<T>(
-  action: "snapshot" | "json",
+  action: "snapshot" | "json" | "vote" | "vote-status",
   path?: string,
+  payload?: { thingId?: string; direction?: number; ids?: string[] },
 ): Promise<T> {
   const id = ++nextId;
   return new Promise((resolve, reject) => {
@@ -42,7 +43,7 @@ export function bridge<T>(
     }, 22000);
     pending.set(id, { resolve, reject, timer });
     window.parent.postMessage(
-      { type: "openrelay:request", id, action, path },
+      { type: "openrelay:request", id, action, path, payload },
       pageUrl.origin,
     );
   });

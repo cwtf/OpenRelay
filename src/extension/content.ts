@@ -1,3 +1,4 @@
+import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, parseRoute } from "./reddit";
 import { readSnapshot } from "./snapshot";
 
@@ -70,12 +71,28 @@ window.addEventListener("message", async (event) => {
     event.data?.type !== "openrelay:request"
   )
     return;
-  const { id, action, path } = event.data;
+  const { id, action, path, payload } = event.data;
   const target = frame.contentWindow;
   if (!Number.isSafeInteger(id)) return;
   try {
     let value: unknown;
-    if (action === "snapshot") {
+    if (action === "vote") {
+      if (!active) throw new Error("OpenRelay is not active");
+      value = await forwardVote(document, payload?.thingId, payload?.direction);
+    } else if (action === "vote-status") {
+      if (
+        !Array.isArray(payload?.ids) ||
+        payload.ids.length > 100 ||
+        !payload.ids.every(isThingId)
+      )
+        throw new Error("Invalid vote status request");
+      value = Object.fromEntries(
+        payload.ids.map((thingId: string) => [
+          thingId,
+          readNativeVote(document, thingId),
+        ]),
+      );
+    } else if (action === "snapshot") {
       let loaded = readSnapshot(document);
       for (let i = 0; !loaded.posts.length && i < 10; i++) {
         await new Promise((resolve) => setTimeout(resolve, 200));

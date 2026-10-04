@@ -403,7 +403,7 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
     nav.openSheet((onClosed) => (
       <ReplySheet
         parentId={parentId}
-        permalink={permalink || post?.permalink || ""}
+                permalink={permalink || post?.permalink || ""}
         author={author}
         quote={quote}
         loggedIn={nav.session.loggedIn}
@@ -671,7 +671,8 @@ export const PostScreen = ({ postId, seed }: PostScreenProps) => {
             ) : null}
             <div className="post-toolbar">
               <VoteLinks
-                permalink={post.permalink}
+                thingId={post.id}
+        permalink={post.permalink}
                 score={post.score}
                 kind="post"
                 variant="stat"

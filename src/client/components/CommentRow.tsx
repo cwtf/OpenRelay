@@ -121,6 +121,7 @@ export const CommentRow = memo(
             </span>
           ) : (
             <VoteLinks
+              thingId={node.id}
               permalink={node.permalink}
               score={node.score}
               kind="comment"

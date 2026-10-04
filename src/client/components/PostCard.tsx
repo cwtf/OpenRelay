@@ -33,6 +33,7 @@ const Stats = ({ post, onMore }: { post: PostSummary; onMore: () => void }) => {
   return (
     <div className="post-stats">
       <VoteLinks
+        thingId={post.id}
         permalink={post.permalink}
         score={post.score}
         kind="post"

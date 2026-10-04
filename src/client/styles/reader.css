@@ -407,7 +407,7 @@
   height: 18px;
 }
 
-/* Vote arrows: they link out to Reddit, where voting happens. */
+/* Vote arrows forward one click to the matching native Reddit control. */
 .vote {
   display: inline-flex;
   align-items: center;
@@ -2098,3 +2098,10 @@
 .layer.has-drawer.is-closing .scrim {
   animation-duration: var(--dur-drawer-out);
 }
+
+.vote-btn { border: 0; background: transparent; padding: 0; cursor: pointer; }
+.vote-btn.is-up.is-selected { color: var(--score); background: var(--press); }
+.vote-btn.is-down.is-selected { color: var(--downvote); background: var(--press); }
+.vote-btn:disabled { opacity: .5; cursor: progress; }
+.vote-fallback { color: var(--link); font-size: 11px; margin-left: 6px; }
+.vote > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

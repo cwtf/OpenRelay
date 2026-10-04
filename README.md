@@ -24,11 +24,13 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - Cards, Compact and List layouts; Auto, Light, Dark and Black themes.
 - One-click restoration of Reddit's original page. Unsupported pages (settings, login, profiles, messages, moderation) stay native. Recognized challenge screens stay native too.
 
-**Voting and replying open Reddit's own page.** This extension does not submit votes or comments, request OAuth access, or use Devvit's app account. Settings stay local to the browser; Reddit account preference syncing is not included.
+**Vote arrows forward one click to the matching native Reddit vote control**, using the page’s signed-in session. Upvote, downvote, undo, and switching votes are supported when the native control is loaded and exposes its state. Current and old Reddit controls are supported, including open shadow roots. Buttons pause while a click is pending; the reader mirrors Reddit’s displayed selection/count and later rollbacks. This reflects Reddit’s UI, not an independent server acknowledgment.
+
+If the control is absent, disabled, inaccessible, or does not change state, an explicit **Vote on Reddit** link appears. There are no automatic retries or redirect popups. Posts/comments fetched only inside the reader may lack native controls and need this fallback. Replies still open Reddit’s editor. The extension does not read authentication tokens, send vote API requests, request OAuth access, or use Devvit's app account. Settings stay local to the browser; Reddit account preference syncing is not included.
 
 ## Data and permissions
 
-A Manifest V3 content script runs only on the three Reddit hosts above. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes.
+A Manifest V3 content script runs only on the three Reddit hosts above. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and validated single-click vote forwarding for a specific post/comment ID. Page-origin messages cannot invoke these operations.
 
 No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. Requests use the Reddit tab's normal same-origin session. Nothing is sent to an OpenRelay server. Preferences and read/hidden markers are kept in the reader's local storage.
 
@@ -52,7 +54,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 21 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 23 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -61,6 +63,8 @@ npm run test:browser
 ```
 
 Set `PLAYWRIGHT_MODULE` to a Playwright module URL or `CHROMIUM_PATH` to an installed Chromium executable when using shared tooling. Test profiles/screenshots are written under ignored `test-results/`.
+
+Vote tests additionally cover initial selection, undo/switch, rapid-click suppression, exact nested-comment ownership, disabled/missing controls, unconfirmed changes, delayed rollbacks, and rejection of page-origin spoofed messages. All vote tests use instrumented fixtures; they cast no votes on Reddit.
 
 Validated: injection, loaded-page feeds, nested comments, direct posts, layouts, themes, toolbar restore/reopen, excluded pages, JSON-denied fallback. A live public Reddit check reached Reddit's humanity challenge, so live signed-in behavior has not been verified.
 
@@ -71,6 +75,6 @@ Validated: injection, loaded-page feeds, nested comments, direct posts, layouts,
 - `src/extension/` — Reddit normalization, DOM extraction, message bridge, content script and toolbar worker.
 - `public/manifest.json` — extension manifest.
 - `tools/build.mjs` — independent extension build; no dependency on the sibling project at build/runtime.
-- `tools/browser-smoke.mjs` — browser integration checks.
+- `tools/browser-smoke.mjs` and `tools/vote-smoke.mjs` — browser integration checks.
 
 No files in the neighboring OpenRelay project are modified.
