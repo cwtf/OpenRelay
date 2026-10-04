@@ -1,0 +1,26 @@
+{
+  "name": "openrelay-chrome",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/extension/*.test.ts src/client/lib/*.test.ts",
+    "check": "npm run type-check && npm test && npm run build",
+    "test:browser": "node tools/browser-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.1"
+  }
+}

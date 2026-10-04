@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "OpenRelay for Reddit",
+  "version": "0.1.0",
+  "description": "Read Reddit pages with OpenRelay’s cards, themes, comment threads and media viewer.",
+  "action": {
+    "default_title": "Toggle OpenRelay / original Reddit"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.reddit.com/*",
+        "https://old.reddit.com/*",
+        "https://reddit.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["reader.html", "assets/*"],
+      "matches": [
+        "https://www.reddit.com/*",
+        "https://old.reddit.com/*",
+        "https://reddit.com/*"
+      ]
+    }
+  ]
+}
