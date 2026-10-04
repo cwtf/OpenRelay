@@ -1,6 +1,6 @@
 import { apiVote } from "./apiVote";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
-import { allowedJsonPath, parseRoute } from "./reddit";
+import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
 import { readSnapshot } from "./snapshot";
 
 let host: HTMLDivElement | null = null;
@@ -110,6 +110,16 @@ window.addEventListener("message", async (event) => {
           readNativeVote(document, thingId),
         ]),
       );
+    } else if (action === "me") {
+      // Only the name and picture reach the reader, never the session modhash.
+      const response = await fetch(new URL("/api/me.json", location.origin), {
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(15000),
+        headers: { Accept: "application/json" },
+      });
+      value = response.ok
+        ? normalizeAccount(await response.json().catch(() => null))
+        : null;
     } else if (action === "snapshot") {
       let loaded = readSnapshot(document);
       for (let i = 0; !loaded.posts.length && i < 10; i++) {

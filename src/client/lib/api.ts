@@ -1,5 +1,6 @@
 import type {
   AboutResponse,
+  Account,
   CommentNode,
   CommentSort,
   Community,
@@ -14,6 +15,7 @@ import type {
 } from "../../shared/api";
 import { bridge, pageUrl } from "../../extension/bridge";
 import {
+  safeUrl,
   normalizeCommunity,
   normalizeComments,
   normalizePost,
@@ -224,9 +226,11 @@ export async function fetchAbout(sub: string): Promise<AboutResponse> {
   const result = await json(prefix(sub) + "/about.json?raw_json=1");
   const d = result?.data;
   if (!d) throw new ApiFailure("Community information unavailable");
+  const icon = safeUrl(d.community_icon) || safeUrl(d.icon_img);
   return {
     about: {
       name: d.display_name ?? sub,
+      ...(icon ? { icon } : {}),
       title: d.title,
       description: d.public_description,
       subscribers: d.subscribers,
@@ -258,4 +262,7 @@ export async function fetchSubscriptions(): Promise<Community[]> {
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
   );
 }
+/** The signed-in account's name and profile picture, or null. */
+export const fetchAccount = (): Promise<Account | null> =>
+  bridge<Account | null>("me");
 export const savePrefsRemote = async (prefs: Prefs) => ({ prefs });

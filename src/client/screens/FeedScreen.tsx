@@ -21,6 +21,7 @@ import { usePrefs } from "../app/prefs";
 import { Icon, type IconName } from "../components/Icon";
 import { PostCard } from "../components/PostCard";
 import { Sheet, SheetItem } from "../components/Sheet";
+import { useAccount } from "../lib/account";
 import { fetchAbout, fetchFeed } from "../lib/api";
 import { compact, hueOf, sortLabel, timeframeLabel } from "../lib/format";
 import {
@@ -66,21 +67,47 @@ type CachedFeed = {
 const feedCache = new Map<string, CachedFeed>();
 const aboutCache = new Map<string, SubredditAbout>();
 
+/** A round picture, or the name's initial when there is none or it fails. */
 export const Avatar = ({
   name,
   size,
+  src,
 }: {
   name: string;
   size?: "small" | "large";
-}) => (
-  <span
-    className={`avatar${size ? ` is-${size}` : ""}`}
-    style={{ ["--hue" as string]: hueOf(name.toLowerCase()) }}
-    aria-hidden
-  >
-    {name.slice(0, 1)}
-  </span>
-);
+  src?: string | undefined;
+}) => {
+  const [failed, setFailed] = useState<string | null>(null);
+  const className = `avatar${size ? ` is-${size}` : ""}`;
+  if (src && failed !== src)
+    return (
+      <img
+        className={className}
+        src={src}
+        alt=""
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(src)}
+      />
+    );
+  return (
+    <span
+      className={className}
+      style={{ ["--hue" as string]: hueOf(name.toLowerCase()) }}
+      aria-hidden
+    >
+      {name.slice(0, 1)}
+    </span>
+  );
+};
+
+/** Home shows the signed-in account's picture; communities their icon. */
+export const useFeedPicture = (
+  sub: string,
+  about: SubredditAbout | null,
+): string | undefined => {
+  const account = useAccount();
+  return sub === "Home" ? account?.icon : about?.icon;
+};
 
 export const useAbout = (sub: string): SubredditAbout | null => {
   const key = sub.toLowerCase();
@@ -153,6 +180,7 @@ export const FeedScreen = ({
   const nav = useNav();
   const { prefs, update } = usePrefs();
   const about = useAbout(sub);
+  const picture = useFeedPicture(sub, about);
   const key = `${sub.toLowerCase()}|${sort}|${timeframe}`;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -464,7 +492,7 @@ export const FeedScreen = ({
         <div className="appbar-spacer" />
         <div className="feed" data-layout={prefs.layout} ref={feedRef}>
           <div className="feed-banner">
-            <Avatar name={sub} />
+            <Avatar name={sub} src={picture} />
             <div className="meta">
               <div className="title">{about?.title || `r/${sub}`}</div>
               <div className="stats">

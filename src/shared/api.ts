@@ -138,6 +138,8 @@ export type CommentNode = {
 export type SubredditAbout = {
   name: string;
   title?: string;
+  /** Community icon, when Reddit provides one. */
+  icon?: string;
   description?: string;
   subscribers?: number;
   active?: number;
@@ -155,6 +157,9 @@ export type Community = {
   subscribers?: number;
   nsfw: boolean;
 };
+
+/** The signed-in Reddit account, as far as the reader needs it. */
+export type Account = { name: string; icon?: string };
 
 export type Prefs = {
   theme: "system" | "dark" | "black" | "light";

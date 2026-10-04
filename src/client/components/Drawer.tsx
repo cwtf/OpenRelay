@@ -19,7 +19,8 @@ import {
   useFavourites,
   useSubscriptions,
 } from "../lib/subscriptions";
-import { Avatar, useAbout } from "../screens/FeedScreen";
+import { useAccount } from "../lib/account";
+import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
 
@@ -220,6 +221,8 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
   const nav = useNav();
   const { session, current } = nav;
   const about = useAbout(current);
+  const picture = useFeedPicture(current, about);
+  const account = useAccount();
   const subscriptions = useSubscriptions();
   const favourites = useFavourites();
   const [closing, setClosing] = useState(false);
@@ -356,7 +359,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
         }}
       >
         <div className="drawer-head">
-          <Avatar name={current} size="large" />
+          <Avatar name={current} size="large" src={picture} />
           <div className="title">{about?.title || `r/${current}`}</div>
           <div className="subtitle">r/{current}</div>
           <div className="numbers">
@@ -586,8 +589,8 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
           </button>
         </div>
         <div className="drawer-foot">
-          {session.username
-            ? `Signed in as u/${session.username}`
+          {account
+            ? `Signed in as u/${account.name}`
             : "Reading from your Reddit tab"}
           <br />
           OpenRelay · an independent reader built on Devvit

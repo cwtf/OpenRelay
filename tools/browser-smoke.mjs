@@ -78,8 +78,28 @@ const comment = {
 };
 const fixture = `<!doctype html><html><head><title>Reddit fixture</title></head><body><h1>Original Reddit fixture</h1><shreddit-post id="t3_abc123" post-title="${post.title}" author="example_user" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="123" comment-count="2" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post></body></html>`;
 let deny = false;
+// 1x1 PNG served for profile and community pictures.
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
 await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
   const url = new URL(route.request().url());
+  if (url.pathname.startsWith("/img/"))
+    return url.pathname === "/img/broken.png"
+      ? route.fulfill({ status: 404, body: "" })
+      : route.fulfill({ contentType: "image/png", body: png });
+  if (url.pathname === "/api/me.json")
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          name: "fixture_user",
+          modhash: "fixturemodhash1",
+          icon_img: "https://www.reddit.com/img/me.png",
+        },
+      }),
+    });
   if (url.pathname === "/r/challenge/")
     return route.fulfill({
       contentType: "text/html",
@@ -127,7 +147,12 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       : url.pathname.endsWith("about.json")
         ? {
             data: {
-              display_name: "test",
+              display_name: url.pathname.startsWith("/r/broken/")
+                ? "broken"
+                : "test",
+              community_icon: url.pathname.startsWith("/r/broken/")
+                ? "https://www.reddit.com/img/broken.png"
+                : "https://www.reddit.com/img/test.png",
               title: "Test community",
               subscribers: 1000,
             },
@@ -217,6 +242,16 @@ try {
       .evaluateAll((els) => els.map((el) => el.textContent)),
     ["Home", "Popular", "All", "Apple", "zebra"],
   );
+  // Community icon in the drawer header and feed banner; account in the footer.
+  assert.equal(
+    await app.locator(".drawer-head img.avatar").getAttribute("src"),
+    "https://www.reddit.com/img/test.png",
+  );
+  assert.equal(
+    await app.locator(".feed-banner img.avatar").getAttribute("src"),
+    "https://www.reddit.com/img/test.png",
+  );
+  await app.getByText("Signed in as u/fixture_user").waitFor();
   await app.getByRole("button", { name: "Add r/zebra to Favourites" }).click();
   await app.getByRole("button", { name: "Collapse Favourites" }).waitFor();
   await page.screenshot({ path: resolve(out, "drawer.png") });
@@ -257,6 +292,23 @@ try {
     await chrome.tabs.sendMessage(tab.id, { type: "openrelay:toggle" });
   });
   assert.equal(await page.locator("body").evaluate((el) => el.inert), true);
+  // Home shows the signed-in account's profile picture.
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.locator(".sub-row-main", { hasText: "Home" }).click();
+  await app.locator(".has-drawer").waitFor({ state: "detached" });
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.locator('.drawer-head img.avatar[src="https://www.reddit.com/img/me.png"]').waitFor();
+  assert.equal(
+    await app.locator(".drawer-head img.avatar").evaluate((img) => img.naturalWidth),
+    1,
+  );
+  await page.screenshot({ path: resolve(out, "drawer-home.png") });
+  await app.locator("body").press("Escape");
+  await app.locator(".has-drawer").waitFor({ state: "detached" });
+  // A picture that fails to load falls back to the initial.
+  await page.goto("https://www.reddit.com/r/broken/");
+  app = await reader();
+  await app.locator(".feed-banner span.avatar", { hasText: "b" }).waitFor();
   await page.goto("https://www.reddit.com/r/test/comments/abc123/example/");
   app = await reader();
   await app
@@ -281,7 +333,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, subscriptions drawer, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

@@ -1957,7 +1957,7 @@
   padding: 4px 16px;
 }
 
-img.avatar.sub-icon {
+img.avatar {
   object-fit: cover;
   background: var(--surface-3);
 }

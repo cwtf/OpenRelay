@@ -1,4 +1,5 @@
 import type {
+  Account,
   Community,
   CommentNode,
   PostDetail,
@@ -192,6 +193,14 @@ export function normalizeCommunity(s: Raw): Community | null {
     ...(typeof s.subscribers === "number" ? { subscribers: s.subscribers } : {}),
     nsfw: Boolean(s.over18),
   };
+}
+/** Name and profile picture from `/api/me.json`; null when signed out. */
+export function normalizeAccount(me: Raw): Account | null {
+  const d = me?.data;
+  const name = String(d?.name ?? "");
+  if (!/^[\w-]{3,20}$/.test(name)) return null;
+  const icon = safeUrl(d.icon_img) || safeUrl(d.snoovatar_img);
+  return { name, ...(icon ? { icon } : {}) };
 }
 export type PageRoute = {
   sub: string;

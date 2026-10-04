@@ -37,7 +37,7 @@ window.addEventListener("message", (event) => {
   else task.resolve(event.data.value);
 });
 export function bridge<T>(
-  action: "snapshot" | "json" | "vote" | "vote-status",
+  action: "snapshot" | "json" | "vote" | "vote-status" | "me",
   path?: string,
   payload?: {
     thingId?: string;

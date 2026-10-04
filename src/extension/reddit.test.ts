@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   allowedJsonPath,
+  normalizeAccount,
   normalizeCommunity,
   normalizePost,
   normalizeComments,
@@ -170,4 +171,28 @@ test("reads the viewer's vote from Reddit's likes field", () => {
     { kind: "t1", data: { id: "c", body: "x", likes: false } },
   ]);
   assert.equal(tree.comments[0]?.vote, -1);
+});
+test("reads only the account name and picture, never the modhash", () => {
+  assert.deepEqual(
+    normalizeAccount({
+      data: {
+        name: "reader_1",
+        modhash: "secret",
+        icon_img: "https://styles.redditmedia.com/t5_u/profileIcon.png?a=1&amp;b=2",
+        snoovatar_img: "https://i.redd.it/snoo.png",
+      },
+    }),
+    {
+      name: "reader_1",
+      icon: "https://styles.redditmedia.com/t5_u/profileIcon.png?a=1&b=2",
+    },
+  );
+  assert.deepEqual(
+    normalizeAccount({
+      data: { name: "snoo_fan", icon_img: "", snoovatar_img: "https://i.redd.it/snoo.png" },
+    }),
+    { name: "snoo_fan", icon: "https://i.redd.it/snoo.png" },
+  );
+  assert.equal(normalizeAccount({}), null); // Signed out.
+  assert.equal(normalizeAccount({ data: { name: "<bad name>" } }), null);
 });
