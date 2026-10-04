@@ -92,7 +92,32 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       path: url.pathname,
       body: Object.fromEntries(new URLSearchParams(route.request().postData())),
     });
-    return route.fulfill({ contentType: "application/json", body: "{}" });
+    const sent = writes.at(-1).body;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        url.pathname === "/api/comment"
+          ? {
+              json: {
+                errors: [],
+                data: {
+                  things: [
+                    {
+                      kind: "t1",
+                      data: {
+                        id: "mine1", name: "t1_mine1", parent_id: sent.thing_id,
+                        author: "fixture_user", body: sent.text, score: 1,
+                        created_utc: Math.floor(Date.now() / 1000), likes: true,
+                        permalink: post.permalink + "mine1/",
+                      },
+                    },
+                  ],
+                },
+              },
+            }
+          : {},
+      ),
+    });
   }
   if (url.pathname === "/r/test/about/moderators.json")
     return route.fulfill({
@@ -266,6 +291,50 @@ try {
   await app.getByText("An actual nested comment fixture", { exact: true }).click();
   await app.getByText("A nested reply", { exact: true }).waitFor();
   await page.screenshot({ path: resolve(out, "comments.png") });
+
+  // Reply to a comment in place, as in Relay: format bar, preview, send.
+  const openReply = async () => {
+    await app.locator('[data-cid="t1_c1"] .comment-more').click();
+    await app.locator(".sheet-item", { hasText: "Reply" }).click();
+    const box = app.getByRole("textbox", { name: "Reply" });
+    await box.waitFor();
+    return box;
+  };
+  let box = await openReply();
+  await app.getByText("Replying to u/reader").waitFor();
+  await box.fill("Totally agree");
+  // A draft survives closing the composer.
+  await app.getByRole("button", { name: "Cancel" }).click();
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  box = await openReply();
+  assert.equal(await box.inputValue(), "Totally agree");
+  await box.evaluate((el) => el.setSelectionRange(8, 13)); // "agree"
+  await app.getByRole("button", { name: "Bold", exact: true }).click();
+  assert.equal(await box.inputValue(), "Totally **agree**");
+  await app.getByRole("button", { name: "Preview" }).click();
+  await app.locator(".reply-preview strong", { hasText: "agree" }).waitFor();
+  await page.screenshot({ path: resolve(out, "reply.png") });
+  await app.getByRole("button", { name: "Edit" }).click();
+  await app.getByRole("button", { name: "Send", exact: true }).click();
+  await app.locator(".toast", { hasText: "Reply sent" }).waitFor();
+  assert.deepEqual(writes.at(-1), {
+    path: "/api/comment",
+    body: {
+      thing_id: "t1_c1",
+      text: "Totally **agree**",
+      uh: "fixturemodhash1",
+      api_type: "json",
+    },
+  });
+  // The new reply appears nested under the comment, with its Markdown.
+  const mine = app.locator('[data-cid="t1_mine1"]');
+  await mine.locator("strong", { hasText: "agree" }).waitFor();
+  assert.equal(await mine.getAttribute("data-level"), "1");
+  // The sent draft is gone.
+  box = await openReply();
+  assert.equal(await box.inputValue(), "");
+  await app.getByRole("button", { name: "Cancel" }).click();
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
   await app.getByRole("button", { name: "Back", exact: true }).click();
   await app
     .locator(".screen.is-entering,.screen.is-exiting")
@@ -494,7 +563,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

@@ -444,19 +444,12 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     else toast("End of comments");
   };
 
-  const openReply = (
-    parentId: string,
-    author: string,
-    quote: string,
-    permalink?: string,
-  ) => {
+  const openReply = (parentId: string, author: string, quote: string) => {
     nav.openSheet((onClosed) => (
       <ReplySheet
         parentId={parentId}
-                permalink={permalink || post?.permalink || ""}
         author={author}
         quote={quote}
-        loggedIn={nav.session.loggedIn}
         onClosed={onClosed}
         onPosted={(posted) => {
           const comment = {
@@ -514,7 +507,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                     icon="reply"
                     label="Reply"
                     onClick={run(() =>
-                      openReply(node.id, node.author, snippet, node.permalink),
+                      openReply(node.id, node.author, snippet),
                     )}
                   />
                 ) : null}

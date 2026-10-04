@@ -2,7 +2,7 @@
 // whose title opens a section picker, a bottom app bar of icon-over-label
 // buttons with an optional FAB, per-row action strips, and filled text fields.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { setBottomInset } from "../../extension/bridge";
 import { useNav } from "../app/nav";
 import { Icon, type IconName } from "./Icon";
@@ -335,56 +335,3 @@ export const ConfirmSheet = ({
     )}
   </Sheet>
 );
-
-/** Reply composer that posts through the viewer's session. */
-export const ReplyComposer = ({
-  title,
-  quote,
-  onSend,
-  onClosed,
-}: {
-  title: string;
-  quote: string;
-  onSend: (text: string) => Promise<void>;
-  onClosed: () => void;
-}) => {
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  return (
-    <Sheet title={title} onClosed={onClosed}>
-      {(close) => (
-        <div className="composer">
-          {quote ? <div className="quote">{quote}</div> : null}
-          <textarea
-            autoFocus
-            value={draft}
-            maxLength={10000}
-            placeholder="Write a reply"
-            aria-label="Reply"
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <div className="row-actions">
-            <span className="grow">Markdown supported</span>
-            <button type="button" className="btn is-text" onClick={close}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={!draft.trim() || sending}
-              onClick={() => {
-                setSending(true);
-                onSend(draft)
-                  .then(close)
-                  .catch(() => setSending(false));
-              }}
-            >
-              <Icon name="send" />
-              {sending ? "Sending…" : "Send"}
-            </button>
-          </div>
-        </div>
-      )}
-    </Sheet>
-  );
-};

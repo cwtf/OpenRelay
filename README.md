@@ -22,6 +22,7 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - Post Markdown, nested comments, collapse, comment search/navigation, and additional replies where Reddit returns them.
 - OpenRelay image/gallery/video presentation (the viewer scales images, GIFs and videos to fit the screen on both axes, enlarging small ones, as Relay does), NSFW/spoiler blur, local read/hidden markers, and settings. Settings changes save automatically and apply to every open Reddit tab.
 - Your subscribed communities load automatically. As in Relay, tapping the feed title opens a tall **Subreddit search** sheet: a search field ready for typing, then collapsible Feeds / Favourites / Recent / Subscriptions sections in a Relay-style list (round community icons, alphabetical, a star to pin favourites, a re-sync button). Typing filters your communities and, as in Relay, searches Reddit live (after two characters, debounced) through its read-only subreddit autocomplete, showing results with member counts, NSFW tags and a subscribe button; you can also open the typed name directly. The list is kept for 30 minutes between syncs.
+- **Replying** to posts, comments and inbox messages inside the reader, after Relay's reply screen: the parent quoted under "Replying to", a Markdown format bar (bold, italic, strikethrough, spoiler, quote, link, lists, rule, code, header, superscript), Preview, and Send (Ctrl/Cmd+Enter). Drafts are kept per parent until sent; a posted reply appears in the thread straight away.
 - Relay's community header: banner, 72px icon, title, members and online counts, and description, with round **Subscribe** (+ / ✓) and **⋮** buttons. The ⋮ menu has View Sidebar (Relay's right-hand "Sidebar Info" panel with the full sidebar), View Wiki, View Rules, View Mods, Message Mods, Create Post (Text or Image/Link) and Share. Tapping the description also opens the sidebar.
 - The drawer is Relay's navigation drawer: the community header, then Profile, Inbox, Moderator, New Post, Friends, User and Settings.
 - Relay's account destinations, inside the reader, each with Relay's layout: an app bar whose title switches section, and a bottom bar of icon-over-label actions:
@@ -36,9 +37,9 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 
 Posts and comments the reader fetched itself (other pages, more comments) have no control on the page. Their votes go to Reddit's `/api/vote` endpoint as a same-origin request from the Reddit tab, with your existing session and its modhash (Reddit's CSRF token, read from `/api/me.json` and held only in memory in that tab). The arrows start from the vote Reddit reports for you, and the count adjusts locally. A stale modhash is refreshed once; nothing else is retried.
 
-If you are signed out, the control is disabled (archived/locked), or Reddit does not confirm a clicked vote, the reader explains why and shows a **Vote on Reddit** link as a fallback. Comment replies in threads still open Reddit’s editor. The extension does not request OAuth access, use Devvit's app account, or send any token outside the Reddit tab.
+If you are signed out, the control is disabled (archived/locked), or Reddit does not confirm a clicked vote, the reader explains why and shows a **Vote on Reddit** link as a fallback. The extension does not request OAuth access, use Devvit's app account, or send any token outside the Reddit tab.
 
-**Writes** happen only when you act, through Reddit's own `/api/*` endpoints with your session: voting, subscribing and unsubscribing, messaging a community's moderators, and the account screens' actions (mark read/unread, read all, reply to inbox items, delete and block, compose, approve/remove/spam/ignore reports, friend/unfriend, submit). The page script accepts only this fixed list, validates every parameter (IDs, usernames, community names, lengths, http(s) URLs) before contacting Reddit, and adds the modhash itself; the reader never receives it. Deleting, blocking and removing friends ask for confirmation first. Settings stay local to the browser; Reddit account preference syncing is not included.
+**Writes** happen only when you act, through Reddit's own `/api/*` endpoints with your session: voting, replying to posts, comments and messages, subscribing and unsubscribing, messaging a community's moderators, and the account screens' actions (mark read/unread, read all, reply to inbox items, delete and block, compose, approve/remove/spam/ignore reports, friend/unfriend, submit). The page script accepts only this fixed list, validates every parameter (IDs, usernames, community names, lengths, http(s) URLs) before contacting Reddit, and adds the modhash itself; the reader never receives it. Deleting, blocking and removing friends ask for confirmation first. Settings stay local to the browser; Reddit account preference syncing is not included.
 
 ## Data and permissions
 
@@ -66,7 +67,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 40 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 45 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

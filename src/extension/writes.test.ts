@@ -200,3 +200,43 @@ test("subscribes and messages a community's moderators", async () => {
   await apiAction(fetchFn, origin, "compose", { to: "/r/typescript", subject: "Hi", text: "Mods" });
   assert.equal(sent(calls[3]!).to, "/r/typescript");
 });
+
+test("returns the posted reply as a comment", async () => {
+  resetWrites();
+  const { calls, fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42" } })
+      : json({
+          json: {
+            errors: [],
+            data: {
+              things: [
+                {
+                  kind: "t1",
+                  data: {
+                    id: "new9", name: "t1_new9", parent_id: "t1_abc", author: "me",
+                    body: "Thanks **a lot**", score: 1, created_utc: 1700000000,
+                    permalink: "/r/test/comments/p1/x/new9/", likes: true,
+                  },
+                },
+              ],
+            },
+          },
+        }),
+  );
+  const result = await apiAction(fetchFn, origin, "comment", {
+    parent: "t1_abc",
+    text: "Thanks **a lot**",
+  });
+  assert.deepEqual(sent(calls[1]!), {
+    thing_id: "t1_abc",
+    text: "Thanks **a lot**",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+  assert.equal(result.id, "t1_new9");
+  assert.equal(result.comment?.id, "t1_new9");
+  assert.equal(result.comment?.parentId, "t1_abc");
+  assert.equal(result.comment?.body, "Thanks **a lot**");
+  assert.equal(result.comment?.vote, 1);
+});

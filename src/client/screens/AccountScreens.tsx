@@ -21,6 +21,7 @@ import {
   ReaderMarkdown,
 } from "../components/ListingCards";
 import { PostCard } from "../components/PostCard";
+import { ReplySheet } from "../components/ReplySheet";
 import {
   ActionStrip,
   BottomBar,
@@ -28,7 +29,6 @@ import {
   ConfirmSheet,
   Field,
   ListFooter,
-  ReplyComposer,
   ScreenHeader,
   type BarAction,
   type Choice,
@@ -341,16 +341,10 @@ export const InboxScreen = () => {
       label: "Reply",
       onClick: () =>
         nav.openSheet((onClosed) => (
-          <ReplyComposer
-            title={`Reply to ${item.author}`}
+          <ReplySheet
+            parentId={item.id}
+            author={item.author}
             quote={item.body}
-            onSend={async (text) => {
-              const ok = await attempt(
-                () => runAction("comment", { parent: item.id, text }),
-                "Reply sent",
-              );
-              if (!ok) throw new Error("not sent");
-            }}
             onClosed={onClosed}
           />
         )),

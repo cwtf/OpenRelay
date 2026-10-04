@@ -435,6 +435,7 @@ export async function fetchWiki(sub: string): Promise<string> {
 export const runAction = (
   op: string,
   args: Record<string, unknown> = {},
-): Promise<{ id?: string; url?: string }> => bridge("action", undefined, { op, args });
+): Promise<{ id?: string; url?: string; comment?: CommentNode }> =>
+  bridge("action", undefined, { op, args });
 
 export const savePrefsRemote = async (prefs: Prefs) => ({ prefs });

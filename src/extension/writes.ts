@@ -1,5 +1,6 @@
 import { isThingId, type Vote, type VoteResult } from "./votes.ts";
-import { safeUrl } from "./reddit.ts";
+import type { CommentNode } from "../shared/api.ts";
+import { normalizeComments, safeUrl } from "./reddit.ts";
 
 /**
  * Writes to Reddit through its own `/api/*` endpoints with the tab's
@@ -202,7 +203,7 @@ export async function apiAction(
   origin: string,
   name: unknown,
   args: unknown,
-): Promise<{ id?: string; url?: string }> {
+): Promise<{ id?: string; url?: string; comment?: CommentNode }> {
   if (!isAction(name) || !args || typeof args !== "object") fail();
   const action = ACTIONS[name as string]!;
   // Validate before reading the session, so bad input never reaches Reddit.
@@ -214,9 +215,15 @@ export async function apiAction(
   const created = data?.things?.[0]?.data;
   const id = String(data?.name ?? created?.name ?? "");
   const url = safeUrl(data?.url);
+  // A posted reply comes back as the new comment, so it can be shown at once.
+  const comment =
+    data?.things?.[0]?.kind === "t1"
+      ? normalizeComments([data.things[0]]).comments[0]
+      : undefined;
   return {
     ...(/^t\d_[a-z0-9]+$/i.test(id) ? { id } : {}),
     ...(url ? { url } : {}),
+    ...(comment ? { comment } : {}),
   };
 }
 
