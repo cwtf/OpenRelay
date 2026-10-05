@@ -111,10 +111,16 @@ export const subtreeRows = (root: HTMLElement, id: string): HTMLElement[] => {
     `[data-cid="${CSS.escape(id)}"]`
   );
   if (!head) return [];
+  // Rows may be wrapped (e.g. in a swipe container): walk the list's own
+  // children, reading each row's level from itself or the row inside it.
+  let row: HTMLElement = head;
+  while (row.parentElement && row.parentElement !== root) row = row.parentElement;
+  const levelOf = (el: HTMLElement) =>
+    Number(el.dataset.level ?? el.querySelector<HTMLElement>('[data-level]')?.dataset.level);
   const level = Number(head.dataset.level);
   const rows: HTMLElement[] = [];
-  let next = head.nextElementSibling as HTMLElement | null;
-  while (next && Number(next.dataset.level) > level) {
+  let next = row.nextElementSibling as HTMLElement | null;
+  while (next && levelOf(next) > level) {
     const rect = next.getBoundingClientRect();
     if (rect.top > window.innerHeight * 1.25) break;
     if (nearViewport(rect)) rows.push(next);

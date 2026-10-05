@@ -8,7 +8,11 @@ import { age, fullDate } from "../lib/format";
 import { Markdown, MarkdownContext } from "../lib/markdown";
 import { Icon, type IconName } from "./Icon";
 import { ActionStrip, type BarAction } from "./Relay";
-import { VoteLinks } from "./VoteLinks";
+import { VoteLinks, useVoteToggle } from "./VoteLinks";
+import { useAccount } from "../lib/account";
+import { ModActionsSheet } from "./Relay";
+import { ReplySheet } from "./ReplySheet";
+import { SwipeActions, type SwipeAction } from "./SwipeActions";
 
 /** Markdown whose links and images open inside the reader. */
 export const ReaderMarkdown = ({ source }: { source: string }) => {
@@ -67,7 +71,54 @@ export const CommentCard = ({
   children?: ReactNode;
 }) => {
   const nav = useNav();
+  const account = useAccount();
+  const vote = useVoteToggle(comment.id, comment.vote, comment.score);
+  const own = account?.name.toLowerCase() === comment.author.toLowerCase();
+  // Relay's listing-comment swipe actions: Up, Down, Full, Reply, Edit, Mod.
+  const actions: SwipeAction[] = [
+    { icon: "up", label: "Up", title: "Upvote", tone: "up", active: vote.current === 1, disabled: vote.pending, onClick: () => vote.cast(1) },
+    { icon: "down", label: "Down", title: "Downvote", tone: "down", active: vote.current === -1, disabled: vote.pending, onClick: () => vote.cast(-1) },
+    { icon: "thread", label: "Full", title: "Open the full thread", onClick: () => nav.openPost(comment.postId, comment.id) },
+    {
+      icon: "reply",
+      label: "Reply",
+      onClick: () =>
+        nav.openSheet((onClosed) => (
+          <ReplySheet parentId={comment.id} author={comment.author} quote={comment.body} onClosed={onClosed} />
+        )),
+    },
+    ...(own
+      ? [
+          {
+            icon: "edit",
+            label: "Edit",
+            title: "Edit comment",
+            onClick: () =>
+              nav.openSheet((onClosed) => (
+                <ReplySheet
+                  parentId={comment.postId}
+                  author={comment.author}
+                  quote=""
+                  editing={{ id: comment.id, text: comment.body }}
+                  onClosed={onClosed}
+                />
+              )),
+          } satisfies SwipeAction,
+        ]
+      : []),
+    ...(account?.isMod
+      ? [
+          {
+            icon: "modShield",
+            label: "Mod",
+            title: "Moderate",
+            onClick: () => nav.openSheet((onClosed) => <ModActionsSheet id={comment.id} onClosed={onClosed} />),
+          } satisfies SwipeAction,
+        ]
+      : []),
+  ];
   return (
+    <SwipeActions actions={actions}>
     <article
       className="list-card"
       data-cid={comment.id}
@@ -109,6 +160,7 @@ export const CommentCard = ({
       </div>
       {children}
     </article>
+    </SwipeActions>
   );
 };
 

@@ -141,8 +141,15 @@ export const useLongPress = (
   const timer = useRef<number | undefined>(undefined);
   const fired = useRef(false);
   const origin = useRef({ x: 0, y: 0 });
+  const watcher = useRef<((event: PointerEvent) => void) | null>(null);
 
-  const clear = () => window.clearTimeout(timer.current);
+  const clear = () => {
+    window.clearTimeout(timer.current);
+    if (watcher.current) {
+      window.removeEventListener('pointermove', watcher.current, true);
+      watcher.current = null;
+    }
+  };
 
   const handlers = {
     onPointerDown: (event: ReactPointerEvent) => {
@@ -150,7 +157,18 @@ export const useLongPress = (
       fired.current = false;
       origin.current = { x: event.clientX, y: event.clientY };
       clear();
+      // Track movement window-wide: a swipe may capture the pointer on an
+      // ancestor, and this element would then never see the drag.
+      watcher.current = (move: PointerEvent) => {
+        if (
+          Math.abs(move.clientX - origin.current.x) > 8 ||
+          Math.abs(move.clientY - origin.current.y) > 8
+        )
+          clear();
+      };
+      window.addEventListener('pointermove', watcher.current, true);
       timer.current = window.setTimeout(() => {
+        clear();
         fired.current = true;
         try {
           navigator.vibrate?.(12);

@@ -13,7 +13,12 @@ import {
   wantsThumb,
 } from './PostParts';
 import { openPostActions } from './PostActions';
-import { VoteLinks } from './VoteLinks';
+import { ModActionsSheet } from './Relay';
+import { SwipeActions, type SwipeAction } from './SwipeActions';
+import { VoteLinks, useVoteToggle } from './VoteLinks';
+import { useAccount } from '../lib/account';
+import { sharePost } from '../lib/platform';
+import { toggleSaved, useSaved } from '../lib/saved';
 
 const useIsRead = (id: string): boolean => {
   useSyncExternalStore(readPosts.subscribe, readPosts.getVersion);
@@ -80,6 +85,21 @@ export const PostCard = memo(
       if (press.consumeClick()) return;
       nav.openPost(post);
     };
+    const account = useAccount();
+    const vote = useVoteToggle(post.id, post.vote, post.score);
+    const saved = useSaved(post.id, post.saved);
+    // Relay's post swipe actions: Up, Down, Save, Share, Cmts, Mod, More.
+    const swipe: SwipeAction[] = [
+      { icon: 'up', label: 'Up', title: 'Upvote', tone: 'up', active: vote.current === 1, disabled: vote.pending, onClick: () => vote.cast(1) },
+      { icon: 'down', label: 'Down', title: 'Downvote', tone: 'down', active: vote.current === -1, disabled: vote.pending, onClick: () => vote.cast(-1) },
+      { icon: saved ? 'starFilled' : 'star', label: saved ? 'Saved' : 'Save', tone: 'saved', active: saved, onClick: () => toggleSaved(post.id, saved) },
+      { icon: 'share', label: 'Share', onClick: () => void sharePost(post.id, post.permalink) },
+      { icon: 'comment', label: 'Cmts', title: 'Open comments', onClick: () => nav.openPost(post) },
+      ...(account?.isMod
+        ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => nav.openSheet((onClosed) => <ModActionsSheet id={post.id} onClosed={onClosed} />) } satisfies SwipeAction]
+        : []),
+      { icon: 'more', label: 'More', title: 'More actions', onClick: more },
+    ];
 
     const hit = (
       <button
@@ -94,6 +114,7 @@ export const PostCard = memo(
 
     if (layout === 'cards') {
       return (
+        <SwipeActions actions={swipe}>
         <article
           className={`post${read ? ' is-read' : ''}`}
           data-anim-key={post.id}
@@ -116,11 +137,13 @@ export const PostCard = memo(
             <Stats post={post} onMore={more} />
           </div>
         </article>
+        </SwipeActions>
       );
     }
 
     const thumb = showThumbnails && wantsThumb(post);
     return (
+      <SwipeActions actions={swipe}>
       <article
         className={`post${read ? ' is-read' : ''}`}
         data-anim-key={post.id}
@@ -148,6 +171,7 @@ export const PostCard = memo(
           <Stats post={post} onMore={more} />
         </div>
       </article>
+      </SwipeActions>
     );
   }
 );

@@ -52,18 +52,32 @@ type ReplySheetProps = {
   quote: string;
   /** Called with the new comment when Reddit returns it. */
   onPosted?: (comment: CommentNode) => void;
+  /** Edit your own comment or post (`t1_`/`t3_`) instead of replying. */
+  editing?: { id: string; text: string };
   onClosed: () => void;
 };
 
-export const ReplySheet = ({ parentId, author, quote, onPosted, onClosed }: ReplySheetProps) => {
+export const ReplySheet = ({
+  parentId,
+  author,
+  quote,
+  onPosted,
+  editing,
+  onClosed,
+}: ReplySheetProps) => {
   const account = useAccount();
-  const [text, setText] = useState(() => loadDraft(parentId));
+  // Edits keep their own drafts, separate from replies to the same item.
+  const draftKey = editing ? `edit:${editing.id}` : parentId;
+  const [text, setText] = useState(() => loadDraft(draftKey) || editing?.text || "");
   const [preview, setPreview] = useState(false);
   const [sending, setSending] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const pendingSelection = useRef<[number, number] | null>(null);
 
-  useEffect(() => saveDraft(parentId, text), [parentId, text]);
+  useEffect(
+    () => saveDraft(draftKey, text === editing?.text ? "" : text),
+    [draftKey, text, editing?.text],
+  );
 
   // Restore the selection after a format action re-renders the text.
   useEffect(() => {
@@ -90,11 +104,11 @@ export const ReplySheet = ({ parentId, author, quote, onPosted, onClosed }: Repl
   const send = (close: () => void) => {
     if (!text.trim() || sending) return;
     setSending(true);
-    runAction("comment", { parent: parentId, text })
+    runAction(editing ? "edit" : "comment", editing ? { id: editing.id, text } : { parent: parentId, text })
       .then((result) => {
-        saveDraft(parentId, "");
+        saveDraft(draftKey, "");
         setText("");
-        toast("Reply sent");
+        toast(editing ? "Edit saved" : "Reply sent");
         if (result.comment) onPosted?.(result.comment);
         close();
       })
@@ -106,7 +120,7 @@ export const ReplySheet = ({ parentId, author, quote, onPosted, onClosed }: Repl
   };
 
   return (
-    <Sheet title={`Reply to ${author}`} onClosed={onClosed}>
+    <Sheet title={editing ? "Edit comment" : `Reply to ${author}`} onClosed={onClosed}>
       {(close) =>
         !account ? (
           <div className="composer">
@@ -125,7 +139,7 @@ export const ReplySheet = ({ parentId, author, quote, onPosted, onClosed }: Repl
           </div>
         ) : (
           <div className="composer">
-            {quote ? (
+            {quote && !editing ? (
               <>
                 <div className="reply-parent">Replying to u/{author}</div>
                 <div className="quote">{quote}</div>
@@ -146,7 +160,7 @@ export const ReplySheet = ({ parentId, author, quote, onPosted, onClosed }: Repl
                 value={text}
                 maxLength={MAX_LENGTH}
                 placeholder="Write a reply"
-                aria-label="Reply"
+                aria-label={editing ? "Comment text" : "Reply"}
                 onChange={(event) => setText(event.target.value)}
                 onKeyDown={(event) => {
                   // Ctrl/Cmd+Enter sends, as in most editors.
@@ -197,7 +211,7 @@ export const ReplySheet = ({ parentId, author, quote, onPosted, onClosed }: Repl
                 onClick={() => send(close)}
               >
                 <Icon name="send" />
-                {sending ? "Sending…" : "Send"}
+                {sending ? "Sending…" : editing ? "Save" : "Send"}
               </button>
             </div>
           </div>

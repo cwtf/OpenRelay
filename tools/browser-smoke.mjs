@@ -334,12 +334,101 @@ try {
   box = await openReply();
   assert.equal(await box.inputValue(), "");
   await app.getByRole("button", { name: "Cancel" }).click();
-  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  await app.locator(".sheet").waitFor({ state: "detached" }); // Fully closed.
+  // Relay's swipe actions: drag a comment left to reveal its actions.
+  const swipeLeft = async (locator, stepDelay = 0) => {
+    const box = await locator.boundingBox();
+    const y = box.y + Math.min(box.height / 2, 40);
+    await page.mouse.move(box.x + box.width - 30, y);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) {
+      await page.mouse.move(box.x + box.width - 30 - step * 60, y + step);
+      if (stepDelay) await page.waitForTimeout(stepDelay);
+    }
+    await page.mouse.up();
+  };
+  const actionLabels = () =>
+    app.locator(".swipe.is-open .swipe-btn span").allTextContents();
+  // The card has fully slid away, uncovering the actions beneath it.
+  const revealed = () =>
+    app.waitForFunction(() => {
+      const open = document.querySelector(".swipe.is-open");
+      const card = open?.querySelector(".swipe-content")?.getBoundingClientRect();
+      const row = open?.getBoundingClientRect();
+      return card && row && card.right <= row.left + 1;
+    });
+  await swipeLeft(app.locator('[data-cid="t1_c1"]'));
+  await app.locator(".swipe.is-open").waitFor();
+  assert.deepEqual(await actionLabels(), ["Up", "Down", "User", "Reply", "Mod", "More"]);
+  await revealed();
+  await page.screenshot({ path: resolve(out, "swipe-comment.png") });
+  // Swiping right on the open row restores the card, triggering nothing.
+  const writesBefore = writes.length;
+  const openRow = await app.locator(".swipe.is-open").boundingBox();
+  const midY = openRow.y + openRow.height / 2;
+  await page.mouse.move(openRow.x + 40, midY);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step++)
+    await page.mouse.move(openRow.x + 40 + step * 60, midY + step);
+  await page.mouse.up();
+  await app.locator(".swipe.is-open").waitFor({ state: "detached" });
+  await app.waitForFunction(() => {
+    const card = document.querySelector('[data-cid="t1_c1"]')?.closest(".swipe-content");
+    const row = card?.parentElement?.getBoundingClientRect();
+    const box = card?.getBoundingClientRect();
+    return box && row && Math.abs(box.left - row.left) < 1; // Back in place.
+  });
+  assert.equal(writes.length, writesBefore);
+  await app.getByText("A nested reply", { exact: true }).waitFor(); // Not collapsed.
+  // And it opens again as before.
+  await swipeLeft(app.locator('[data-cid="t1_c1"]'));
+  await app.locator(".swipe.is-open").waitFor();
+  await app.locator(".swipe.is-open .swipe-btn", { hasText: "Up" }).click();
+  await app.locator(".swipe.is-open").waitFor({ state: "detached" });
+  assert.deepEqual(writes.at(-1), {
+    path: "/api/vote",
+    body: { id: "t1_c1", dir: "1", uh: "fixturemodhash1", api_type: "json" },
+  });
+  await app.locator('.vote[data-thing-id="t1_c1"] .is-up[aria-pressed="true"]').waitFor();
+  // The swipe did not collapse the comment it was dragged on.
+  await app.getByText("A nested reply", { exact: true }).waitFor();
+  // A nested reply offers Parent, which scrolls to and flashes its parent.
+  // Slowly (~0.7s): the long-press menu must not open during a swipe.
+  await swipeLeft(app.locator('[data-cid="t1_c2"]'), 90);
+  assert.ok((await actionLabels()).includes("Parent"));
+  assert.equal(await app.locator(".sheet").count(), 0);
+  await app.locator(".swipe.is-open .swipe-btn", { hasText: "Parent" }).click();
+  await app.locator('.comment.is-focus[data-cid="t1_c1"]').waitFor();
+
   await app.getByRole("button", { name: "Back", exact: true }).click();
   await app
     .locator(".screen.is-entering,.screen.is-exiting")
     .waitFor({ state: "detached" });
   await page.screenshot({ path: resolve(out, "feed.png") });
+
+  // Posts: the drag reveals Relay's post actions instead of opening the post.
+  const card = app.locator(".post", { hasText: post.title }).first();
+  await swipeLeft(card);
+  await app.locator(".swipe.is-open").waitFor();
+  assert.equal(await app.locator(".screen").count(), 1); // Still on the feed.
+  assert.deepEqual(await actionLabels(), ["Up", "Down", "Save", "Share", "Cmts", "Mod", "More"]);
+  await revealed();
+  await page.screenshot({ path: resolve(out, "swipe-post.png") });
+  await app.locator(".swipe.is-open .swipe-btn", { hasText: "Save" }).click();
+  await app.locator(".toast", { hasText: "Saved" }).waitFor();
+  assert.deepEqual(writes.at(-1), {
+    path: "/api/save",
+    body: { id: "t3_abc123", uh: "fixturemodhash1", api_type: "json" },
+  });
+  // A sideways trackpad scroll opens it too; Save now shows as active.
+  // Measure the row's fixed outer box: the card itself may still be sliding back.
+  await app.locator(".swipe.is-open").waitFor({ state: "detached" });
+  const cardBox = await app.locator(".swipe").filter({ has: card }).boundingBox();
+  await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + 30);
+  await page.mouse.wheel(150, 0);
+  await app.locator('.swipe.is-open .swipe-btn.is-saved.is-active', { hasText: "Saved" }).waitFor();
+  await app.locator("body").press("Escape"); // Escape closes the row.
+  await app.locator(".swipe.is-open").waitFor({ state: "detached" });
   await app.getByRole("button", { name: /Layout:/ }).click();
   await app.locator('.feed[data-layout="compact"]').waitFor();
   await app.getByRole("button", { name: "Settings", exact: true }).click();
@@ -563,7 +652,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

@@ -170,6 +170,9 @@ test("rejects unknown actions and invalid parameters before any request", async 
     ["submit", { sr: "../api", kind: "self", title: "x" }],
     ["submit", { sr: "test", kind: "self", title: "x".repeat(301) }],
     ["read_message", null],
+    ["save", { id: "t5_sub" }],
+    ["edit", { id: "t1_abc", text: "" }],
+    ["edit", { id: "t4_msg", text: "x" }],
     ["subscribe", { action: "join", sr: "test" }],
     ["subscribe", { action: "sub", sr: "a/b" }],
     ["compose", { to: "/r/a/b", subject: "s", text: "t" }],
@@ -239,4 +242,22 @@ test("returns the posted reply as a comment", async () => {
   assert.equal(result.comment?.parentId, "t1_abc");
   assert.equal(result.comment?.body, "Thanks **a lot**");
   assert.equal(result.comment?.vote, 1);
+});
+
+test("saves, unsaves and edits with their own parameters", async () => {
+  resetWrites();
+  const { calls, fetchFn } = signedIn();
+  await apiAction(fetchFn, origin, "save", { id: "t3_abc" });
+  assert.equal(new URL(calls[1]!.url).pathname, "/api/save");
+  assert.deepEqual(sent(calls[1]!), { id: "t3_abc", uh: "abc123modhash", api_type: "json" });
+  await apiAction(fetchFn, origin, "unsave", { id: "t1_def" });
+  assert.equal(new URL(calls[2]!.url).pathname, "/api/unsave");
+  await apiAction(fetchFn, origin, "edit", { id: "t1_def", text: "Fixed typo" });
+  assert.equal(new URL(calls[3]!.url).pathname, "/api/editusertext");
+  assert.deepEqual(sent(calls[3]!), {
+    thing_id: "t1_def",
+    text: "Fixed typo",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
 });

@@ -146,6 +146,7 @@ export function normalizePost(p: Raw): PostDetail {
       : {}),
     ...(thumb ? { thumb } : {}),
     ...viewerVote(p.likes),
+    ...(typeof p.saved === "boolean" ? { saved: p.saved } : {}),
     ...modInfo(p),
     media,
   };

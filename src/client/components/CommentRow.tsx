@@ -5,7 +5,10 @@ import { useLongPress } from '../lib/gestures';
 import { Markdown } from '../lib/markdown';
 import { Icon } from './Icon';
 import { FlairChip } from './PostParts';
-import { VoteLinks } from './VoteLinks';
+import { VoteLinks, useVoteToggle } from './VoteLinks';
+import { SwipeActions, type SwipeAction } from './SwipeActions';
+import { useNav } from '../app/nav';
+import { useAccount } from '../lib/account';
 
 const MAX_VISUAL_DEPTH = 10;
 
@@ -27,6 +30,14 @@ const guidesFor = (depth: number): string | undefined => {
 
 export const visualDepth = (depth: number) => Math.min(depth, MAX_VISUAL_DEPTH);
 
+/** Thread-level handlers for a comment's swipe actions (stable callbacks). */
+export type CommentSwipe = {
+  reply?: (node: CommentNode) => void;
+  parent: (node: CommentNode) => void;
+  edit: (node: CommentNode) => void;
+  moderate: (node: CommentNode) => void;
+};
+
 type CommentRowProps = {
   node: CommentNode;
   depth: number;
@@ -36,6 +47,7 @@ type CommentRowProps = {
   focused?: boolean;
   onToggle: (id: string) => void;
   onActions: (node: CommentNode) => void;
+  swipe?: CommentSwipe | undefined;
 };
 
 export const CommentRow = memo(
@@ -47,7 +59,27 @@ export const CommentRow = memo(
     focused,
     onToggle,
     onActions,
+    swipe,
   }: CommentRowProps) => {
+    const nav = useNav();
+    const account = useAccount();
+    const vote = useVoteToggle(node.id, node.vote, node.score);
+    const own = account?.name.toLowerCase() === node.author.toLowerCase();
+    // Relay's comment swipe actions: Up, Down, User, Edit, Reply, Parent, Mod, More.
+    const actions: SwipeAction[] = [
+      { icon: 'up', label: 'Up', title: 'Upvote', tone: 'up', active: vote.current === 1, disabled: vote.pending, onClick: () => vote.cast(1) },
+      { icon: 'down', label: 'Down', title: 'Downvote', tone: 'down', active: vote.current === -1, disabled: vote.pending, onClick: () => vote.cast(-1) },
+      ...(/^[\w-]{3,20}$/.test(node.author)
+        ? [{ icon: 'user', label: 'User', title: `Go to u/${node.author}`, onClick: () => nav.openProfile(node.author) } satisfies SwipeAction]
+        : []),
+      ...(own && swipe ? [{ icon: 'edit', label: 'Edit', title: 'Edit comment', onClick: () => swipe.edit(node) } satisfies SwipeAction] : []),
+      ...(swipe?.reply ? [{ icon: 'reply', label: 'Reply', onClick: () => swipe.reply!(node) } satisfies SwipeAction] : []),
+      ...(swipe && node.parentId.startsWith('t1_')
+        ? [{ icon: 'comment', label: 'Parent', title: 'Go to parent comment', onClick: () => swipe.parent(node) } satisfies SwipeAction]
+        : []),
+      ...(account?.isMod && swipe ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => swipe.moderate(node) } satisfies SwipeAction] : []),
+      { icon: 'more', label: 'More', title: 'More actions', onClick: () => onActions(node) },
+    ];
     const press = useLongPress(() => onActions(node));
     // Like Relay, collapsing hides only the replies; the comment stays whole.
     const collapsible = node.replies.length > 0 || node.moreReplies;
@@ -67,6 +99,7 @@ export const CommentRow = memo(
       .join(' ');
 
     return (
+      <SwipeActions actions={actions}>
       <div
         className={`comment${collapsed ? ' is-collapsed' : ''}${focused ? ' is-context' : ''}`}
         data-depth={d}
@@ -156,6 +189,7 @@ export const CommentRow = memo(
           <Markdown source={node.body} />
         </div>
       </div>
+      </SwipeActions>
     );
   }
 );

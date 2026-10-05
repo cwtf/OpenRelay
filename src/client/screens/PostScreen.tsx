@@ -15,7 +15,8 @@ import {
 } from "../../shared/api";
 import { useNav } from "../app/nav";
 import { usePrefs } from "../app/prefs";
-import { CommentRow, MoreRow } from "../components/CommentRow";
+import { CommentRow, MoreRow, type CommentSwipe } from "../components/CommentRow";
+import { ModActionsSheet } from "../components/Relay";
 import { Icon, type IconName } from "../components/Icon";
 import { openPostActions } from "../components/PostActions";
 import {
@@ -481,6 +482,49 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     ));
   };
 
+  // Swipe actions need the latest thread state but must stay stable so the
+  // memoized rows do not all re-render.
+  const swipeLatest = useRef({
+    reply: (_node: CommentNode) => {},
+    edit: (_node: CommentNode) => {},
+  });
+  swipeLatest.current = {
+    reply: (node) =>
+      openReply(
+        node.id,
+        node.author,
+        decodeEntities(node.body).replace(/\s+/g, " ").slice(0, 220),
+      ),
+    edit: (node) =>
+      nav.openSheet((onClosed) => (
+        <ReplySheet
+          parentId={node.parentId}
+          author={node.author}
+          quote=""
+          editing={{ id: node.id, text: decodeEntities(node.body) }}
+          onClosed={onClosed}
+          onPosted={(updated) =>
+            setTree((current) =>
+              current
+                ? mapTree(current, node.id, (n) => ({ ...n, body: updated.body, edited: true }))
+                : current,
+            )
+          }
+        />
+      )),
+  };
+  const locked = Boolean(post?.locked || post?.archived);
+  const commentSwipe = useMemo<CommentSwipe>(
+    () => ({
+      ...(locked ? {} : { reply: (node: CommentNode) => swipeLatest.current.reply(node) }),
+      parent: (node) => scrollToComment(node.parentId),
+      edit: (node) => swipeLatest.current.edit(node),
+      moderate: (node) =>
+        nav.openSheet((onClosed) => <ModActionsSheet id={node.id} onClosed={onClosed} />),
+    }),
+    [locked, scrollToComment, nav],
+  );
+
   const commentActions = useCallback(
     (node: CommentNode) => {
       const path = tree ? findPath(tree, node.id) : null;
@@ -876,6 +920,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 focused={row.node.id === focus}
                 onToggle={toggle}
                 onActions={commentActions}
+                swipe={commentSwipe}
               />
             ) : (
               <MoreRow

@@ -5,6 +5,18 @@ import { castVote, useVote } from "../lib/votes";
 import type { Vote } from "../../extension/votes";
 import { Icon } from "./Icon";
 
+/** Current vote and a caster, shared by the arrows and swipe actions. */
+export const useVoteToggle = (thingId: string, vote: Vote | undefined, score: number) => {
+  const state = useVote(thingId);
+  const current: Vote = state.vote ?? vote ?? 0;
+  const shown = state.score ?? score;
+  return {
+    current,
+    pending: state.pending,
+    cast: (direction: Vote) => void castVote(thingId, direction, current, shown),
+  };
+};
+
 type VoteLinksProps = {
   thingId: string;
   permalink: string;

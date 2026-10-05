@@ -312,3 +312,8 @@ test("reads whether the viewer subscribes to a search result", () => {
   assert.equal(normalizeCommunity({ display_name: "pics", user_is_subscriber: true })?.subscribed, true);
   assert.equal("subscribed" in normalizeCommunity({ display_name: "pics" })!, false);
 });
+test("reads whether the viewer saved a post", () => {
+  const base = { id: "s", title: "T", created_utc: 1, permalink: "/r/t/comments/s/" };
+  assert.equal(normalizePost({ ...base, saved: true }).saved, true);
+  assert.equal("saved" in normalizePost(base), false);
+});

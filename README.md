@@ -22,6 +22,7 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 - Post Markdown, nested comments, collapse, comment search/navigation, and additional replies where Reddit returns them.
 - OpenRelay image/gallery/video presentation (the viewer scales images, GIFs and videos to fit the screen on both axes, enlarging small ones, as Relay does), NSFW/spoiler blur, local read/hidden markers, and settings. Settings changes save automatically and apply to every open Reddit tab.
 - Your subscribed communities load automatically. As in Relay, tapping the feed title opens a tall **Subreddit search** sheet: a search field ready for typing, then collapsible Feeds / Favourites / Recent / Subscriptions sections in a Relay-style list (round community icons, alphabetical, a star to pin favourites, a re-sync button). Typing filters your communities and, as in Relay, searches Reddit live (after two characters, debounced) through its read-only subreddit autocomplete, showing results with member counts, NSFW tags and a subscribe button; you can also open the typed name directly. The list is kept for 30 minutes between syncs.
+- **Swipe actions**, as in Relay: swipe a post or comment to the left (touch, mouse drag or a sideways trackpad scroll) and it slides away over a row of actions. Posts: Up, Down, Save, Share, Cmts, Mod (moderators), More. Comments: Up, Down, User, Edit (your own), Reply, Parent, Mod, More. Profile comments: Up, Down, Full, Reply, Edit, Mod. Active votes and saves use Relay's colours; swipe right to bring the card back as it was (or tap the row's background or press Escape).
 - **Replying** to posts, comments and inbox messages inside the reader, after Relay's reply screen: the parent quoted under "Replying to", a Markdown format bar (bold, italic, strikethrough, spoiler, quote, link, lists, rule, code, header, superscript), Preview, and Send (Ctrl/Cmd+Enter). Drafts are kept per parent until sent; a posted reply appears in the thread straight away.
 - Relay's community header: banner, 72px icon, title, members and online counts, and description, with round **Subscribe** (+ / ✓) and **⋮** buttons. The ⋮ menu has View Sidebar (Relay's right-hand "Sidebar Info" panel with the full sidebar), View Wiki, View Rules, View Mods, Message Mods, Create Post (Text or Image/Link) and Share. Tapping the description also opens the sidebar.
 - The drawer is Relay's navigation drawer: the community header, then Profile, Inbox, Moderator, New Post, Friends, User and Settings.
@@ -67,7 +68,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 45 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 47 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

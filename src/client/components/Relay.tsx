@@ -5,6 +5,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { setBottomInset } from "../../extension/bridge";
 import { useNav } from "../app/nav";
+import { runAction } from "../lib/api";
+import { toast } from "../lib/platform";
 import { Icon, type IconName } from "./Icon";
 import { Sheet, SheetItem } from "./Sheet";
 
@@ -335,3 +337,31 @@ export const ConfirmSheet = ({
     )}
   </Sheet>
 );
+
+/** Relay's "Mod" swipe action: moderate one post or comment. */
+export const ModActionsSheet = ({
+  id,
+  onClosed,
+}: {
+  id: string;
+  onClosed: () => void;
+}) => {
+  const act = (op: string, args: Record<string, unknown>, done: string) =>
+    runAction(op, { id, ...args })
+      .then(() => toast(done))
+      .catch((error: unknown) =>
+        toast(error instanceof Error ? error.message : "Reddit could not do that."),
+      );
+  return (
+    <Sheet title="Moderate" onClosed={onClosed}>
+      {(close) => (
+        <>
+          <SheetItem icon="check" label="Approve" onClick={() => { close(); void act("approve", {}, "Approved"); }} />
+          <SheetItem icon="removeCircle" label="Remove" onClick={() => { close(); void act("remove", { spam: false }, "Removed"); }} />
+          <SheetItem icon="spam" label="Remove as spam" onClick={() => { close(); void act("remove", { spam: true }, "Removed as spam"); }} />
+          <SheetItem icon="flag" label="Ignore reports" onClick={() => { close(); void act("ignore_reports", {}, "Reports ignored"); }} />
+        </>
+      )}
+    </Sheet>
+  );
+};

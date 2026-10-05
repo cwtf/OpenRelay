@@ -114,6 +114,8 @@ export type PostSummary = {
   media: PostMedia;
   /** Present when Reddit reports the signed-in viewer's vote. */
   vote?: ViewerVote;
+  /** Whether the signed-in viewer saved it, when Reddit reports it. */
+  saved?: boolean;
   mod?: ModInfo;
 };
 

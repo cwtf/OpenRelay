@@ -3109,3 +3109,84 @@ button.appbar-title {
 .format-bar .icon-btn:disabled {
   opacity: 0.4;
 }
+
+/* Relay's swipe layout: swiping a post or comment left slides it away over a
+   row of evenly spaced icon-over-label actions. Active Up/Down/Save use
+   Relay's orange, purple and green. */
+.swipe {
+  position: relative;
+  /* Horizontal touch drags belong to the swipe; vertical ones still scroll. */
+  touch-action: pan-y;
+  /* Clip the sliding card but leave room for card shadows. */
+  overflow: clip;
+  overflow-clip-margin: 8px;
+}
+
+.swipe-content {
+  position: relative;
+  transition: transform 220ms var(--ease-emph);
+  touch-action: pan-y;
+}
+
+.swipe.is-dragging .swipe-content {
+  transition: none;
+}
+
+.swipe.is-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.swipe.is-open .swipe-content {
+  /* Past the shadow allowance, so no sliver of the card peeks back in. */
+  transform: translateX(calc(-100% - 16px));
+}
+
+.swipe-actions {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  padding: 0 6px;
+  background: var(--surface-2);
+}
+
+.feed[data-layout='cards'] .swipe-actions {
+  border-radius: var(--radius-card);
+}
+
+.swipe-btn {
+  flex: 1;
+  min-width: 0;
+  max-width: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 2px;
+  border-radius: 12px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.swipe-btn:hover {
+  background: var(--hover);
+}
+
+.swipe-btn:disabled {
+  opacity: 0.5;
+}
+
+.swipe-btn.is-up.is-active {
+  color: var(--upvote);
+}
+
+.swipe-btn.is-down.is-active {
+  color: var(--downvote);
+}
+
+.swipe-btn.is-saved.is-active {
+  color: var(--collapsed-badge); /* Relay's green */
+}
