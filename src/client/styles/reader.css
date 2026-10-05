@@ -55,7 +55,8 @@
 
 /* Relay's tablet layout (navigation_dual_pane): the feed on the left and the
    opened post on the right, 50:50 with a 2px divider, or 42:58 with a 4px
-   divider from 900px wide. Other pages still open full screen over both. */
+   divider from 900px wide. Profiles, the inbox, moderation and search replace
+   the feed on the left; New Post and messages open full screen over both. */
 .app.is-dual {
   --list-w: 50%;
   --pane-gap: 2px;
@@ -67,9 +68,20 @@
   --pane-gap: 4px;
 }
 
-.app.is-dual > .screen.is-feed {
+.app.is-dual > .screen.is-feed,
+.app.is-dual > .screen.is-list {
   right: auto;
   width: var(--list-w);
+}
+
+/* Left-pane pages swap in place, as Relay's fragments do, rather than
+   sliding across the post beside them. */
+.screen.is-list.is-entering {
+  animation: fade-in var(--dur-item-fade) var(--ease-in-out) both;
+}
+
+.screen.is-list.is-exiting {
+  animation: fade-out var(--dur-item-fade) var(--ease-in-out) both;
 }
 
 .app.is-dual > .screen.is-detail,

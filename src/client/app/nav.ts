@@ -57,10 +57,15 @@ export type Nav = {
 
 export const NavContext = createContext<Nav | null>(null);
 
-/** Where a screen is shown: full screen, or the dual-pane layout's right pane. */
-export const PaneContext = createContext<'screen' | 'detail'>('screen');
+/**
+ * Where a screen is shown: full screen, or in the dual-pane layout's left
+ * (list) or right (detail) pane.
+ */
+export type Pane = 'screen' | 'list' | 'detail';
 
-export const usePane = (): 'screen' | 'detail' => useContext(PaneContext);
+export const PaneContext = createContext<Pane>('screen');
+
+export const usePane = (): Pane => useContext(PaneContext);
 
 export const useNav = (): Nav => {
   const nav = useContext(NavContext);

@@ -129,8 +129,13 @@ try {
   const bar = (label) => top().locator(".bottom-bar .bar-btn", { hasText: label });
 
   // Profile: own account, Relay header and sections, no Friend/Message.
+  // A 900px window is dual pane: as in Relay, drawer pages replace the feed
+  // on the left and leave the post pane beside them.
   await drawer("Profile");
   await top().getByText("A profile comment").waitFor();
+  assert.equal(await app.locator(".app.is-dual .screen.is-list").count(), 1);
+  assert.equal(await app.locator(".screen.is-feed.is-covered").count(), 1);
+  assert.equal(await app.locator(".pane-empty:not(.is-covered)").count(), 1);
   assert.equal(await top().locator(".appbar-title .name").textContent(), "u/fixture_user");
   assert.match(await top().locator(".profile-karma").textContent(), /^Karma: 1\.2K \/ 3\.4K/);
   assert.deepEqual(
@@ -246,8 +251,13 @@ try {
   await app.getByRole("button", { name: "View all comments" }).click();
   await app.getByText("Top-level comment 0").waitFor();
   assert.equal(await app.getByText("Single comment thread").count(), 0);
-  await back(); // Post -> Inbox
-  await back();
+  // The thread opened beside the inbox, which stays usable on the left.
+  await app.locator(".screen.is-detail").getByText("Top-level comment 0").waitFor();
+  assert.ok(await app.locator(".screen.is-list:not(.is-covered) .message-card").count());
+  await app.locator(".screen.is-detail").getByRole("button", { name: "Close post" }).click();
+  await app.locator(".pane-empty").waitFor();
+  await back(); // Inbox -> feed
+  assert.equal(await app.locator(".screen.is-feed.is-covered").count(), 0);
 
   // Moderator: queue with reports and approve/remove/spam/ignore actions.
   await drawer("Moderator");
@@ -280,6 +290,9 @@ try {
   // New Post: community prefilled, rules, options, then opens the new post.
   await drawer("New Post");
   assert.equal(await top().getByLabel("Subreddit").inputValue(), "test");
+  // Compose screens are full screen over both panes, as Relay's activities.
+  assert.equal(await app.locator(".screen.screen-shadow").count(), 1);
+  assert.equal(await app.locator(".pane-empty.is-covered").count(), 1);
   await top().getByRole("button", { name: "Rules" }).click();
   await app.getByText("Be kind").waitFor();
   await app.locator("body").press("Escape");
@@ -297,7 +310,7 @@ try {
     sr: "test", kind: "self", title: "My new post", text: "Body text", sendreplies: "true",
     nsfw: "false", spoiler: "true", resubmit: "false", uh: "fixturemodhash1", api_type: "json",
   });
-  await app.getByText("Opened post").waitFor();
+  await app.locator(".screen.is-detail").getByText("Opened post").waitFor();
 
   assert.ok(writes.every((write) => write.path.startsWith("/api/")));
   assert.equal(context.pages().length, 2); // No tabs opened for these screens.

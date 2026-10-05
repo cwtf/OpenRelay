@@ -42,7 +42,9 @@ import {
 import {
   NavContext,
   PaneContext,
+  useNav,
   type Nav,
+  type Pane,
   type Session,
   type SheetRenderer,
   type ViewerSpec,
@@ -71,6 +73,23 @@ type Entry = {
 
 let keySeed = 0;
 const nextKey = () => `s${++keySeed}`;
+/** Keys count up, so they order screens by when they were opened. */
+const seq = (entry: Entry) => Number(entry.key.slice(1));
+const bySeq = (a: Entry, b: Entry) => seq(a) - seq(b);
+
+/**
+ * Relay's listing fragments (profile, inbox, moderator, search) replace the
+ * feed in the dual-pane layout's left pane, so posts opened from them show
+ * beside them. Compose screens are activities in Relay and stay full screen.
+ */
+const LIST_ROUTES = new Set<Route["kind"]>([
+  "search",
+  "profile",
+  "inbox",
+  "moderator",
+  "friends",
+]);
+const isListRoute = (route: Route) => LIST_ROUTES.has(route.kind);
 
 /** The page URL's post or search, opened over the feed once at start. */
 const initialStack = (): Entry[] => {
@@ -97,30 +116,40 @@ const initialStack = (): Entry[] => {
 
 type FrameProps = {
   entry: Entry;
-  /** Shown in the right-hand pane of the dual-pane layout. */
-  detail: boolean;
+  /** Full screen, or one side of the dual-pane layout. */
+  pane: Pane;
   covered: boolean;
   top: boolean;
   onEntered: (key: string) => void;
   onExited: (key: string) => void;
   onSwiped: (key: string) => void;
+  /** Closes this screen, whichever pane it is in. */
+  onClose: (key: string) => void;
   children: ReactNode;
 };
 
 const ScreenFrame = ({
   entry,
-  detail,
+  pane,
   covered,
   top,
   onEntered,
   onExited,
   onSwiped,
+  onClose,
   children,
 }: FrameProps) => {
   const ref = useRef<HTMLDivElement | null>(null);
+  const nav = useNav();
+  // A screen's back arrow closes that screen: with both panes open, the one
+  // opened last is not necessarily the one being tapped.
+  const frameNav = useMemo<Nav>(
+    () => ({ ...nav, back: () => onClose(entry.key) }),
+    [nav, onClose, entry.key],
+  );
 
   useSwipeBack(ref, {
-    enabled: top && !detail && entry.phase === "idle",
+    enabled: top && pane === "screen" && entry.phase === "idle",
     onCommit: () => onSwiped(entry.key),
   });
 
@@ -137,7 +166,7 @@ const ScreenFrame = ({
 
   const className = [
     "screen",
-    detail ? "is-detail" : "screen-shadow",
+    pane === "screen" ? "screen-shadow" : `is-${pane}`,
     entry.phase === "entering" ? "is-entering" : "",
     entry.phase === "exiting" ? "is-exiting" : "",
     covered ? "is-covered" : "",
@@ -156,9 +185,9 @@ const ScreenFrame = ({
         else if (entry.phase === "entering") onEntered(entry.key);
       }}
     >
-      <PaneContext.Provider value={detail ? "detail" : "screen"}>
-        {children}
-      </PaneContext.Provider>
+      <NavContext.Provider value={frameNav}>
+        <PaneContext.Provider value={pane}>{children}</PaneContext.Provider>
+      </NavContext.Provider>
     </div>
   );
 };
@@ -256,11 +285,12 @@ const Reader = ({ init }: { init: InitResponse }) => {
   }, []);
 
   const popScreen = useCallback(() => {
-    // With no full-screen page open, back closes the right-hand pane.
-    if (
-      detailRef.current &&
-      !stackRef.current.some((entry) => entry.phase !== "exiting")
-    ) {
+    // Back closes whichever was opened last: the right-hand pane, or the top
+    // page (full screen, or in the left-hand pane).
+    const shown = detailRef.current;
+    const live = stackRef.current.filter((entry) => entry.phase !== "exiting");
+    const top = live[live.length - 1];
+    if (shown && (!top || seq(shown) > seq(top))) {
       detailRef.current = null;
       setDetail(null);
       return;
@@ -361,18 +391,46 @@ const Reader = ({ init }: { init: InitResponse }) => {
     setStack((current) => current.filter((entry) => entry.key !== key));
   }, []);
 
-  const onSwiped = useCallback((key: string) => {
-    setStack((entries) => entries.filter((entry) => entry.key !== key));
-    if (pushedStates.current > 0) {
-      ignorePops.current++;
-      pushedStates.current--;
-      try {
-        window.history.back();
-      } catch {
-        ignorePops.current--;
-      }
+  /** Drop the history entry of a screen closed without going back. */
+  const consumeHistory = useCallback(() => {
+    if (pushedStates.current <= 0) return;
+    ignorePops.current++;
+    pushedStates.current--;
+    try {
+      window.history.back();
+    } catch {
+      ignorePops.current--;
     }
   }, []);
+
+  const onSwiped = useCallback(
+    (key: string) => {
+      setStack((entries) => entries.filter((entry) => entry.key !== key));
+      consumeHistory();
+    },
+    [consumeHistory],
+  );
+
+  const closeScreen = useCallback(
+    (key: string) => {
+      if (detailRef.current?.key === key) {
+        detailRef.current = null;
+        setDetail(null);
+      } else if (
+        stackRef.current.some(
+          (entry) => entry.key === key && entry.phase !== "exiting",
+        )
+      ) {
+        setStack((entries) =>
+          entries.map((entry) =>
+            entry.key === key ? { ...entry, phase: "exiting" } : entry,
+          ),
+        );
+      } else return;
+      consumeHistory();
+    },
+    [consumeHistory],
+  );
 
   // -- navigation API
 
@@ -400,8 +458,9 @@ const Reader = ({ init }: { init: InitResponse }) => {
               focus,
             }
           : { kind: "post", id: post.id, seed: post, focus };
+      // Pages in the left-hand pane leave the right-hand one free for posts.
       const fullScreen = stackRef.current.some(
-        (entry) => entry.phase !== "exiting",
+        (entry) => entry.phase !== "exiting" && !isListRoute(entry.route),
       );
       if (!dualRef.current || fullScreen) {
         push(route);
@@ -421,16 +480,15 @@ const Reader = ({ init }: { init: InitResponse }) => {
   );
 
   // Moving between single and dual pane keeps the open post: it becomes the
-  // right-hand pane, or the bottom full-screen page, under the same key.
+  // right-hand pane, or a full-screen page in the order it was opened, under
+  // the same key. Profiles, the inbox and search move to the left-hand pane.
   useLayoutEffect(() => {
     if (panes.dual) {
-      const first = stackRef.current[0];
-      if (
-        detailRef.current ||
-        first?.route.kind !== "post" ||
-        first.phase === "exiting"
-      )
-        return;
+      if (detailRef.current) return;
+      const first = stackRef.current.find(
+        (entry) => entry.phase !== "exiting" && !isListRoute(entry.route),
+      );
+      if (first?.route.kind !== "post") return;
       const entry: Entry = { ...first, phase: "idle" };
       detailRef.current = entry;
       setDetail(entry);
@@ -440,7 +498,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
       if (!shown) return;
       detailRef.current = null;
       setDetail(null);
-      setStack((entries) => [shown, ...entries]);
+      setStack((entries) => [...entries, shown].sort(bySeq));
     }
   }, [panes.dual]);
 
@@ -505,11 +563,19 @@ const Reader = ({ init }: { init: InitResponse }) => {
     if (stackRef.current.length || detailRef.current) pushState();
   }, []);
 
+  const paneOf = (entry: Entry): Pane =>
+    entry === detail
+      ? "detail"
+      : panes.dual && isListRoute(entry.route)
+        ? "list"
+        : "screen";
   const live = stack.filter((entry) => entry.phase !== "exiting");
   const feedCovered = live.length > 0;
+  const bothCovered = live.some((entry) => paneOf(entry) === "screen");
   // The right-hand pane renders in the same keyed list as the full-screen
-  // pages, so moving a post between them keeps it mounted.
-  const frames = detail ? [detail, ...stack] : stack;
+  // pages, in the order they were opened, so moving a post between them keeps
+  // it mounted and in place.
+  const frames = detail ? [detail, ...stack].sort(bySeq) : stack;
 
   return (
     <NavContext.Provider value={nav}>
@@ -538,28 +604,33 @@ const Reader = ({ init }: { init: InitResponse }) => {
         </div>
         {panes.dual && !detail ? (
           <div
-            className={`pane-empty${feedCovered ? " is-covered" : ""}`}
-            aria-hidden={feedCovered || undefined}
+            className={`pane-empty${bothCovered ? " is-covered" : ""}`}
+            aria-hidden={bothCovered || undefined}
           >
             <Icon name="comment" size={40} />
             <span>Select a post to read it here</span>
           </div>
         ) : null}
         {frames.map((entry, index) => {
-          const covered = frames
-            .slice(index + 1)
-            .some((other) => other.phase !== "exiting");
+          const pane = paneOf(entry);
+          // Full-screen pages cover both panes; a pane covers only its side.
+          const covered = frames.slice(index + 1).some((other) => {
+            if (other.phase === "exiting") return false;
+            const over = paneOf(other);
+            return over === "screen" || over === pane;
+          });
           const isTop = !covered && entry.phase !== "exiting";
           return (
             <ScreenFrame
               key={entry.key}
               entry={entry}
-              detail={entry === detail}
+              pane={pane}
               covered={covered}
               top={isTop}
               onEntered={onEntered}
               onExited={onExited}
               onSwiped={onSwiped}
+              onClose={closeScreen}
             >
               {entry.route.kind === "post" ? (
                 <PostScreen
