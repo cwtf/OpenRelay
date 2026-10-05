@@ -16,12 +16,14 @@ import type {
   Timeframe,
 } from "../../shared/api";
 import { Drawer } from "../components/Drawer";
+import { Icon } from "../components/Icon";
 import { MediaViewer } from "../components/MediaViewer";
 import { SettingsSheet } from "../components/SettingsSheet";
 import { fetchInit, entryRoute } from "../lib/api";
 import { useSwipeBack } from "../lib/gestures";
 import { resolveLink } from "../lib/links";
 import { openUrl } from "../lib/platform";
+import { paneLayout, setSelectedPost, useWindowSize } from "../lib/panes";
 import { installRipple } from "../lib/ripple";
 import { recentCommunities } from "../lib/storage";
 import { ensureAccount } from "../lib/account";
@@ -39,6 +41,7 @@ import {
 } from "../screens/AccountScreens";
 import {
   NavContext,
+  PaneContext,
   type Nav,
   type Session,
   type SheetRenderer,
@@ -94,6 +97,8 @@ const initialStack = (): Entry[] => {
 
 type FrameProps = {
   entry: Entry;
+  /** Shown in the right-hand pane of the dual-pane layout. */
+  detail: boolean;
   covered: boolean;
   top: boolean;
   onEntered: (key: string) => void;
@@ -104,6 +109,7 @@ type FrameProps = {
 
 const ScreenFrame = ({
   entry,
+  detail,
   covered,
   top,
   onEntered,
@@ -114,7 +120,7 @@ const ScreenFrame = ({
   const ref = useRef<HTMLDivElement | null>(null);
 
   useSwipeBack(ref, {
-    enabled: top && entry.phase === "idle",
+    enabled: top && !detail && entry.phase === "idle",
     onCommit: () => onSwiped(entry.key),
   });
 
@@ -131,7 +137,7 @@ const ScreenFrame = ({
 
   const className = [
     "screen",
-    "screen-shadow",
+    detail ? "is-detail" : "screen-shadow",
     entry.phase === "entering" ? "is-entering" : "",
     entry.phase === "exiting" ? "is-exiting" : "",
     covered ? "is-covered" : "",
@@ -150,7 +156,9 @@ const ScreenFrame = ({
         else if (entry.phase === "entering") onEntered(entry.key);
       }}
     >
-      {children}
+      <PaneContext.Provider value={detail ? "detail" : "screen"}>
+        {children}
+      </PaneContext.Provider>
     </div>
   );
 };
@@ -158,7 +166,12 @@ const ScreenFrame = ({
 // ------------------------------------------------------------------ reader
 
 const Reader = ({ init }: { init: InitResponse }) => {
-  const { hydrate } = usePrefs();
+  const { prefs, hydrate } = usePrefs();
+  const windowSize = useWindowSize();
+  const panes = paneLayout(windowSize.width, windowSize.height, {
+    portrait: prefs.paneModePortrait,
+    landscape: prefs.paneModeLandscape,
+  });
   const session = useMemo<Session>(
     () => ({
       home: init.subreddit,
@@ -173,6 +186,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
   const [sort, setSort] = useState<FeedSort>(init.defaultSort);
   const [timeframe, setTimeframe] = useState<Timeframe>(entryRoute.timeframe);
   const [stack, setStack] = useState<Entry[]>(initialStack);
+  /** The post in the right-hand pane while the layout is dual pane. */
+  const [detail, setDetail] = useState<Entry | null>(null);
   const [sheet, setSheet] = useState<{
     key: number;
     render: SheetRenderer;
@@ -185,9 +200,13 @@ const Reader = ({ init }: { init: InitResponse }) => {
   } | null>(null);
 
   const stackRef = useRef(stack);
+  const detailRef = useRef(detail);
+  const dualRef = useRef(panes.dual);
   const overlayRef = useRef({ sheet, viewer, drawer });
   useLayoutEffect(() => {
     stackRef.current = stack;
+    detailRef.current = detail;
+    dualRef.current = panes.dual;
     overlayRef.current = { sheet, viewer, drawer };
   });
   const pushedStates = useRef(0);
@@ -241,6 +260,15 @@ const Reader = ({ init }: { init: InitResponse }) => {
   }, []);
 
   const popScreen = useCallback(() => {
+    // With no full-screen page open, back closes the right-hand pane.
+    if (
+      detailRef.current &&
+      !stackRef.current.some((entry) => entry.phase !== "exiting")
+    ) {
+      detailRef.current = null;
+      setDetail(null);
+      return;
+    }
     setStack((current) => {
       const index = current.map((entry) => entry.phase).lastIndexOf("idle");
       const alt =
@@ -269,7 +297,10 @@ const Reader = ({ init }: { init: InitResponse }) => {
       setDrawer(false);
       return true;
     }
-    if (stackRef.current.some((entry) => entry.phase !== "exiting")) {
+    if (
+      detailRef.current ||
+      stackRef.current.some((entry) => entry.phase !== "exiting")
+    ) {
       popScreen();
       return true;
     }
@@ -365,15 +396,63 @@ const Reader = ({ init }: { init: InitResponse }) => {
 
   const openPost = useCallback(
     (post: PostSummary | string, focus?: string) => {
-      if (typeof post === "string") {
-        const id = post.startsWith("t3_") ? post : `t3_${post}`;
-        push({ kind: "post", id, focus });
-      } else {
-        push({ kind: "post", id: post.id, seed: post, focus });
+      const route: Route =
+        typeof post === "string"
+          ? {
+              kind: "post",
+              id: post.startsWith("t3_") ? post : `t3_${post}`,
+              focus,
+            }
+          : { kind: "post", id: post.id, seed: post, focus };
+      const fullScreen = stackRef.current.some(
+        (entry) => entry.phase !== "exiting",
+      );
+      if (!dualRef.current || fullScreen) {
+        push(route);
+        return;
       }
+      // Dual pane: the post replaces whatever the right-hand pane shows. Only
+      // the first one adds a history entry, so back closes the pane.
+      const shown = detailRef.current;
+      if (shown?.route.kind === "post" && shown.route.id === route.id && !focus)
+        return;
+      if (!shown) pushState();
+      const entry: Entry = { key: nextKey(), route, phase: "idle" };
+      detailRef.current = entry;
+      setDetail(entry);
     },
     [push],
   );
+
+  // Moving between single and dual pane keeps the open post: it becomes the
+  // right-hand pane, or the bottom full-screen page, under the same key.
+  useLayoutEffect(() => {
+    if (panes.dual) {
+      const first = stackRef.current[0];
+      if (
+        detailRef.current ||
+        first?.route.kind !== "post" ||
+        first.phase === "exiting"
+      )
+        return;
+      const entry: Entry = { ...first, phase: "idle" };
+      detailRef.current = entry;
+      setDetail(entry);
+      setStack((entries) => entries.filter((other) => other.key !== first.key));
+    } else {
+      const shown = detailRef.current;
+      if (!shown) return;
+      detailRef.current = null;
+      setDetail(null);
+      setStack((entries) => [shown, ...entries]);
+    }
+  }, [panes.dual]);
+
+  useEffect(() => {
+    setSelectedPost(
+      panes.dual && detail?.route.kind === "post" ? detail.route.id : null,
+    );
+  }, [panes.dual, detail]);
 
   const openLink = useCallback(
     (href: string) => {
@@ -427,17 +506,28 @@ const Reader = ({ init }: { init: InitResponse }) => {
 
   // Give a deep-linked first screen a history entry so back returns to the feed.
   useEffect(() => {
-    if (stackRef.current.length) pushState();
+    if (stackRef.current.length || detailRef.current) pushState();
   }, []);
 
   const live = stack.filter((entry) => entry.phase !== "exiting");
   const feedCovered = live.length > 0;
+  // The right-hand pane renders in the same keyed list as the full-screen
+  // pages, so moving a post between them keeps it mounted.
+  const frames = detail ? [detail, ...stack] : stack;
 
   return (
     <NavContext.Provider value={nav}>
-      <div className="app">
+      <div
+        className={[
+          "app",
+          panes.dual ? "is-dual" : "",
+          panes.dual && panes.wide ? "is-wide" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <div
-          className={`screen${feedCovered ? " is-covered" : ""}`}
+          className={`screen is-feed${feedCovered ? " is-covered" : ""}`}
           aria-hidden={feedCovered || undefined}
         >
           <FeedScreen
@@ -450,8 +540,17 @@ const Reader = ({ init }: { init: InitResponse }) => {
             }}
           />
         </div>
-        {stack.map((entry, index) => {
-          const covered = stack
+        {panes.dual && !detail ? (
+          <div
+            className={`pane-empty${feedCovered ? " is-covered" : ""}`}
+            aria-hidden={feedCovered || undefined}
+          >
+            <Icon name="comment" size={40} />
+            <span>Select a post to read it here</span>
+          </div>
+        ) : null}
+        {frames.map((entry, index) => {
+          const covered = frames
             .slice(index + 1)
             .some((other) => other.phase !== "exiting");
           const isTop = !covered && entry.phase !== "exiting";
@@ -459,6 +558,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
             <ScreenFrame
               key={entry.key}
               entry={entry}
+              detail={entry === detail}
               covered={covered}
               top={isTop}
               onEntered={onEntered}

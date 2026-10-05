@@ -3,6 +3,7 @@ import type { Prefs, PostSummary } from '../../shared/api';
 import { useNav } from '../app/nav';
 import { compact } from '../lib/format';
 import { useLongPress } from '../lib/gestures';
+import { useIsSelectedPost } from '../lib/panes';
 import { readPosts } from '../lib/storage';
 import { Icon } from './Icon';
 import {
@@ -79,6 +80,8 @@ export const PostCard = memo(
   ({ post, layout, showThumbnails, showSub, onHide }: PostCardProps) => {
     const nav = useNav();
     const read = useIsRead(post.id);
+    const selected = useIsSelectedPost(post.id);
+    const stateClass = `${read ? ' is-read' : ''}${selected ? ' is-selected' : ''}`;
     const more = () => openPostActions(nav, post, onHide);
     const press = useLongPress(more);
     const open = () => {
@@ -116,7 +119,7 @@ export const PostCard = memo(
       return (
         <SwipeActions actions={swipe}>
         <article
-          className={`post${read ? ' is-read' : ''}`}
+          className={`post${stateClass}`}
           data-anim-key={post.id}
         >
           {hit}
@@ -145,7 +148,7 @@ export const PostCard = memo(
     return (
       <SwipeActions actions={swipe}>
       <article
-        className={`post${read ? ' is-read' : ''}`}
+        className={`post${stateClass}`}
         data-anim-key={post.id}
       >
         {hit}

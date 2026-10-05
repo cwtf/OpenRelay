@@ -271,6 +271,15 @@ try {
     .waitFor();
   await app.getByText("A nested reply", { exact: true }).waitFor();
   await app.locator(".screen.is-entering").waitFor({ state: "detached" });
+  // A 1280px window is Relay's dual pane: the post opens beside the feed
+  // (42:58 from 900px) and its card is marked as the one being read.
+  await app.locator(".app.is-dual.is-wide .screen.is-detail .post-head").waitFor();
+  assert.equal(await app.locator(".screen.is-feed.is-covered").count(), 0);
+  assert.equal(await app.locator(".post.is-selected").count(), 1);
+  await app
+    .locator(".screen.is-detail")
+    .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  await page.screenshot({ path: resolve(out, "dual-pane.png") });
   // Collapsing hides only the replies; the comment itself stays, like Relay.
   await app.getByText("A nested reply", { exact: true }).click(); // Leaf: no-op.
   await app.getByText("A nested reply", { exact: true }).waitFor();
@@ -400,10 +409,24 @@ try {
   await app.locator(".swipe.is-open .swipe-btn", { hasText: "Parent" }).click();
   await app.locator('.comment.is-focus[data-cid="t1_c1"]').waitFor();
 
-  await app.getByRole("button", { name: "Back", exact: true }).click();
-  await app
-    .locator(".screen.is-entering,.screen.is-exiting")
-    .waitFor({ state: "detached" });
+  await app.getByRole("button", { name: "Close post", exact: true }).click();
+  await app.locator(".pane-empty").waitFor();
+  assert.equal(await app.locator(".post.is-selected").count(), 0);
+
+  // A phone-sized window is single pane: the post opens full screen.
+  await page.setViewportSize({ width: 420, height: 860 });
+  await app.locator(".app:not(.is-dual)").waitFor();
+  await app.getByRole("button", { name: post.title, exact: true }).click();
+  await app.locator(".screen.screen-shadow .post-head").waitFor();
+  await app.locator(".screen.is-entering").waitFor({ state: "detached" });
+  assert.equal(await app.locator(".screen.is-feed.is-covered").count(), 1);
+  await page.screenshot({ path: resolve(out, "single-pane.png") });
+  // Widening the window moves the open post into the right-hand pane.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await app.locator(".screen.is-detail .post-head").waitFor();
+  assert.equal(await app.locator(".screen.screen-shadow").count(), 0);
+  await app.getByRole("button", { name: "Close post", exact: true }).click();
+  await app.locator(".pane-empty").waitFor();
   await page.screenshot({ path: resolve(out, "feed.png") });
 
   // Posts: the drag reveals Relay's post actions instead of opening the post.

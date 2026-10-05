@@ -261,6 +261,9 @@ export type Prefs = {
   reduceMotion: boolean;
   autoplayGifs: boolean;
   showThumbnails: boolean;
+  /** Relay's tablet setting: single or dual pane, per orientation. */
+  paneModePortrait: "auto" | "single" | "dual";
+  paneModeLandscape: "auto" | "single" | "dual";
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -274,6 +277,8 @@ export const DEFAULT_PREFS: Prefs = {
   reduceMotion: false,
   autoplayGifs: true,
   showThumbnails: true,
+  paneModePortrait: "auto",
+  paneModeLandscape: "auto",
 };
 
 export type InitResponse = {

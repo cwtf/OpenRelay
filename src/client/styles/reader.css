@@ -17,6 +17,8 @@
   flex-direction: column;
   background: var(--bg);
   touch-action: pan-y;
+  /* Name truncation sizes from the screen (or pane) width, in cqw. */
+  container-type: inline-size;
 }
 
 /* The covered screen "holds": no parallax, no dim, just stays put. */
@@ -47,6 +49,74 @@
 
 .screen-shadow {
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.32);
+}
+
+/* ------------------------------------------------------------------ dual pane */
+
+/* Relay's tablet layout (navigation_dual_pane): the feed on the left and the
+   opened post on the right, 50:50 with a 2px divider, or 42:58 with a 4px
+   divider from 900px wide. Other pages still open full screen over both. */
+.app.is-dual {
+  --list-w: 50%;
+  --pane-gap: 2px;
+  background: var(--surface-sunk);
+}
+
+.app.is-dual.is-wide {
+  --list-w: 42%;
+  --pane-gap: 4px;
+}
+
+.app.is-dual > .screen.is-feed {
+  right: auto;
+  width: var(--list-w);
+}
+
+.app.is-dual > .screen.is-detail,
+.app.is-dual > .pane-empty {
+  left: calc(var(--list-w) + var(--pane-gap));
+}
+
+.screen.is-detail {
+  animation: fade-in var(--dur-item-fade) var(--ease-in-out) both;
+}
+
+:root[data-motion='reduced'] .screen.is-detail {
+  animation: none;
+}
+
+.pane-empty {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text-3);
+  font-size: calc(14px * var(--ts));
+  text-align: center;
+}
+
+.pane-empty .icon {
+  opacity: 0.6;
+}
+
+/* The post shown in the right-hand pane. */
+.app.is-dual .post.is-selected {
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* Relay pins the subreddit sheet to the feed side in dual pane (420dp). */
+.app.is-dual .sheet.is-tall {
+  right: auto;
+  width: min(420px, var(--list-w));
+  margin: 0;
 }
 
 .scroller {
@@ -330,7 +400,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 50vw;
+  max-width: 50cqw;
 }
 
 .post-meta .author.is-mod {
@@ -351,7 +421,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 40vw;
+  max-width: 40cqw;
 }
 
 .post-title {
@@ -1164,7 +1234,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 42vw;
+  max-width: 42cqw;
 }
 
 .comment-head .author.is-op {
@@ -1199,7 +1269,7 @@
 }
 
 .comment-head .chip {
-  max-width: 34vw;
+  max-width: 34cqw;
   min-height: 18px;
   line-height: 18px;
   font-size: calc(10.5px * var(--ts));

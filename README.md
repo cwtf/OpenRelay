@@ -32,6 +32,7 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
   - **Moderator** (moderators only): Modqueue, Reports, Spam, Edited and Unmoderated, filtered to posts or comments, for all moderated communities or one; reports shown on each item, with Approve, Remove, Spam and Ignore.
   - **New Post**: text or link post with subreddit rules and options (inbox replies, NSFW, spoiler, repost). **Friends**: your friends list with remove. **New Message**: compose a private message.
 - Cards, Compact and List layouts, applied to feeds, profiles, the inbox and the opened post (as in Relay, Compact and List show the post as its feed row with a tappable thumbnail instead of full-size media); Auto, Light, Dark and Black themes.
+- Relay's **tablet layout**, following the window size: on wide windows the feed stays on the left and the opened post shows beside it (50:50, or 42:58 from 900px wide), with the card being read highlighted and the subreddit sheet pinned to the feed side. As in Relay, **Settings → Single or dual pane** has separate Portrait and Landscape choices: Auto (dual from 840px wide, or in landscape from 600px wide when the shorter side is at least 480px), Single Pane or Dual Pane (from 600px). Profiles, the inbox, search and other pages still open full screen, and resizing moves an open post between the pane and a full-screen page.
 - One-click restoration of Reddit's original page. Unsupported pages (settings, login, profiles, messages, moderation) stay native. Recognized challenge screens stay native too.
 
 **Vote arrows work in place, without leaving the reader.** When Reddit's own vote control for that post or comment is on the page, the reader forwards one click to it, using the page’s signed-in session. Upvote, downvote, undo, and switching votes are supported when the native control is loaded and exposes its state. Current and old Reddit controls are supported, including open shadow roots. Buttons pause while a click is pending; the reader mirrors Reddit’s displayed selection/count and later rollbacks. This reflects Reddit’s UI, not an independent server acknowledgment.
@@ -68,7 +69,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 47 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 51 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

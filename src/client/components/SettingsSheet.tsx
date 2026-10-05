@@ -64,6 +64,37 @@ const Toggle = ({
   </button>
 );
 
+const selectStyle = {
+  background: "var(--surface-2)",
+  border: "1px solid var(--outline)",
+  borderRadius: 10,
+  padding: "8px 10px",
+} as const;
+
+type PaneMode = Prefs["paneModePortrait"];
+
+/** Relay's tabletModes list: Auto, Single Pane, Dual Pane. */
+const PaneSelect = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: PaneMode;
+  onChange: (value: PaneMode) => void;
+}) => (
+  <select
+    aria-label={label}
+    value={value}
+    onChange={(event) => onChange(event.target.value as PaneMode)}
+    style={selectStyle}
+  >
+    <option value="auto">Auto</option>
+    <option value="single">Single Pane</option>
+    <option value="dual">Dual Pane</option>
+  </select>
+);
+
 export const SettingsSheet = ({
   onClosed,
   synced,
@@ -127,6 +158,30 @@ export const SettingsSheet = ({
             value={prefs.showThumbnails}
             onChange={set("showThumbnails")}
           />
+
+          <div className="sheet-section">Single or dual pane</div>
+          <label className="setting">
+            <span className="label">
+              Portrait
+              <small>Auto shows posts beside the feed from 840px wide</small>
+            </span>
+            <PaneSelect
+              label="Portrait"
+              value={prefs.paneModePortrait}
+              onChange={set("paneModePortrait")}
+            />
+          </label>
+          <label className="setting">
+            <span className="label">
+              Landscape
+              <small>Auto shows posts beside the feed from 600px wide</small>
+            </span>
+            <PaneSelect
+              label="Landscape"
+              value={prefs.paneModeLandscape}
+              onChange={set("paneModeLandscape")}
+            />
+          </label>
 
           <div className="sheet-section">Text size</div>
           <div className="range">
@@ -193,12 +248,7 @@ export const SettingsSheet = ({
                   commentSort: event.target.value as Prefs["commentSort"],
                 })
               }
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--outline)",
-                borderRadius: 10,
-                padding: "8px 10px",
-              }}
+              style={selectStyle}
             >
               {COMMENT_SORTS.map((option) => (
                 <option key={option} value={option}>

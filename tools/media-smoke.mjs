@@ -105,7 +105,8 @@ try {
     return screen;
   };
   const back = async (screen) => {
-    await screen.getByRole("button", { name: "Back", exact: true }).click();
+    // Full-screen "Back", or "Close post" in the dual-pane layout.
+    await screen.getByRole("button", { name: /^(Back|Close post)$/ }).click();
     await app.locator(".screen.is-exiting").waitFor({ state: "detached" });
   };
   // The feed's app bar hides on scroll (quick return), so press it directly.

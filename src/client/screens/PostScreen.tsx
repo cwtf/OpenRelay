@@ -13,7 +13,7 @@ import {
   type PostDetail,
   type PostSummary,
 } from "../../shared/api";
-import { useNav } from "../app/nav";
+import { useNav, usePane } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { CommentRow, MoreRow, type CommentSwipe } from "../components/CommentRow";
 import { ModActionsSheet } from "../components/Relay";
@@ -131,6 +131,8 @@ const inTree = (nodes: CommentNode[], id: string): boolean =>
 
 export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const nav = useNav();
+  /** In the dual-pane layout, the post pane closes instead of going back. */
+  const inPane = usePane() === "detail";
   const { prefs } = usePrefs();
   /** Compact and List show the feed's thumbnail row instead of full media. */
   const asRow = (p: PostSummary) =>
@@ -652,10 +654,10 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
           type="button"
           className="icon-btn"
           data-ripple
-          aria-label="Back"
+          aria-label={inPane ? "Close post" : "Back"}
           onClick={nav.back}
         >
-          <Icon name="back" />
+          <Icon name={inPane ? "close" : "back"} />
         </button>
         {search.open ? (
           <>
