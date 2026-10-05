@@ -14,12 +14,25 @@ import { Icon } from './Icon';
 type Transform = { scale: number; x: number; y: number };
 const IDENTITY: Transform = { scale: 1, x: 0, y: 0 };
 const MAX_SCALE = 5;
+/** Movement before a press becomes a drag. */
+const DRAG_SLOP = 8;
+/** Vertical drag that closes the viewer on release. */
+const DISMISS_DISTANCE = 110;
+/** Height of Chrome's native video control bar, left to the player. */
+const VIDEO_CONTROLS = 64;
 
 const apply = (el: HTMLElement | null, t: Transform, animate = false) => {
   if (!el) return;
   el.style.transition = animate ? 'transform 240ms var(--ease-emph)' : 'none';
   el.style.transform = `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.scale})`;
 };
+
+/** The media follows a dismiss drag, shrinking slightly as it goes. */
+const dismissTransform = (dy: number): Transform => ({
+  scale: 1 - Math.min(0.25, Math.abs(dy) / 1600),
+  x: 0,
+  y: dy,
+});
 
 type PageProps = {
   item: ViewerItem;
@@ -182,7 +195,7 @@ const ImagePage = ({
     }
     const dx = event.clientX - g.startX;
     const dy = event.clientY - g.startY;
-    if (!g.moved && Math.hypot(dx, dy) > 8) {
+    if (!g.moved && Math.hypot(dx, dy) > DRAG_SLOP) {
       g.moved = true;
       if (t.current.scale > 1.01) g.kind = 'pan';
       else if (Math.abs(dy) > Math.abs(dx)) g.kind = 'dismiss';
@@ -191,11 +204,7 @@ const ImagePage = ({
       t.current = { ...t.current, x: g.originX + dx, y: g.originY + dy };
       apply(stage.current, t.current);
     } else if (g.kind === 'dismiss') {
-      apply(stage.current, {
-        scale: 1 - Math.min(0.25, Math.abs(dy) / 1600),
-        x: 0,
-        y: dy,
-      });
+      apply(stage.current, dismissTransform(dy));
       onDismissDrag(dy, false);
     }
   };
@@ -218,7 +227,7 @@ const ImagePage = ({
     if (g.kind === 'dismiss') {
       g.kind = 'none';
       const dy = event.clientY - g.startY;
-      if (Math.abs(dy) > 110) {
+      if (Math.abs(dy) > DISMISS_DISTANCE) {
         onDismissDrag(dy, true);
       } else {
         apply(stage.current, IDENTITY, true);
@@ -318,15 +327,24 @@ const ImagePage = ({
 const VideoPage = ({
   item,
   active,
+  onDismissDrag,
   stageRef,
   fallbackUrl,
 }: {
   item: Extract<ViewerItem, { kind: 'video' }>;
   active: boolean;
+  onDismissDrag: (dy: number, done: boolean) => void;
   stageRef?: (el: HTMLDivElement | null) => void;
   fallbackUrl: string | undefined;
 }) => {
   const ref = useRef<HTMLVideoElement>(null);
+  const stage = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{
+    id: number;
+    startX: number;
+    startY: number;
+    dismissing: boolean;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
   // Width / height, from Reddit's metadata until the video reports its own.
   const [ratio, setRatio] = useState(
@@ -355,8 +373,77 @@ const VideoPage = ({
     else video.pause();
   }, [active]);
 
+  // Only the vertical swipe to dismiss: taps and clicks stay with the player
+  // (play/pause, showing its controls), so nothing is captured until a drag.
+  const onPointerDown = (event: ReactPointerEvent) => {
+    if (drag.current || !event.isPrimary) return;
+    const video = ref.current;
+    if (video?.controls) {
+      const rect = video.getBoundingClientRect();
+      const onControls =
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY <= rect.bottom &&
+        event.clientY >= rect.bottom - VIDEO_CONTROLS;
+      // Seeking and the volume slider are drags too; leave them alone.
+      if (onControls) return;
+    }
+    drag.current = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      dismissing: false,
+    };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent) => {
+    const d = drag.current;
+    if (!d || d.id !== event.pointerId) return;
+    const dx = event.clientX - d.startX;
+    const dy = event.clientY - d.startY;
+    if (!d.dismissing) {
+      if (Math.hypot(dx, dy) <= DRAG_SLOP) return;
+      if (Math.abs(dy) <= Math.abs(dx)) {
+        // Horizontal: the track pages between items.
+        drag.current = null;
+        return;
+      }
+      d.dismissing = true;
+      // From here the release lands on the stage, not the video, so it doesn't
+      // also toggle playback.
+      stage.current?.setPointerCapture(event.pointerId);
+    }
+    apply(stage.current, dismissTransform(dy));
+    onDismissDrag(dy, false);
+  };
+
+  const endDrag = (event: ReactPointerEvent, cancelled: boolean) => {
+    const d = drag.current;
+    if (!d || d.id !== event.pointerId) return;
+    drag.current = null;
+    if (!d.dismissing) return;
+    const dy = event.clientY - d.startY;
+    if (!cancelled && Math.abs(dy) > DISMISS_DISTANCE) {
+      onDismissDrag(dy, true);
+    } else {
+      apply(stage.current, IDENTITY, true);
+      onDismissDrag(0, false);
+    }
+  };
+
   return (
-    <div className="viewer-stage" ref={stageRef}>
+    <div
+      className="viewer-stage"
+      ref={(el) => {
+        stage.current = el;
+        stageRef?.(el);
+      }}
+      style={{ touchAction: 'pan-x' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={(event) => endDrag(event, false)}
+      onPointerCancel={(event) => endDrag(event, true)}
+    >
       {src && !failed ? (
         <video
           ref={ref}
@@ -536,6 +623,7 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
               <VideoPage
                 item={item}
                 active={i === index}
+                onDismissDrag={onDismissDrag}
                 fallbackUrl={source}
                 {...(i === spec.index
                   ? {

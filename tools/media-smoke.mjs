@@ -40,17 +40,31 @@ const post = (name) => {
     },
   };
 };
+// A hosted video; its file 404s, which still opens a video page in the viewer.
+const videoPost = {
+  kind: "t3",
+  data: {
+    id: "clip", name: "t3_clip", title: "A video", author: "u", subreddit: "test",
+    permalink: "/r/test/comments/clip/x/", url: "https://www.reddit.com/vid/clip",
+    post_hint: "hosted:video", is_self: false, domain: "v.redd.it", score: 1,
+    num_comments: 0, created_utc: 1700000000,
+    secure_media: {
+      reddit_video: { fallback_url: "https://www.reddit.com/vid/clip.mp4", width: 640, height: 360 },
+    },
+  },
+};
 await context.route(/^https:\/\/www\.reddit\.com\//, (route) => {
   const url = new URL(route.request().url());
   const shape = url.pathname.match(/^\/img\/(\w+)\.svg$/)?.[1];
   if (shape && shapes[shape])
     return route.fulfill({ contentType: "image/svg+xml", body: svg(shapes[shape]) });
+  if (url.pathname.startsWith("/vid/")) return route.fulfill({ status: 404, body: "" });
   if (url.pathname.endsWith(".json"))
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(
         url.pathname === "/r/test/hot.json"
-          ? { data: { after: null, children: Object.keys(shapes).map(post) } }
+          ? { data: { after: null, children: [...Object.keys(shapes).map(post), videoPost] } }
           : url.pathname.startsWith("/comments/")
             ? [
                 { data: { children: [post(url.pathname.split("/")[2].replace(".json", ""))] } },
@@ -92,6 +106,29 @@ try {
     assert.ok(Math.abs(box.width / box.height - w / h) < 0.02, `${name} keeps its aspect ratio`);
     await page.screenshot({ path: resolve(out, `viewer-${name}.png`) });
     await app.locator("body").press("Escape");
+    await app.locator(".viewer").waitFor({ state: "detached" });
+  }
+  // A vertical swipe closes images and videos alike; a short one springs back.
+  const swipe = async (dy) => {
+    const x = viewport.width / 2;
+    const y = viewport.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + dy, { steps: 10 });
+    await page.mouse.up();
+  };
+  for (const [title, opener] of [
+    ["A tiny image", /Open (image|media)/],
+    ["A video", /^(Play|Open) video$/],
+  ]) {
+    const card = app.locator(".post", { hasText: title });
+    await card.getByRole("button", { name: opener }).first().click();
+    await app.locator(".viewer-stage").first().waitFor();
+    await page.waitForTimeout(450); // Opening animation.
+    await swipe(60);
+    await page.waitForTimeout(400);
+    assert.equal(await app.locator(".viewer").count(), 1, `${title}: short swipe springs back`);
+    await swipe(-220);
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
   // The opened post follows the Layout setting, like the feed.
@@ -148,7 +185,7 @@ try {
 
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; opened posts follow the Layout (Cards media, Compact/List thumbnail row).",
+    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row).",
   );
 } finally {
   await context.close();
