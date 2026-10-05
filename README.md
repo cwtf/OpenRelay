@@ -1,6 +1,6 @@
 # OpenRelay for Reddit — Chrome extension
 
-A project inspired by **Relay for Reddit**, the Android app by DBrandy. It renders Reddit pages with the **actual interface from the neighboring OpenRelay project**: its React screens, design tokens, cards, compact/list layouts, themes, comment rails, sheets, drawer, Markdown renderer, gestures, and media viewer.
+A project inspired by **Relay for Reddit**, the Android app by DBrandy. It replaces Reddit's interface with a Relay-style reader: React screens, design tokens, cards, compact/list layouts, themes, comment rails, sheets, drawer, Markdown renderer, gestures, and media viewer.
 
 ## Install
 
@@ -29,9 +29,9 @@ To update, repack **dist** with the same **dist.pem** (Chrome's **Pack extension
 
 ## Data and permissions
 
-A Manifest V3 content script runs only on www.reddit.com, reddit.com and old.reddit.com. It embeds the bundled reader in an extension-origin iframe, keeping OpenRelay's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
+A Manifest V3 content script runs only on www.reddit.com, reddit.com and old.reddit.com. It embeds the bundled reader in an extension-origin iframe, keeping the reader's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
 
-No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. Requests use the Reddit tab's normal same-origin session; the subscription list, profiles, inbox, moderation queues, friends and community rules come from Reddit's read-only JSON listings and need you to be signed in to Reddit. The inbox is read with `mark=false`, so opening it does not mark messages read. Nothing is sent to an OpenRelay server. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
+No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. Requests use the Reddit tab's normal same-origin session; the subscription list, profiles, inbox, moderation queues, friends and community rules come from Reddit's read-only JSON listings and need you to be signed in to Reddit. The inbox is read with `mark=false`, so opening it does not mark messages read. Nothing is sent to any server other than Reddit. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
 
 Chrome's content-script model is documented at:
 [Content scripts — Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts).
@@ -42,7 +42,7 @@ Reddit can block or rate-limit its JSON endpoints. Reading the currently loaded 
 
 Reddit-hosted MP4 fallback streams may have no audio. Account/profile/moderation screens remain native. The address bar keeps the original Reddit URL while navigating inside the reader; use Share/Copy link for the selected post. Original Reddit returns to the original page.
 
-The inherited reader has its own in-frame back stack; complete browser forward-history restoration across reader screens is not implemented.
+The reader has its own in-frame back stack; complete browser forward-history restoration across reader screens is not implemented.
 
 ## Development
 
@@ -73,11 +73,9 @@ Validated: injection, loaded-page feeds, settings persistence, the subscriptions
 
 ## Source layout
 
-- `src/client/` — OpenRelay's UI, copied from `../OpenRelay` and adapted locally.
-- `src/shared/api.ts` — OpenRelay's presentation models.
+- `src/client/` — the reader UI.
+- `src/shared/api.ts` — the reader's presentation models.
 - `src/extension/` — Reddit normalization, DOM extraction, message bridge, content script and toolbar worker.
 - `public/manifest.json` — extension manifest.
-- `tools/build.mjs` — independent extension build; no dependency on the sibling project at build/runtime.
+- `tools/build.mjs` — extension build.
 - `tools/browser-smoke.mjs` and `tools/vote-smoke.mjs` — browser integration checks.
-
-No files in the neighboring OpenRelay project are modified.
