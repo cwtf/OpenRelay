@@ -852,7 +852,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
             ? `Signed in as u/${account.name}`
             : "Reading from your Reddit tab"}
           <br />
-          OpenRelay · an independent reader built on Devvit
+          OpenRelay · an independent reader for Reddit
         </div>
       </nav>
     </div>

@@ -72,7 +72,7 @@ type Entry = {
 let keySeed = 0;
 const nextKey = () => `s${++keySeed}`;
 
-/** Deep link from the inline splash ("open this post"), consumed once. */
+/** The page URL's post or search, opened over the feed once at start. */
 const initialStack = (): Entry[] => {
   if (entryRoute.postId)
     return [
@@ -166,7 +166,7 @@ const ScreenFrame = ({
 // ------------------------------------------------------------------ reader
 
 const Reader = ({ init }: { init: InitResponse }) => {
-  const { prefs, hydrate } = usePrefs();
+  const { prefs } = usePrefs();
   const windowSize = useWindowSize();
   const panes = paneLayout(windowSize.width, windowSize.height, {
     portrait: prefs.paneModePortrait,
@@ -212,10 +212,6 @@ const Reader = ({ init }: { init: InitResponse }) => {
   const pushedStates = useRef(0);
   const pendingBack = useRef<number | null>(null);
   const ignorePops = useRef(0);
-
-  useEffect(() => {
-    if (init.prefs) hydrate(init.prefs);
-  }, [init.prefs, hydrate]);
 
   useEffect(() => installRipple(), []);
 
@@ -489,7 +485,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openDrawer: () => setDrawer(true),
       openSettings: () =>
         openSheet((onClosed) => (
-          <SettingsSheet onClosed={onClosed} synced={session.loggedIn} />
+          <SettingsSheet onClosed={onClosed} />
         )),
     }),
     [
@@ -672,7 +668,7 @@ export const Root = () => {
   useEffect(boot, [boot]);
 
   return (
-    <PrefsProvider canSync={Boolean(init?.loggedIn)}>
+    <PrefsProvider>
       {init ? (
         <Reader init={init} />
       ) : (

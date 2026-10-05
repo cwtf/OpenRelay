@@ -95,13 +95,7 @@ const PaneSelect = ({
   </select>
 );
 
-export const SettingsSheet = ({
-  onClosed,
-  synced,
-}: {
-  onClosed: () => void;
-  synced: boolean;
-}) => {
+export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
   const { prefs, update } = usePrefs();
   const set =
     <K extends keyof Prefs>(key: K) =>
@@ -291,9 +285,7 @@ export const SettingsSheet = ({
               color: "var(--text-3)",
             }}
           >
-            {synced
-              ? "Settings sync to your Reddit account across devices."
-              : "Changes are saved automatically in this browser."}
+            Changes are saved automatically in this browser.
           </p>
         </>
       )}

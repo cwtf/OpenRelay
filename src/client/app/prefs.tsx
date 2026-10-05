@@ -4,19 +4,15 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { DEFAULT_PREFS, type Prefs } from '../../shared/api';
-import { savePrefsRemote } from '../lib/api';
 import { readJson, watchKey, writeJson } from '../lib/storage';
 
 type PrefsContextValue = {
   prefs: Prefs;
   update: (patch: Partial<Prefs>) => void;
-  /** Adopt prefs loaded from the server without echoing them back. */
-  hydrate: (prefs: Prefs) => void;
 };
 
 const PrefsContext = createContext<PrefsContextValue | null>(null);
@@ -45,15 +41,8 @@ export const loadCachedPrefs = (): Prefs => ({
   ...readJson<Partial<Prefs>>('prefs', {}),
 });
 
-export const PrefsProvider = ({
-  children,
-  canSync,
-}: {
-  children: ReactNode;
-  canSync: boolean;
-}) => {
+export const PrefsProvider = ({ children }: { children: ReactNode }) => {
   const [prefs, setPrefs] = useState<Prefs>(loadCachedPrefs);
-  const syncTimer = useRef<number | undefined>(undefined);
 
   // Follow changes saved from other Reddit tabs.
   useEffect(
@@ -78,34 +67,15 @@ export const PrefsProvider = ({
     return () => media.removeEventListener('change', onChange);
   }, [prefs]);
 
-  const update = useCallback(
-    (patch: Partial<Prefs>) => {
-      setPrefs((current) => {
-        const next = { ...current, ...patch };
-        writeJson('prefs', next);
-        if (canSync) {
-          window.clearTimeout(syncTimer.current);
-          syncTimer.current = window.setTimeout(() => {
-            savePrefsRemote(next).catch((error: unknown) =>
-              console.warn('prefs sync failed', error)
-            );
-          }, 900);
-        }
-        return next;
-      });
-    },
-    [canSync]
-  );
-
-  const hydrate = useCallback((remote: Prefs) => {
-    writeJson('prefs', remote);
-    setPrefs(remote);
+  const update = useCallback((patch: Partial<Prefs>) => {
+    setPrefs((current) => {
+      const next = { ...current, ...patch };
+      writeJson('prefs', next);
+      return next;
+    });
   }, []);
 
-  const value = useMemo(
-    () => ({ prefs, update, hydrate }),
-    [prefs, update, hydrate]
-  );
+  const value = useMemo(() => ({ prefs, update }), [prefs, update]);
   return (
     <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>
   );

@@ -1,4 +1,4 @@
-// Wire types shared by the Devvit server and the web client.
+// Types shared by the extension's page script and the reader.
 
 export type FeedSort = "hot" | "new" | "top" | "rising" | "controversial";
 export type Timeframe = "hour" | "day" | "week" | "month" | "year" | "all";
@@ -287,7 +287,6 @@ export type InitResponse = {
   loggedIn: boolean;
   featured: string[];
   defaultSort: FeedSort;
-  prefs: Prefs | null;
 };
 
 export type FeedResponse = {

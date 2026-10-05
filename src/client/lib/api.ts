@@ -14,7 +14,6 @@ import type {
   FeedSort,
   InitResponse,
   PostResponse,
-  Prefs,
   RepliesResponse,
   SearchSort,
   Timeframe,
@@ -61,7 +60,6 @@ export const fetchInit = async (): Promise<InitResponse> => ({
   loggedIn: false,
   featured: ["popular", "all"],
   defaultSort: entryRoute.sort,
-  prefs: null,
 });
 const snapshot = () => bridge<Snapshot>("snapshot");
 const listing = (data: any): FeedResponse => {
@@ -438,4 +436,3 @@ export const runAction = (
 ): Promise<{ id?: string; url?: string; comment?: CommentNode }> =>
   bridge("action", undefined, { op, args });
 
-export const savePrefsRemote = async (prefs: Prefs) => ({ prefs });
