@@ -41,7 +41,7 @@ Posts and comments the reader fetched itself (other pages, more comments) have n
 
 If you are signed out, the control is disabled (archived/locked), or Reddit does not confirm a clicked vote, the reader explains why and shows a **Vote on Reddit** link as a fallback. The extension does not request OAuth access, use Devvit's app account, or send any token outside the Reddit tab.
 
-**Writes** happen only when you act, through Reddit's own `/api/*` endpoints with your session: voting, replying to posts, comments and messages, subscribing and unsubscribing, messaging a community's moderators, and the account screens' actions (mark read/unread, read all, reply to inbox items, delete and block, compose, approve/remove/spam/ignore reports, friend/unfriend, submit). The page script accepts only this fixed list, validates every parameter (IDs, usernames, community names, lengths, http(s) URLs) before contacting Reddit, and adds the modhash itself; the reader never receives it. Deleting, blocking and removing friends ask for confirmation first. Settings stay local to the browser; Reddit account preference syncing is not included.
+**Writes** happen only when you act, through Reddit's own `/api/*` endpoints with your session: voting, replying to posts, comments and messages, subscribing and unsubscribing, messaging a community's moderators, and the account screens' actions (mark read/unread, read all, reply to inbox items, delete and block, compose, approve/remove/spam/ignore reports, friend/unfriend, submit). The page script accepts only this fixed list, validates every parameter (IDs, usernames, community names, lengths, http(s) URLs) before contacting Reddit, and adds the modhash itself; the reader never receives it. When Reddit answers a reply with only part of the new comment, the page script reads the rest from `/api/info.json` so the reply shows its author, text and time straight away. Deleting, blocking and removing friends ask for confirmation first. Settings stay local to the browser; Reddit account preference syncing is not included.
 
 ## Data and permissions
 
@@ -69,7 +69,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 51 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 53 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

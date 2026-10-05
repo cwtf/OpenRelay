@@ -10,7 +10,7 @@ import { normalizeComments, safeUrl } from "./reddit.ts";
  * ask for one of the actions below, each with validated parameters.
  */
 type Fetch = typeof fetch;
-type Session = { uh: string; id: string };
+type Session = { uh: string; id: string; name: string };
 type Params = Record<string, string>;
 
 let session: Promise<Session> | null = null;
@@ -27,7 +27,12 @@ const readSession = async (fetchFn: Fetch, origin: string): Promise<Session> => 
   if (typeof uh !== "string" || !/^[\w-]{8,}$/.test(uh))
     throw new Error("Sign in to Reddit first.");
   const id = String(data.data.id ?? "");
-  return { uh, id: /^[a-z0-9]+$/i.test(id) ? "t2_" + id : "" };
+  const name = String(data.data.name ?? "");
+  return {
+    uh,
+    id: /^[a-z0-9]+$/i.test(id) ? "t2_" + id : "",
+    name: /^[\w-]{1,30}$/.test(name) ? name : "",
+  };
 };
 
 /** POST to a Reddit API path, refreshing a stale modhash once. */
@@ -204,6 +209,67 @@ export type ActionName = keyof typeof ACTIONS;
 export const isAction = (name: unknown): name is ActionName =>
   typeof name === "string" && Object.hasOwn(ACTIONS, name);
 
+/** A comment's `t1_` full name from either its full name or its bare id. */
+const fullName = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const id = value.startsWith("t1_") ? value : "t1_" + value;
+  return /^t1_[a-z0-9]+$/i.test(id) ? id : undefined;
+};
+
+/**
+ * The comment Reddit created for a reply. Reddit may answer `/api/comment`
+ * with the full comment, or with a short form (`id` already a full name,
+ * `contentText`, `parent`, `link`) that lacks the author, body and time.
+ * The short form is completed from `/api/info`, or failing that from what
+ * the response and the session know, so the reply never shows as deleted.
+ */
+async function postedComment(
+  fetchFn: Fetch,
+  origin: string,
+  created: any,
+  parent: unknown,
+): Promise<CommentNode | undefined> {
+  if (!created || typeof created !== "object") return undefined;
+  if (typeof created.author === "string" && typeof created.body === "string")
+    return normalizeComments([{ kind: "t1", data: created }]).comments[0];
+  const name = fullName(created.name) ?? fullName(created.id);
+  if (!name) return undefined;
+  try {
+    const info = new URL("/api/info.json", origin);
+    info.search = new URLSearchParams({ id: name, raw_json: "1" }).toString();
+    const response = await fetchFn(info, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+    const listing = response.ok ? await response.json().catch(() => null) : null;
+    const found = normalizeComments(listing?.data?.children ?? []).comments.find(
+      (comment) => comment.id === name,
+    );
+    if (found) return found;
+  } catch {
+    // Fall back to the short form below.
+  }
+  const me = await session?.catch(() => null);
+  return {
+    id: name,
+    parentId: String(created.parent ?? created.parent_id ?? parent ?? ""),
+    author: me?.name || "[you]",
+    body: String(created.contentText ?? ""),
+    score: 1,
+    createdAt: Date.now(),
+    edited: false,
+    stickied: false,
+    locked: false,
+    isSubmitter: false,
+    permalink: "",
+    replies: [],
+    moreReplies: false,
+    // Reddit upvotes your own comment when it is posted.
+    vote: 1,
+  };
+}
+
 /** Run one allow-listed action; returns only what the reader needs. */
 export async function apiAction(
   fetchFn: Fetch,
@@ -214,18 +280,18 @@ export async function apiAction(
   if (!isAction(name) || !args || typeof args !== "object") fail();
   const action = ACTIONS[name as string]!;
   // Validate before reading the session, so bad input never reaches Reddit.
-  action.params(args as Args, { uh: "", id: "t2_validate" });
+  action.params(args as Args, { uh: "", id: "t2_validate", name: "" });
   const body = await post(fetchFn, origin, action.path, (me) =>
     action.params(args as Args, me),
   );
   const data = body?.json?.data;
   const created = data?.things?.[0]?.data;
-  const id = String(data?.name ?? created?.name ?? "");
+  const id = String(data?.name ?? created?.name ?? fullName(created?.id) ?? "");
   const url = safeUrl(data?.url);
   // A posted reply comes back as the new comment, so it can be shown at once.
   const comment =
     data?.things?.[0]?.kind === "t1"
-      ? normalizeComments([data.things[0]]).comments[0]
+      ? await postedComment(fetchFn, origin, created, (args as Args).parent)
       : undefined;
   return {
     ...(/^t\d_[a-z0-9]+$/i.test(id) ? { id } : {}),

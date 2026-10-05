@@ -79,6 +79,8 @@ const comment = {
 const fixture = `<!doctype html><html><head><title>Reddit fixture</title></head><body><h1>Original Reddit fixture</h1><shreddit-post id="t3_abc123" post-title="${post.title}" author="example_user" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="123" comment-count="2" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post></body></html>`;
 let deny = false;
 const writes = [];
+/** The comment created by the last /api/comment, served by /api/info. */
+let postedReply = null;
 const searches = [];
 // 1x1 PNG served for profile and community pictures.
 const png = Buffer.from(
@@ -93,11 +95,20 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       body: Object.fromEntries(new URLSearchParams(route.request().postData())),
     });
     const sent = writes.at(-1).body;
+    if (url.pathname === "/api/comment")
+      postedReply = {
+        id: "mine1", name: "t1_mine1", parent_id: sent.thing_id,
+        author: "fixture_user", body: sent.text, score: 1,
+        created_utc: Math.floor(Date.now() / 1000), likes: true,
+        permalink: post.permalink + "mine1/",
+      };
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(
         url.pathname === "/api/comment"
-          ? {
+          ? // Reddit's short answer: no author, body or time; `id` is the
+            // full name. The reader completes it from /api/info.
+            {
               json: {
                 errors: [],
                 data: {
@@ -105,10 +116,8 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
                     {
                       kind: "t1",
                       data: {
-                        id: "mine1", name: "t1_mine1", parent_id: sent.thing_id,
-                        author: "fixture_user", body: sent.text, score: 1,
-                        created_utc: Math.floor(Date.now() / 1000), likes: true,
-                        permalink: post.permalink + "mine1/",
+                        id: "t1_mine1", parent: sent.thing_id, link: post.name,
+                        contentText: sent.text, contentHTML: "", replies: "",
                       },
                     },
                   ],
@@ -119,6 +128,19 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       ),
     });
   }
+  if (url.pathname === "/api/info.json")
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        kind: "Listing",
+        data: {
+          children:
+            postedReply && url.searchParams.get("id") === postedReply.name
+              ? [{ kind: "t1", data: postedReply }]
+              : [],
+        },
+      }),
+    });
   if (url.pathname === "/r/test/about/moderators.json")
     return route.fulfill({
       contentType: "application/json",
@@ -339,6 +361,8 @@ try {
   const mine = app.locator('[data-cid="t1_mine1"]');
   await mine.locator("strong", { hasText: "agree" }).waitFor();
   assert.equal(await mine.getAttribute("data-level"), "1");
+  // Completed from /api/info: the author, not "[deleted]".
+  assert.equal((await mine.locator(".comment-head .author").first().textContent())?.trim(), "fixture_user");
   // The sent draft is gone.
   box = await openReply();
   assert.equal(await box.inputValue(), "");

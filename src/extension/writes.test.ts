@@ -244,6 +244,88 @@ test("returns the posted reply as a comment", async () => {
   assert.equal(result.comment?.vote, 1);
 });
 
+// Reddit's short answer to /api/comment: no author, body or time, and `id`
+// is already the full name.
+const shortReply = () =>
+  json({
+    json: {
+      errors: [],
+      data: {
+        things: [
+          {
+            kind: "t1",
+            data: {
+              id: "t1_new9", parent: "t1_abc", link: "t3_p1",
+              contentText: "Thanks **a lot**", contentHTML: "<p>…</p>", replies: "",
+            },
+          },
+        ],
+      },
+    },
+  });
+
+test("completes a short reply response from /api/info", async () => {
+  resetWrites();
+  const { calls, fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42", name: "SylviaJarvis" } })
+      : url.pathname === "/api/info.json"
+        ? json({
+            data: {
+              children: [
+                {
+                  kind: "t1",
+                  data: {
+                    id: "new9", name: "t1_new9", parent_id: "t1_abc",
+                    author: "SylviaJarvis", body: "Thanks **a lot**", score: 1,
+                    created_utc: 1700000000, likes: true,
+                    permalink: "/r/test/comments/p1/x/new9/",
+                  },
+                },
+              ],
+            },
+          })
+        : shortReply(),
+  );
+  const result = await apiAction(fetchFn, origin, "comment", {
+    parent: "t1_abc",
+    text: "Thanks **a lot**",
+  });
+  const info = new URL(calls[2]!.url);
+  assert.equal(info.pathname, "/api/info.json");
+  assert.equal(info.searchParams.get("id"), "t1_new9");
+  assert.equal(calls[2]!.init?.method, undefined); // A read, not a write.
+  assert.equal(result.id, "t1_new9");
+  assert.equal(result.comment?.id, "t1_new9");
+  assert.equal(result.comment?.author, "SylviaJarvis");
+  assert.equal(result.comment?.body, "Thanks **a lot**");
+  assert.equal(result.comment?.createdAt, 1700000000 * 1000);
+  assert.equal(result.comment?.vote, 1);
+});
+
+test("builds a short reply response from the session when /api/info fails", async () => {
+  resetWrites();
+  const { fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42", name: "SylviaJarvis" } })
+      : url.pathname === "/api/info.json"
+        ? json({}, 500)
+        : shortReply(),
+  );
+  const before = Date.now();
+  const result = await apiAction(fetchFn, origin, "comment", {
+    parent: "t1_abc",
+    text: "Thanks **a lot**",
+  });
+  assert.equal(result.comment?.id, "t1_new9");
+  assert.equal(result.comment?.parentId, "t1_abc");
+  assert.equal(result.comment?.author, "SylviaJarvis");
+  assert.equal(result.comment?.body, "Thanks **a lot**");
+  assert.ok(result.comment!.createdAt >= before);
+  assert.equal(result.comment?.score, 1);
+  assert.equal(result.comment?.vote, 1);
+});
+
 test("saves, unsaves and edits with their own parameters", async () => {
   resetWrites();
   const { calls, fetchFn } = signedIn();
