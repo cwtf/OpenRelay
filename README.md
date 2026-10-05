@@ -2,6 +2,8 @@
 
 A project inspired by **Relay for Reddit**, the Android app by DBrandy. It replaces Reddit's interface with a Relay-style reader: React screens, design tokens, cards, compact/list layouts, themes, comment rails, sheets, drawer, Markdown renderer, gestures, and media viewer.
 
+<img width="1645" height="990" alt="image" src="https://github.com/user-attachments/assets/86a7fe14-74a2-4cf4-9aed-b81fe559c4f6" />
+
 ## Install
 
 The built extension is in **dist/**.
