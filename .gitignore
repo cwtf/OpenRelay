@@ -6,3 +6,4 @@ test-results/
 # Packed extension and its private signing key (never commit the key)
 dist.crx
 dist.pem
+APK/
