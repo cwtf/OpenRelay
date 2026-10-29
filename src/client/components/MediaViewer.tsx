@@ -8,7 +8,13 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react';
 import type { ViewerItem, ViewerSpec } from '../app/nav';
-import { copyText, downloadImage, openUrl, redditUrl } from '../lib/platform';
+import {
+  copyText,
+  downloadImage,
+  downloadVideo,
+  openUrl,
+  redditUrl,
+} from '../lib/platform';
 import { Icon } from './Icon';
 
 type Transform = { scale: number; x: number; y: number };
@@ -674,6 +680,17 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
               <Icon name="copy" />
             </button>
           </>
+        ) : null}
+        {current?.kind === 'video' && current.mp4 ? (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Download video"
+            title="Download video"
+            onClick={() => void downloadVideo(current.mp4!)}
+          >
+            <Icon name="download" />
+          </button>
         ) : null}
         {source ? (
           <button
