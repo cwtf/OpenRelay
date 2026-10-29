@@ -58,6 +58,7 @@ test("bridge allows only read-only Reddit JSON paths", () => {
     "/r/test/wiki/index.json",
     "/api/subreddit_autocomplete_v2.json?query=pic&include_over_18=true",
     "/subreddits/search.json?q=pic",
+    "/api/info.json?id=t3_abc,t3_def",
   ])
     assert.ok(allowedJsonPath(path), path);
   for (const path of [

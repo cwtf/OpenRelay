@@ -433,6 +433,8 @@ const READ_ROUTES = [
   /^\/api\/subreddit_autocomplete_v2\.json$/i,
   /^\/subreddits\/search\.json$/i,
   /^\/prefs\/friends\.json$/i,
+  // Posts found by the HTML search when Reddit refuses /search.json.
+  /^\/api\/info\.json$/i,
 ];
 export function allowedJsonPath(path: unknown): path is string {
   if (

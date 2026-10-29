@@ -14,6 +14,7 @@ import type {
   FeedSort,
   InitResponse,
   PostResponse,
+  PostSummary,
   RepliesResponse,
   SearchSort,
   Timeframe,
@@ -32,6 +33,7 @@ import {
   normalizePost,
   parseRoute,
 } from "../../extension/reddit";
+import { searchPagePath, type SearchPage } from "../../extension/search";
 import type { Snapshot } from "../../extension/snapshot";
 
 export class ApiFailure extends Error {
@@ -54,6 +56,9 @@ const prefix = (sub: string) =>
 const json = (path: string) => bridge<any>("json", path);
 let seededFeed = false;
 let seededSearch = false;
+/** Reddit refuses /search.json to some sessions; its own search page works. */
+let jsonSearchBlocked = false;
+let infoBlocked = false;
 export const fetchInit = async (): Promise<InitResponse> => ({
   subreddit: entryRoute.sub,
   username: null,
@@ -118,19 +123,70 @@ export async function fetchSearch(
     if (loaded.posts.length)
       return { posts: loaded.posts, after: loaded.posts.at(-1)!.id };
   }
-  return listing(
-    await json(
-      prefix(sub) +
-        "/search.json" +
-        query({
-          q,
-          sort,
-          after,
-          limit: 25,
-          restrict_sr: sub === "Home" ? 0 : 1,
-        }),
+  // A cursor from the HTML search is the path of its next page.
+  if (after?.startsWith("/")) return searchPage(after);
+  const html = () =>
+    searchPage(searchPagePath(sub, q, sort, pageUrl.hostname === "old.reddit.com"));
+  if (jsonSearchBlocked) return html();
+  try {
+    return listing(
+      await json(
+        prefix(sub) +
+          "/search.json" +
+          query({
+            q,
+            sort,
+            after,
+            limit: 25,
+            restrict_sr: sub === "Home" ? 0 : 1,
+          }),
+      ),
+    );
+  } catch {
+    const page = await html();
+    jsonSearchBlocked = true;
+    return page;
+  }
+}
+async function searchPage(path: string): Promise<FeedResponse> {
+  const page = await bridge<SearchPage>("search-page", path);
+  if (!page.ids.length) return { posts: [], after: null };
+  const posts = await postsById(page.ids);
+  if (!posts.length)
+    throw new ApiFailure(
+      "Reddit found results but would not load them. Try Original Reddit.",
+    );
+  const order = new Map(page.ids.map((id, index) => [id, index]));
+  return {
+    posts: posts.sort(
+      (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
     ),
-  );
+    after: page.next === path ? null : page.next,
+  };
+}
+/** Posts by full name: one /api/info call, else each post's own page. */
+async function postsById(ids: string[]): Promise<PostSummary[]> {
+  if (!infoBlocked)
+    try {
+      return listing(await json("/api/info.json" + query({ id: ids.join(",") })))
+        .posts;
+    } catch {
+      infoBlocked = true;
+    }
+  // Sessions refused /api/info can still open posts, a few at a time.
+  const posts: PostSummary[] = [];
+  for (let i = 0; i < ids.length; i += 5)
+    for (const post of await Promise.all(
+      ids.slice(i, i + 5).map((id) =>
+        json(
+          "/comments/" + id.replace(/^t3_/, "") + ".json" + query({ limit: 1, depth: 1 }),
+        )
+          .then((data) => listing(data?.[0]).posts[0])
+          .catch(() => undefined),
+      ),
+    ))
+      if (post) posts.push(post);
+  return posts;
 }
 const memo = new Map<string, { at: number; value: Promise<PostResponse> }>();
 export function fetchPost(

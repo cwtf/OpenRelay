@@ -1,6 +1,7 @@
 import { apiAction, apiVote } from "./writes";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
+import { allowedSearchPagePath, parseSearchPage } from "./search";
 import { readSnapshot } from "./snapshot";
 
 let host: HTMLDivElement | null = null;
@@ -65,6 +66,22 @@ function mount() {
   shadow.append(style, frame, exit);
   document.documentElement.append(host);
   show(true);
+}
+async function read(path: string, accept: string) {
+  const response = await fetch(new URL(path, location.origin), {
+    credentials: "same-origin",
+    signal: AbortSignal.timeout(18000),
+    headers: { Accept: accept },
+  });
+  if (!response.ok)
+    throw new Error(
+      response.status === 429
+        ? "Reddit is rate limiting requests. Please wait and try again."
+        : "Reddit could not load this content (" +
+            response.status +
+            "). Try Original Reddit.",
+    );
+  return response;
 }
 window.addEventListener("message", async (event) => {
   if (event.source !== frame?.contentWindow || event.origin !== extensionOrigin)
@@ -136,24 +153,18 @@ window.addEventListener("message", async (event) => {
       }
       value = loaded;
     } else if (action === "json" && allowedJsonPath(path)) {
-      const response = await fetch(new URL(path, location.origin), {
-        credentials: "same-origin",
-        signal: AbortSignal.timeout(18000),
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok)
-        throw new Error(
-          response.status === 429
-            ? "Reddit is rate limiting requests. Please wait and try again."
-            : "Reddit could not load this content (" +
-                response.status +
-                "). Try Original Reddit.",
-        );
+      const response = await read(path, "application/json");
       if (!response.headers.get("content-type")?.includes("json"))
         throw new Error(
           "Reddit returned a sign-in or access page. Use Original Reddit to continue.",
         );
       value = await response.json();
+    } else if (action === "search-page" && allowedSearchPagePath(path)) {
+      // Only the post IDs and next page reach the reader, never the page.
+      const response = await read(path, "text/html");
+      if (!response.headers.get("content-type")?.includes("html"))
+        throw new Error("Reddit did not return a search page.");
+      value = parseSearchPage(await response.text());
     } else throw new Error("Unsupported request");
     target?.postMessage(
       { type: "openrelay:response", id, value },

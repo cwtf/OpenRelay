@@ -82,6 +82,8 @@ const writes = [];
 /** The comment created by the last /api/comment, served by /api/info. */
 let postedReply = null;
 const searches = [];
+const htmlSearches = [];
+const infoLookups = [];
 // 1x1 PNG served for profile and community pictures.
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -128,6 +130,11 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       ),
     });
   }
+  // Like Reddit for some sessions: posts by ID are refused, but post pages load.
+  if (url.pathname === "/api/info.json" && url.searchParams.get("id") === post.name) {
+    infoLookups.push(url.searchParams.get("id"));
+    return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
+  }
   if (url.pathname === "/api/info.json")
     return route.fulfill({
       contentType: "application/json",
@@ -141,6 +148,16 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         },
       }),
     });
+  // Reddit refuses JSON search to some sessions; its HTML search still works.
+  if (/^\/(r\/test\/)?search\.json$/.test(url.pathname))
+    return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
+  if (url.pathname === "/r/test/search/") {
+    htmlSearches.push(url.search);
+    return route.fulfill({
+      contentType: "text/html",
+      body: `<title>Search</title><search-telemetry-tracker data-thingid="${post.name}"><a href="${post.permalink}">${post.title}</a></search-telemetry-tracker>`,
+    });
+  }
   if (url.pathname === "/r/test/about/moderators.json")
     return route.fulfill({
       contentType: "application/json",
@@ -686,6 +703,23 @@ try {
   await page.goto("https://www.reddit.com/r/test/?openrelay=off");
   await page.waitForTimeout(1000);
   assert.equal(await page.locator("#openrelay-extension").count(), 0);
+  // Post search falls back to Reddit's HTML search when JSON search is refused.
+  await page.goto("https://www.reddit.com/r/test/");
+  app = await reader();
+  await app.getByRole("button", { name: "Search", exact: true }).click();
+  await app.getByLabel("Search r/test").fill("loaded");
+  await app.getByLabel("Search r/test").press("Enter");
+  await app
+    .locator(".screen", { has: app.getByLabel("Search r/test") })
+    .getByRole("button", { name: post.title, exact: true })
+    .waitFor();
+  assert.deepEqual(htmlSearches, [
+    "?q=loaded&sort=relevance&restrict_sr=1&type=posts",
+  ]);
+  // /api/info was tried once, then the post came from its own page.
+  assert.deepEqual(infoLookups, [post.name]);
+  await app.locator(".screen.is-entering").waitFor({ state: "detached" });
+  await page.screenshot({ path: resolve(out, "search-fallback.png") });
   deny = true;
   await page.goto("https://www.reddit.com/r/test/comments/abc123/example/");
   app = await reader();
@@ -699,7 +733,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

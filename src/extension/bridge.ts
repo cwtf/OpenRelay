@@ -40,7 +40,14 @@ window.addEventListener("message", (event) => {
 export const setBottomInset = (bottom: number): void =>
   window.parent.postMessage({ type: "openrelay:inset", bottom }, pageUrl.origin);
 export function bridge<T>(
-  action: "snapshot" | "json" | "vote" | "vote-status" | "me" | "action",
+  action:
+    | "snapshot"
+    | "json"
+    | "search-page"
+    | "vote"
+    | "vote-status"
+    | "me"
+    | "action",
   path?: string,
   payload?: {
     thingId?: string;

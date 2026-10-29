@@ -6,6 +6,9 @@ import { Icon } from "../components/Icon";
 import { PostCard } from "../components/PostCard";
 import { fetchSearch, entryRoute } from "../lib/api";
 import { sortLabel } from "../lib/format";
+import { openUrl } from "../lib/platform";
+import { pageUrl } from "../../extension/bridge";
+import { searchPagePath } from "../../extension/search";
 import { readJson, writeJson } from "../lib/storage";
 
 const SORTS: SearchSort[] = ["relevance", "new", "top", "comments"];
@@ -200,7 +203,29 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
               <div className="spinner" />
             </div>
           ) : null}
-          {status === "error" ? <div className="feed-end">{error}</div> : null}
+          {status === "error" ? (
+            <div className="feed-end">
+              <span>{error}</span>
+              <button
+                type="button"
+                className="btn is-tonal"
+                data-ripple
+                onClick={() =>
+                  openUrl(
+                    pageUrl.origin +
+                      searchPagePath(
+                        sub,
+                        query,
+                        sort,
+                        pageUrl.hostname === "old.reddit.com",
+                      ),
+                  )
+                }
+              >
+                Search on Original Reddit
+              </button>
+            </div>
+          ) : null}
           {query && status === "idle" && !posts.length ? (
             <div className="feed-state">
               <strong>No results</strong>
