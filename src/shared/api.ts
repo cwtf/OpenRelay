@@ -105,6 +105,8 @@ export type PostSummary = {
   archived: boolean;
   edited: boolean;
   crosspost: boolean;
+  /** The crossposted original, from `crosspost_parent_list`. */
+  crosspostParent?: PostSummary;
   distinguished?: Distinguished;
   flair?: Flair;
   authorFlair?: Flair;
@@ -261,6 +263,8 @@ export type Prefs = {
   reduceMotion: boolean;
   autoplayGifs: boolean;
   showThumbnails: boolean;
+  /** Relay's "Compact Crosspost Layout": one link to the original instead of its card. */
+  compactCrossposts: boolean;
   /** Relay's tablet setting: single or dual pane, per orientation. */
   paneModePortrait: "auto" | "single" | "dual";
   paneModeLandscape: "auto" | "single" | "dual";
@@ -277,6 +281,7 @@ export const DEFAULT_PREFS: Prefs = {
   reduceMotion: false,
   autoplayGifs: true,
   showThumbnails: true,
+  compactCrossposts: false,
   paneModePortrait: "auto",
   paneModeLandscape: "auto",
 };

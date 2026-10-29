@@ -152,6 +152,12 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
             value={prefs.showThumbnails}
             onChange={set("showThumbnails")}
           />
+          <Toggle
+            label="Compact crossposts"
+            hint="Link to the original post instead of showing its card"
+            value={prefs.compactCrossposts}
+            onChange={set("compactCrossposts")}
+          />
 
           <div className="sheet-section">Single or dual pane</div>
           <label className="setting">

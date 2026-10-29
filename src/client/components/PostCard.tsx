@@ -1,7 +1,8 @@
 import { memo, useSyncExternalStore } from 'react';
 import type { Prefs, PostSummary } from '../../shared/api';
 import { useNav } from '../app/nav';
-import { compact } from '../lib/format';
+import { usePrefs } from '../app/prefs';
+import { compact, plural } from '../lib/format';
 import { useLongPress } from '../lib/gestures';
 import { useIsSelectedPost } from '../lib/panes';
 import { readPosts } from '../lib/storage';
@@ -76,6 +77,114 @@ const Stats = ({ post, onMore }: { post: PostSummary; onMore: () => void }) => {
   );
 };
 
+/** The compact and list layouts' row: title, flags, meta and thumbnail. */
+const PostRow = ({
+  post,
+  showSub,
+  thumb,
+  onMore,
+}: {
+  post: PostSummary;
+  showSub: boolean;
+  thumb: boolean;
+  onMore: () => void;
+}) => (
+  <>
+    <div className="row">
+      <div className="row-main">
+        <h3 className="post-title">{post.title}</h3>
+        <PostFlags post={post} />
+        <PostMeta post={post} showSub={showSub} />
+        <div className="list-stats">
+          <span className="score">
+            <Icon name="up" size={14} />
+            {compact(post.score)}
+          </span>
+          <span>
+            <Icon name="comment" size={14} />
+            {compact(post.comments)}
+          </span>
+        </div>
+      </div>
+      {thumb ? <Thumb post={post} /> : null}
+    </div>
+    <div className="row-foot">
+      <Stats post={post} onMore={onMore} />
+    </div>
+  </>
+);
+
+/**
+ * Relay's crosspost block: an "Original Post" header over the original as a
+ * small card, or with Compact Crosspost Layout one "N Comments in r/sub"
+ * link. Both open the original's comments.
+ */
+const Crosspost = ({
+  original,
+  layout,
+  showThumbnails,
+}: {
+  original: PostSummary;
+  layout: Prefs['layout'];
+  showThumbnails: boolean;
+}) => {
+  const nav = useNav();
+  const { prefs } = usePrefs();
+  const read = useIsRead(original.id);
+  const more = () => openPostActions(nav, original);
+  const press = useLongPress(more);
+  const open = () => nav.openPost(original);
+  if (prefs.compactCrossposts)
+    return (
+      <div className="crosspost">
+        <button
+          type="button"
+          className="crosspost-title is-single"
+          data-ripple
+          onClick={open}
+        >
+          <span>
+            {plural(original.comments, 'Comment')} in r/{original.subreddit}
+          </span>
+          <Icon name="crosspost" size={20} />
+        </button>
+      </div>
+    );
+  return (
+    <div className="crosspost">
+      <button
+        type="button"
+        className="crosspost-title"
+        data-ripple
+        onClick={open}
+      >
+        <span>Original Post</span>
+        <Icon name="crosspost" size={20} />
+      </button>
+      <article className={`crosspost-card${read ? ' is-read' : ''}`}>
+        <button
+          type="button"
+          className="post-hit"
+          data-ripple
+          onClick={() => {
+            if (press.consumeClick()) return;
+            open();
+          }}
+          aria-label={`Original post: ${original.title}`}
+          {...press.handlers}
+        />
+        {/* Relay draws the original with its thumbnail card in every layout. */}
+        <PostRow
+          post={original}
+          showSub
+          thumb={(showThumbnails || layout === 'cards') && wantsThumb(original)}
+          onMore={more}
+        />
+      </article>
+    </div>
+  );
+};
+
 export const PostCard = memo(
   ({ post, layout, showThumbnails, showSub, onHide }: PostCardProps) => {
     const nav = useNav();
@@ -103,6 +212,10 @@ export const PostCard = memo(
         : []),
       { icon: 'more', label: 'More', title: 'More actions', onClick: more },
     ];
+
+    const crosspost = post.crosspostParent ? (
+      <Crosspost original={post.crosspostParent} layout={layout} showThumbnails={showThumbnails} />
+    ) : null;
 
     const hit = (
       <button
@@ -136,6 +249,7 @@ export const PostCard = memo(
               <MediaFrame post={post} variant="card" />
             </div>
           ) : null}
+          {crosspost}
           <div className="card-foot">
             <Stats post={post} onMore={more} />
           </div>
@@ -152,27 +266,8 @@ export const PostCard = memo(
         data-anim-key={post.id}
       >
         {hit}
-        <div className="row">
-          <div className="row-main">
-            <h3 className="post-title">{post.title}</h3>
-            <PostFlags post={post} />
-            <PostMeta post={post} showSub={showSub} />
-            <div className="list-stats">
-              <span className="score">
-                <Icon name="up" size={14} />
-                {compact(post.score)}
-              </span>
-              <span>
-                <Icon name="comment" size={14} />
-                {compact(post.comments)}
-              </span>
-            </div>
-          </div>
-          {thumb ? <Thumb post={post} /> : null}
-        </div>
-        <div className="row-foot">
-          <Stats post={post} onMore={more} />
-        </div>
+        <PostRow post={post} showSub={showSub} thumb={thumb} onMore={more} />
+        {crosspost}
       </article>
       </SwipeActions>
     );

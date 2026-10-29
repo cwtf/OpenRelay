@@ -31,6 +31,14 @@ export const openPostActions = (
               label="Open comments"
               onClick={run(() => nav.openPost(post))}
             />
+            {post.crosspostParent ? (
+              <SheetItem
+                icon="crosspost"
+                label="View original post"
+                hint={`r/${post.crosspostParent.subreddit}`}
+                onClick={run(() => nav.openPost(post.crosspostParent!))}
+              />
+            ) : null}
             {external ? (
               <SheetItem
                 icon="external"

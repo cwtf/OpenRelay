@@ -114,6 +114,25 @@ export function normalizePost(p: Raw): PostDetail {
       })),
       totalVotes: num(p.poll_data.total_vote_count),
     };
+  const parentRaw = Array.isArray(p.crosspost_parent_list)
+    ? p.crosspost_parent_list[0]
+    : undefined;
+  const parent =
+    parentRaw && typeof parentRaw === "object"
+      ? normalizePost(parentRaw)
+      : undefined;
+  let ownUrl = url;
+  // Relay's crosspost rules: a crosspost of a self post opens as a self post
+  // at its own permalink, and it takes the original's gallery. Relay plays a
+  // crossposted v.redd.it link in its own player; a crosspost carries no
+  // video data of its own, so the reader takes the original's video (and
+  // poll) the same way.
+  if (parent?.media.kind === "self") {
+    media = { kind: "self" };
+    ownUrl = safeUrl(p.permalink) || parent.permalink;
+  } else if (parent && media.kind === "link" && parent.media.kind !== "link")
+    media = parent.media;
+  const shownThumb = thumb ?? parent?.thumb;
   return {
     id: String(p.name ?? "t3_" + p.id),
     title: String(p.title ?? "Untitled"),
@@ -122,8 +141,8 @@ export function normalizePost(p: Raw): PostDetail {
     permalink:
       safeUrl(p.permalink) ||
       "https://www.reddit.com/comments/" + String(p.id ?? ""),
-    url,
-    domain: String(p.domain ?? ""),
+    url: ownUrl,
+    domain: String(p.domain || parent?.domain || ""),
     createdAt: num(p.created_utc) * 1000,
     score: num(p.score),
     comments: num(p.num_comments),
@@ -133,7 +152,8 @@ export function normalizePost(p: Raw): PostDetail {
     locked: Boolean(p.locked),
     archived: Boolean(p.archived),
     edited: Boolean(p.edited),
-    crosspost: Boolean(p.crosspost_parent),
+    crosspost: Boolean(p.crosspost_parent || parent),
+    ...(parent ? { crosspostParent: parent } : {}),
     body: String(p.selftext ?? ""),
     excerpt: String(p.selftext ?? "").slice(0, 280),
     ...(p.link_flair_text
@@ -144,7 +164,7 @@ export function normalizePost(p: Raw): PostDetail {
           },
         }
       : {}),
-    ...(thumb ? { thumb } : {}),
+    ...(shownThumb ? { thumb: shownThumb } : {}),
     ...viewerVote(p.likes),
     ...(typeof p.saved === "boolean" ? { saved: p.saved } : {}),
     ...modInfo(p),

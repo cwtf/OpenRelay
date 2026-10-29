@@ -128,6 +128,67 @@ test("normalizes image, gallery, video, deleted text and unsafe media", () => {
   assert.equal(safeUrl("javascript:alert(1)"), "");
   assert.equal(safeUrl("data:text/html,abc"), "");
 });
+test("keeps a crosspost's original and takes its media like Relay", () => {
+  const crosspost = (original: Record<string, unknown>, own = {}) =>
+    normalizePost({
+      id: "xp",
+      name: "t3_xp",
+      title: "Crossposted",
+      subreddit: "elsewhere",
+      permalink: "/r/elsewhere/comments/xp/crossposted/",
+      crosspost_parent: "t3_orig",
+      crosspost_parent_list: [
+        {
+          id: "orig",
+          name: "t3_orig",
+          title: "Original",
+          subreddit: "source",
+          permalink: "/r/source/comments/orig/original/",
+          num_comments: 44,
+          ...original,
+        },
+      ],
+      ...own,
+    });
+  const self = crosspost(
+    { is_self: true, selftext: "Body", domain: "self.source" },
+    { url: "/r/source/comments/orig/original/" },
+  );
+  assert.equal(self.crosspost, true);
+  assert.equal(self.media.kind, "self");
+  assert.equal(self.url, "https://www.reddit.com/r/elsewhere/comments/xp/crossposted/");
+  assert.equal(self.domain, "self.source");
+  assert.equal(self.crosspostParent?.id, "t3_orig");
+  assert.equal(self.crosspostParent?.comments, 44);
+  assert.equal(self.crosspostParent?.subreddit, "source");
+  const video = crosspost(
+    {
+      url: "https://v.redd.it/abc",
+      secure_media: {
+        reddit_video: { fallback_url: "https://v.redd.it/abc/DASH_720.mp4" },
+      },
+    },
+    { url: "https://v.redd.it/abc", domain: "v.redd.it" },
+  );
+  assert.equal(video.media.kind, "video");
+  const gallery = crosspost(
+    {
+      gallery_data: { items: [{ media_id: "one" }] },
+      media_metadata: {
+        one: { s: { u: "https://i.redd.it/one.png", x: 600, y: 400 } },
+      },
+    },
+    { url: "https://www.reddit.com/gallery/orig" },
+  );
+  assert.equal(gallery.media.kind, "gallery");
+  const link = crosspost(
+    { url: "https://example.com/story", domain: "example.com" },
+    { url: "https://example.com/story" },
+  );
+  assert.equal(link.media.kind, "link");
+  assert.equal(link.domain, "example.com");
+  assert.equal("crosspostParent" in normalizePost({ id: "plain" }), false);
+});
 test("preserves nested comments and missing-reply markers", () => {
   const result = normalizeComments([
     {

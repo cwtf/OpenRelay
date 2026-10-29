@@ -659,6 +659,61 @@
   gap: 3px;
 }
 
+/* Crossposts: Relay's "Original Post" header joined to the original's card */
+
+.crosspost {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 10px 10px;
+}
+
+.crosspost-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 12px;
+  border-radius: var(--radius-card) var(--radius-card) 4px 4px;
+  background: var(--surface-2);
+  color: var(--link);
+  font-size: calc(14px * var(--ts));
+  font-weight: 600;
+  text-align: left;
+}
+
+.crosspost-title.is-single {
+  border-radius: var(--radius-card);
+}
+
+.crosspost-title span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crosspost-card {
+  position: relative;
+  border-radius: 4px 4px var(--radius-card) var(--radius-card);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.crosspost-card > *:not(.post-hit) {
+  position: relative;
+  z-index: 1;
+}
+
+.crosspost-card.is-read .post-title {
+  color: var(--text-read);
+}
+
+.post .crosspost-card:not(.is-read) .post-title {
+  color: var(--text);
+}
+
 /* Thumbnails */
 
 .thumb {
