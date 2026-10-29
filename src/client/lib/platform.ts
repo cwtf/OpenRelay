@@ -27,5 +27,46 @@ export async function copyText(
     toast("Copy is not available here");
   }
 }
-export const sharePost = async (_postId: string, permalink: string) =>
+type ExtensionApi = {
+  permissions?: {
+    request(permissions: { permissions: string[] }): Promise<boolean>;
+  };
+  downloads?: {
+    download(options: { url: string; filename?: string }): Promise<number>;
+  };
+};
+
+/**
+ * Saves an image with `chrome.downloads`. Reddit's image hosts send no CORS
+ * headers, so the reader can't fetch the file itself. `downloads` is an
+ * optional permission, asked for on the first download.
+ */
+export async function downloadImage(value: string): Promise<void> {
+  const url = safeUrl(value);
+  if (!url) return;
+  const api = (globalThis as { chrome?: ExtensionApi }).chrome;
+  if (!api?.permissions) {
+    toast("Download is not available here");
+    return;
+  }
+  try {
+    // The permission prompt needs the click's user gesture, so nothing may be
+    // awaited before the request.
+    const granted = await api.permissions.request({
+      permissions: ["downloads"],
+    });
+    if (!granted || !api.downloads) {
+      toast("Downloads not allowed. Right-click the image to save it");
+      return;
+    }
+    const name = new URL(url).pathname.split("/").pop() ?? "";
+    await api.downloads.download({
+      url,
+      ...(/^[\w.-]+\.\w+$/.test(name) ? { filename: name } : {}),
+    });
+  } catch {
+    toast("Download is not available here");
+  }
+}
+export const sharePost =async (_postId: string, permalink: string) =>
   copyText(redditUrl(permalink), "Link copied");

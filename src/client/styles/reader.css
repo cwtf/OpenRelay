@@ -2200,7 +2200,6 @@ img.avatar {
   width: auto;
   height: auto;
   object-fit: contain;
-  pointer-events: none;
 }
 
 /* Once the aspect ratio is known, fit the whole screen on whichever axis
@@ -2212,10 +2211,6 @@ img.avatar {
   aspect-ratio: var(--ratio);
   max-width: none;
   max-height: none;
-}
-
-.viewer-stage video {
-  pointer-events: auto;
 }
 
 .viewer-chrome {

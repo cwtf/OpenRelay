@@ -30,6 +30,7 @@ const PATHS = {
   refresh: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
   reply: 'M10 7.5L5 12l5 4.5M5 12h9a5 5 0 0 1 5 5v2',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  download: 'M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14',
   pin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v7',
   lock: 'M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3',
   check: 'M5 12.5l4.5 4.5L19 7',

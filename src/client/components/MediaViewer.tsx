@@ -8,7 +8,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react';
 import type { ViewerItem, ViewerSpec } from '../app/nav';
-import { copyText, openUrl, redditUrl } from '../lib/platform';
+import { copyText, downloadImage, openUrl, redditUrl } from '../lib/platform';
 import { Icon } from './Icon';
 
 type Transform = { scale: number; x: number; y: number };
@@ -139,6 +139,8 @@ const ImagePage = ({
   };
 
   const onPointerDown = (event: ReactPointerEvent) => {
+    // Right/middle clicks belong to the browser (e.g. "Save image as…").
+    if (event.button !== 0) return;
     pointers.current.set(event.pointerId, {
       x: event.clientX,
       y: event.clientY,
@@ -210,7 +212,7 @@ const ImagePage = ({
   };
 
   const onPointerUp = (event: ReactPointerEvent) => {
-    pointers.current.delete(event.pointerId);
+    if (!pointers.current.delete(event.pointerId)) return;
     const g = gesture.current;
     if (g.kind === 'pinch') {
       if (pointers.current.size === 0) {
@@ -653,14 +655,25 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
           </span>
         ) : null}
         {current?.kind === 'image' ? (
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Copy image link"
-            onClick={() => void copyText(current.url, 'Image link copied')}
-          >
-            <Icon name="copy" />
-          </button>
+          <>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Download image"
+              title="Download image"
+              onClick={() => void downloadImage(current.url)}
+            >
+              <Icon name="download" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Copy image link"
+              onClick={() => void copyText(current.url, 'Image link copied')}
+            >
+              <Icon name="copy" />
+            </button>
+          </>
         ) : null}
         {source ? (
           <button
