@@ -34,6 +34,10 @@
       "resources/icon.png",
       "openrelay/**"
     ],
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
     "electronFuses": {
       "runAsNode": false,
       "enableNodeOptionsEnvironmentVariable": false,
@@ -55,6 +59,7 @@
       "uninstallerIcon": "resources/icon.ico",
       "installerHeaderIcon": "resources/icon.ico",
       "artifactName": "${productName}-${version}-setup.${ext}",
+      "differentialPackage": false,
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true

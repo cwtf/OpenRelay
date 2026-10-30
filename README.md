@@ -6,7 +6,9 @@ A project inspired by **Relay for Reddit**, the Android app by DBrandy. It repla
 
 ## Install
 
-The built extension is in **dist/**.
+Release packages are in **releases/**: the Chrome extension (`.zip` and signed `.crx`) in **releases/chrome/**, the Firefox add-on in **releases/firefox/**, the Windows installer and portable exe in **releases/desktop/**, and the Android APK in **releases/android/**. `npm run build:apps` rebuilds all of them (`-- chrome`, `-- firefox`, `-- exe` or `-- apk` for some).
+
+The built extension is in **dist/**, or unzip **releases/chrome/OpenRelay-*-chrome.zip** and use that folder.
 
 1. Open **chrome://extensions** in Chrome.
 2. Turn on **Developer mode**.
@@ -20,14 +22,14 @@ Click **Original Reddit** at the bottom left to restore the loaded page. Click t
 
 Microsoft Edge Canary for Android can sideload extensions from a `.crx` file.
 
-1. Build the extension (see **Development**), then pack it on a desktop: in **chrome://extensions** with **Developer mode** on, click **Pack extension**, choose the **dist** folder and click **Pack extension**. Chrome writes **dist.crx** and a private key, **dist.pem**, next to the folder. Keep the key to sign later updates, and don't share it.
-2. Copy **dist.crx** to your phone.
+1. Use **releases/chrome/OpenRelay-*.crx**. To pack it yourself, `npm run build:apps -- chrome` signs it with **dist.pem** in the repo root. Without that key, pack **dist** in **chrome://extensions** with **Developer mode** on (**Pack extension**); Chrome writes **dist.crx** and a new private key, **dist.pem**, next to the folder. Keep the key to sign later updates, and don't share it.
+2. Copy the `.crx` to your phone.
 3. Install **Microsoft Edge Canary** from Google Play.
 4. In Edge Canary, open **Settings → About Microsoft Edge** and tap the build number repeatedly until developer options are enabled.
 5. Go back to **Settings**, open **Developer options** and tap **Extension install by crx**. Pick **dist.crx** and confirm the install.
 6. Open or refresh a Reddit page. The extension appears in Edge's **Extensions** menu, where you can toggle the reader.
 
-To update, repack **dist** with the same **dist.pem** (Chrome's **Pack extension** dialog has a **Private key file** field) and install the new **dist.crx** the same way.
+To update, install the new `.crx` the same way. It must be signed with the same **dist.pem** (`build:apps` does that; Chrome's **Pack extension** dialog has a **Private key file** field).
 
 ## Install on Firefox
 
@@ -37,7 +39,7 @@ To update, repack **dist** with the same **dist.pem** (Chrome's **Pack extension
 2. Click **Load Temporary Add-on…** and select **dist-firefox/manifest.json**.
 3. Open or refresh a Reddit page.
 
-Firefox removes temporary add-ons when it restarts. To keep it installed, have Mozilla sign it, for example with `web-ext sign` as an unlisted add-on on addons.mozilla.org. Firefox for Android (142 or later) also installs only signed add-ons. The add-on ID, `openrelay-reddit@cwtf`, is set in `tools/build.mjs`; keep it unchanged once the add-on is published, or updates won't reach existing installs.
+**releases/firefox/OpenRelay-*-unsigned.xpi** is the same add-on packed for signing or for **Load Temporary Add-on…**. Firefox removes temporary add-ons when it restarts. To keep it installed, have Mozilla sign it, for example with `web-ext sign` as an unlisted add-on on addons.mozilla.org. Firefox for Android (142 or later) also installs only signed add-ons. The add-on ID, `openrelay-reddit@cwtf`, is set in `tools/build.mjs`; keep it unchanged once the add-on is published, or updates won't reach existing installs.
 
 ## Desktop app (Windows, macOS, Linux)
 

@@ -1,25 +1,48 @@
-// Rebuilds the desktop app (Windows installer + portable exe) and the Android
-// debug APK from the current sources.
+// Rebuilds OpenRelay's release packages from the current sources: the desktop
+// app (Windows installer + portable exe), the Android APK, and the Chrome and
+// Firefox extensions.
 //
-//   node tools/build-apps.mjs          both
-//   node tools/build-apps.mjs exe      desktop only
-//   node tools/build-apps.mjs apk      Android only
+//   node tools/build-apps.mjs                  all of them
+//   node tools/build-apps.mjs exe apk          just the ones named
+//                                              (exe, apk, chrome, firefox)
 //
-// The desktop's `npm run dist` runs the root build first, so the APK step
-// (which copies dist/ in through Gradle's copyOpenRelay task) reuses it.
+// The APK is a signed release build, which needs apps/android/keystore.properties
+// (see keystore.properties.example). Add --debug for a debug APK instead.
+// The Chrome .crx is signed with dist.pem in the repo root, so it keeps the
+// extension's ID; the Firefox .xpi is unsigned until Mozilla signs it.
+//
+// The packages are then copied into releases/<desktop|android|chrome|firefox>/,
+// which is committed as the project's official downloads, named with their
+// version (a rebuild of the same version replaces its files). Debug APKs are
+// never copied there.
+//
+// The desktop's `npm run dist` runs the root build first, so the other steps
+// (the APK copies dist/ in through Gradle's copyOpenRelay task) reuse it.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { crx3, zipDirectory } from "./extension-packages.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const desktop = join(root, "apps/desktop");
 const android = join(root, "apps/android");
+const releases = join(root, "releases");
+const crxKey = join(root, "dist.pem");
+// GitHub rejects pushes containing a file over 100 MiB.
+const GITHUB_FILE_LIMIT = 100 * 1024 * 1024;
 
-const wanted = process.argv.slice(2);
+const TARGETS = ["exe", "apk", "chrome", "firefox"];
+const args = process.argv.slice(2);
+const debug = args.includes("--debug");
+const wanted = args.filter((arg) => arg !== "--debug");
 for (const arg of wanted)
-  if (arg !== "exe" && arg !== "apk") fail(`Unknown target "${arg}". Use exe, apk, or nothing for both.`);
-const buildExe = wanted.length === 0 || wanted.includes("exe");
-const buildApk = wanted.length === 0 || wanted.includes("apk");
+  if (!TARGETS.includes(arg))
+    fail(`Unknown target "${arg}". Use any of ${TARGETS.join(", ")}, or nothing for all, plus --debug for a debug APK.`);
+const builds = (target) => wanted.length === 0 || wanted.includes(target);
+const buildExe = builds("exe");
+const buildApk = builds("apk");
+const buildChrome = builds("chrome");
+const buildFirefox = builds("firefox");
 
 function fail(message) {
   console.error(`\n${message}`);
@@ -59,6 +82,28 @@ function findJdk() {
   return candidates.find((home) => home && jdkMajor(home) >= 17);
 }
 
+// Without a complete keystore.properties Gradle would quietly produce an
+// unsigned APK, which Android refuses to install. Check before building anything.
+function checkKeystore() {
+  const file = join(android, "keystore.properties");
+  if (!existsSync(file))
+    fail(`Missing ${file}. Copy keystore.properties.example and fill it in, or pass --debug.`);
+  const props = Object.fromEntries(
+    readFileSync(file, "utf8")
+      .split("\n")
+      .filter((line) => line.includes("=") && !line.trimStart().startsWith("#"))
+      .map((line) => [line.slice(0, line.indexOf("=")).trim(), line.slice(line.indexOf("=") + 1).trim()]),
+  );
+  const empty = ["storeFile", "storePassword", "keyAlias", "keyPassword"].filter((key) => !props[key]);
+  if (empty.length) fail(`${file} has no value for ${empty.join(", ")}.`);
+  if (!existsSync(resolve(android, props.storeFile))) fail(`Keystore ${resolve(android, props.storeFile)} not found.`);
+}
+
+if (buildApk && !debug) checkKeystore();
+// A new key would give the extension a new ID, so installed copies wouldn't update.
+if (buildChrome && !existsSync(crxKey))
+  fail(`Missing ${crxKey}, the key the .crx is signed with. Restore it, or leave out the chrome target.`);
+
 if (buildExe) {
   if (!existsSync(join(desktop, "node_modules"))) run("npm", ["ci"], desktop);
   // electron-builder only targets the host OS; on Windows that's NSIS + portable.
@@ -72,13 +117,58 @@ if (buildApk) {
   if (!javaHome) fail("No JDK 17+ found. Install one (or Android Studio) and set JAVA_HOME to it.");
   console.log(`\nUsing JDK at ${javaHome}`);
   const gradlew = `"${join(android, process.platform === "win32" ? "gradlew.bat" : "gradlew")}"`;
-  run(gradlew, ["assembleDebug"], android, { ...process.env, JAVA_HOME: javaHome });
+  run(gradlew, [debug ? "assembleDebug" : "assembleRelease"], android, { ...process.env, JAVA_HOME: javaHome });
+}
+
+const manifestVersion = (dir) => JSON.parse(readFileSync(join(root, dir, "manifest.json"), "utf8")).version;
+
+// [releases/ subfolder, name, source path or contents] for this build's packages.
+const packages = [];
+if (buildExe) {
+  const { productName, version } = JSON.parse(readFileSync(join(desktop, "package.json"), "utf8"));
+  const release = join(desktop, "release");
+  // release/ keeps older versions' installers too; take only this version's.
+  for (const file of readdirSync(release))
+    if (file.startsWith(`${productName}-${version}-`) && /\.(exe|dmg|AppImage)$/.test(file))
+      packages.push(["desktop", file, join(release, file)]);
+}
+if (buildApk && !debug) {
+  const outputs = join(android, "app/build/outputs/apk/release");
+  const [apk] = JSON.parse(readFileSync(join(outputs, "output-metadata.json"), "utf8")).elements;
+  if (apk.outputFile.includes("unsigned")) fail(`${apk.outputFile} is unsigned. Check apps/android/keystore.properties.`);
+  packages.push(["android", `OpenRelay-${apk.versionName}.apk`, join(outputs, apk.outputFile)]);
+}
+if (buildChrome) {
+  const version = manifestVersion("dist");
+  const zip = zipDirectory(join(root, "dist"));
+  const { crx, id } = crx3(zip, readFileSync(crxKey));
+  console.log(`\nChrome extension ID ${id}`);
+  packages.push(["chrome", `OpenRelay-${version}-chrome.zip`, zip]);
+  packages.push(["chrome", `OpenRelay-${version}.crx`, crx]);
+}
+if (buildFirefox)
+  packages.push([
+    "firefox",
+    `OpenRelay-${manifestVersion("dist-firefox")}-unsigned.xpi`,
+    zipDirectory(join(root, "dist-firefox")),
+  ]);
+
+const size = (source) => (typeof source === "string" ? statSync(source).size : source.length);
+const mib = (source) => `${(size(source) / 1024 / 1024).toFixed(1)} MiB`;
+
+const tooLarge = packages.filter(([, , source]) => size(source) > GITHUB_FILE_LIMIT);
+if (tooLarge.length)
+  fail(
+    `Not copied to releases/, since GitHub rejects files over 100 MiB:\n` +
+      tooLarge.map(([, name, source]) => `  ${name} (${mib(source)})`).join("\n"),
+  );
+
+for (const [folder, name, source] of packages) {
+  mkdirSync(join(releases, folder), { recursive: true });
+  if (typeof source === "string") copyFileSync(source, join(releases, folder, name));
+  else writeFileSync(join(releases, folder, name), source);
 }
 
 console.log("\nDone.");
-if (buildExe) {
-  const release = join(desktop, "release");
-  for (const file of readdirSync(release).filter((f) => /\.(exe|dmg|AppImage)$/.test(f)))
-    console.log(`  ${join(release, file)}`);
-}
-if (buildApk) console.log(`  ${join(android, "app/build/outputs/apk/debug/app-debug.apk")}`);
+for (const [folder, name, source] of packages) console.log(`  ${join(releases, folder, name)}  (${mib(source)})`);
+if (buildApk && debug) console.log(`  ${join(android, "app/build/outputs/apk/debug/app-debug.apk")}`);

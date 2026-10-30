@@ -1,7 +1,18 @@
+import java.util.Properties
 import javax.inject.Inject
 
 plugins {
     id("com.android.application")
+}
+
+/**
+ * Release signing comes from apps/android/keystore.properties (git-ignored):
+ * storeFile (relative to apps/android/), storePassword, keyAlias, keyPassword.
+ * Without it, release builds come out unsigned and debug builds are unaffected.
+ */
+val keystoreFile = rootProject.file("keystore.properties")
+val keystore = Properties().apply {
+    if (keystoreFile.isFile) keystoreFile.inputStream().use { load(it) }
 }
 
 android {
@@ -14,6 +25,26 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+    }
+
+    signingConfigs {
+        if (keystoreFile.isFile) {
+            create("release") {
+                storeFile = rootProject.file(keystore.getProperty("storeFile"))
+                storePassword = keystore.getProperty("storePassword")
+                keyAlias = keystore.getProperty("keyAlias")
+                keyPassword = keystore.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.findByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
     }
 }
 

@@ -1,0 +1,2 @@
+# Official release packages: never convert line endings or diff them.
+releases/** binary
