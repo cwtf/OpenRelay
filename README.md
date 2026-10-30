@@ -65,7 +65,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 65 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 69 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -88,6 +88,7 @@ Validated: injection, loaded-page feeds, settings persistence, the subscriptions
 - `src/client/` — the reader UI.
 - `src/shared/api.ts` — the reader's presentation models.
 - `src/extension/` — Reddit normalization, DOM extraction, message bridge, content script and toolbar worker.
+- `src/hosts/` — what the reader and content script need from the app running them (storage, downloads, reader URL, toggle), with the browser-extension implementation.
 - `public/manifest.json` — extension manifest.
 - `tools/build.mjs` — extension build, for Chrome and Firefox.
 - `tools/browser-smoke.mjs` and `tools/vote-smoke.mjs` — browser integration checks.

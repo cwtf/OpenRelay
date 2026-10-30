@@ -40,6 +40,10 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 2. **Reader** (`src/client/`, extension origin, inside the iframe): the React app. It can't reach Reddit directly. Every request goes through `bridge()` in `src/extension/bridge.ts`, a postMessage RPC to the parent page. Despite its folder, `bridge.ts` is imported by the reader.
 3. **Service worker** (`src/extension/background.ts`): only forwards toolbar-icon clicks as `openrelay:toggle`.
 
+### Host adapter
+
+Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
+
 ### The bridge is a security boundary
 
 `content.ts` accepts messages only from its own iframe with the extension origin, and handles a fixed set of actions:
@@ -63,10 +67,10 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 
 - `app/App.tsx` is the shell: screen stack, drawer, sheets, media viewer, and Relay's dual-pane layout (listing left, post right). Screens navigate through `useNav()` (`NavContext` in `app/nav.ts`) and learn which pane they're in from `usePane()`. Dual-pane rules are in `lib/panes.ts`.
 - Preferences are in `app/prefs.tsx` and are applied to `document` before first render (`reader.tsx`).
-- Persistence: always use `lib/storage.ts` (`readJson`/`writeJson`/`RecentSet`), never `localStorage`. It is a synchronous in-memory cache over `chrome.storage.local`, loaded by `initStorage()` before the app renders. Chrome denies `localStorage` to the extension frame when third-party cookies are blocked, which the browser tests exercise.
+- Persistence: always use `lib/storage.ts` (`readJson`/`writeJson`/`RecentSet`), never `localStorage`. It is a synchronous in-memory cache over the host's storage (`chrome.storage.local` in the extension), loaded by `initStorage()` before the app renders. Chrome denies `localStorage` to the extension frame when third-party cookies are blocked, which the browser tests exercise.
 - Styling: `styles/theme.css` holds the design tokens/themes, `reader.css` the components, and `markdown.css` the custom Reddit Markdown renderer (`lib/markdownParser.ts` + `lib/markdown.tsx`).
 
 ## Repo notes
 
 - `dist/`, `dist-firefox/`, `*.xpi`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`.
-- The README lists the unit-test count ("54 unit tests"). Update it if you add or remove tests.
+- The README lists the unit-test count ("69 unit tests"). Update it if you add or remove tests.

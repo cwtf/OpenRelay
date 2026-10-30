@@ -3,6 +3,7 @@ import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
 import { allowedSearchPagePath, parseSearchPage } from "./search";
 import { readSnapshot } from "./snapshot";
+import { pageHost } from "../hosts/page";
 
 let host: HTMLDivElement | null = null;
 let frame: HTMLIFrameElement | null = null;
@@ -13,7 +14,8 @@ let originalOverflow = "";
 let mountedUrl = "";
 let dismissed = new URL(location.href).searchParams.get("openrelay") === "off";
 let lastUrl = location.href;
-const extensionOrigin = new URL(chrome.runtime.getURL("reader.html")).origin;
+const appHost = pageHost();
+const readerOrigin = new URL(appHost.readerUrl("")).origin;
 
 function show(visible: boolean) {
   if (!host || active === visible) return;
@@ -51,10 +53,9 @@ function mount() {
   frame = document.createElement("iframe");
   frame.title = "OpenRelay Reddit reader";
   frame.allow = "clipboard-write; fullscreen";
-  frame.src =
-    chrome.runtime.getURL("reader.html") +
-    "#" +
-    new URLSearchParams({ source: location.href });
+  frame.src = appHost.readerUrl(
+    String(new URLSearchParams({ source: location.href })),
+  );
   const exit = (exitButton = document.createElement("button"));
   exit.textContent = "Original Reddit";
   exit.title =
@@ -84,7 +85,7 @@ async function read(path: string, accept: string) {
   return response;
 }
 window.addEventListener("message", async (event) => {
-  if (event.source !== frame?.contentWindow || event.origin !== extensionOrigin)
+  if (event.source !== frame?.contentWindow || event.origin !== readerOrigin)
     return;
   // Keep "Original Reddit" clear of the reader's bottom app bar.
   if (event.data?.type === "openrelay:inset") {
@@ -168,7 +169,7 @@ window.addEventListener("message", async (event) => {
     } else throw new Error("Unsupported request");
     target?.postMessage(
       { type: "openrelay:response", id, value },
-      extensionOrigin,
+      readerOrigin,
     );
   } catch (error) {
     target?.postMessage(
@@ -177,12 +178,11 @@ window.addEventListener("message", async (event) => {
         id,
         error: error instanceof Error ? error.message : "Request failed",
       },
-      extensionOrigin,
+      readerOrigin,
     );
   }
 });
-chrome.runtime.onMessage.addListener((message) => {
-  if ((message as { type?: string })?.type !== "openrelay:toggle") return;
+appHost.onToggle(() => {
   dismissed = active;
   if (active) show(false);
   else mount();

@@ -3,27 +3,17 @@
  *
  * The reader runs in an extension iframe on reddit.com, where Chrome denies
  * `localStorage` whenever third-party cookies are blocked (and in Incognito).
- * Values therefore live in `chrome.storage.local`, which is unaffected, and
- * are mirrored in memory so reads stay synchronous. `initStorage()` must
- * resolve before the first read. Outside the extension (tests, previews) the
- * page's own `localStorage` is used when it is available.
+ * Values therefore live in the host's storage (`chrome.storage.local` in the
+ * extension, see `src/hosts/`), which is unaffected, and are mirrored in
+ * memory so reads stay synchronous. `initStorage()` must resolve before the
+ * first read. When the host has no storage (tests, previews) the page's own
+ * `localStorage` is used when it is available.
  */
+import { readerHost } from "../../hosts/reader.ts";
+import type { HostStorage } from "../../hosts/types.ts";
+
 const PREFIX = "openrelay:";
 const FLUSH_DELAY = 150;
-
-type Area = {
-  get(keys: null): Promise<Record<string, unknown>>;
-  set(items: Record<string, unknown>): Promise<void>;
-  remove(keys: string[]): Promise<void>;
-};
-
-const extensionArea = (): Area | null => {
-  try {
-    return (globalThis as any).chrome?.storage?.local ?? null;
-  } catch {
-    return null;
-  }
-};
 
 const pageStorage = (): Storage | null => {
   try {
@@ -38,14 +28,14 @@ const pageStorage = (): Storage | null => {
 const memory = new Map<string, unknown>();
 const dirty = new Set<string>();
 const watchers = new Map<string, Set<(value: unknown) => void>>();
-let area: Area | null = null;
+let area: HostStorage | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let ready: Promise<void> | null = null;
 
 /** Load stored values into memory. Safe to call more than once. */
 export const initStorage = (): Promise<void> =>
   (ready ??= (async () => {
-    area = extensionArea();
+    area = readerHost().storage;
     const page = pageStorage();
     if (!area) {
       if (!page) return;
@@ -62,7 +52,7 @@ export const initStorage = (): Promise<void> =>
       return;
     }
     try {
-      const stored = await area.get(null);
+      const stored = await area.getAll();
       for (const [key, value] of Object.entries(stored))
         if (key.startsWith(PREFIX)) memory.set(key.slice(PREFIX.length), value);
     } catch (error) {
@@ -83,24 +73,21 @@ export const initStorage = (): Promise<void> =>
       }
       if (dirty.size) void flush();
     }
-    (globalThis as any).chrome?.storage?.onChanged?.addListener(
-      (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
-        if (areaName !== "local") return;
-        for (const [key, change] of Object.entries(changes)) {
-          if (!key.startsWith(PREFIX)) continue;
-          const name = key.slice(PREFIX.length);
-          // Our own pending write is newer than whatever another tab saved.
-          if (
-            dirty.has(name) ||
-            JSON.stringify(change.newValue) === JSON.stringify(memory.get(name))
-          )
-            continue;
-          if (change.newValue === undefined) memory.delete(name);
-          else memory.set(name, change.newValue);
-          for (const watcher of watchers.get(name) ?? []) watcher(change.newValue);
-        }
-      },
-    );
+    area.onChanged?.((changes) => {
+      for (const [key, change] of Object.entries(changes)) {
+        if (!key.startsWith(PREFIX)) continue;
+        const name = key.slice(PREFIX.length);
+        // Our own pending write is newer than whatever another tab saved.
+        if (
+          dirty.has(name) ||
+          JSON.stringify(change.newValue) === JSON.stringify(memory.get(name))
+        )
+          continue;
+        if (change.newValue === undefined) memory.delete(name);
+        else memory.set(name, change.newValue);
+        for (const watcher of watchers.get(name) ?? []) watcher(change.newValue);
+      }
+    });
     globalThis.addEventListener?.("pagehide", () => void flush());
   })());
 

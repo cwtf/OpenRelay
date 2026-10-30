@@ -1,5 +1,7 @@
 import { safeUrl } from "../../extension/reddit";
 import { audioFromPlaylist, muxAudioVideo } from "./mp4";
+import { readerHost } from "../../hosts/reader";
+import type { Downloads } from "../../hosts/types";
 
 export const toast = (text: string): void => {
   window.dispatchEvent(new CustomEvent("openrelay:toast", { detail: text }));
@@ -28,33 +30,17 @@ export async function copyText(
     toast("Copy is not available here");
   }
 }
-type Downloads = {
-  download(options: { url: string; filename?: string }): Promise<number>;
-};
-type ExtensionApi = {
-  permissions?: {
-    request(permissions: { permissions: string[] }): Promise<boolean>;
-  };
-  downloads?: Downloads;
-};
-
 /**
- * Asks for the optional `downloads` permission (Chrome only prompts the first
- * time). Call it before awaiting anything else: the prompt needs the click's
- * user gesture.
+ * Asks the host for file saving and toasts when it can't. Call it before
+ * awaiting anything else: Chrome's permission prompt needs the click's user
+ * gesture.
  */
 async function allowDownloads(declined: string): Promise<Downloads | null> {
-  const api = (globalThis as { chrome?: ExtensionApi }).chrome;
-  if (!api?.permissions) {
-    toast("Download is not available here");
-    return null;
-  }
-  const granted = await api.permissions.request({ permissions: ["downloads"] });
-  if (!granted || !api.downloads) {
-    toast(declined);
-    return null;
-  }
-  return api.downloads;
+  const downloads = await readerHost().downloads();
+  if (downloads === "unavailable") toast("Download is not available here");
+  else if (downloads === "declined") toast(declined);
+  else return downloads;
+  return null;
 }
 
 const fileName = (url: string): { filename?: string } => {
@@ -63,7 +49,7 @@ const fileName = (url: string): { filename?: string } => {
 };
 
 /**
- * Saves an image with `chrome.downloads`. Reddit's image hosts send no CORS
+ * Saves an image through the host, by URL. Reddit's image hosts send no CORS
  * headers, so the reader can't fetch the file itself.
  */
 export async function downloadImage(value: string): Promise<void> {
@@ -73,7 +59,7 @@ export async function downloadImage(value: string): Promise<void> {
     const downloads = await allowDownloads(
       "Downloads not allowed. Right-click the image to save it",
     );
-    if (downloads) await downloads.download({ url, ...fileName(url) });
+    if (downloads) await downloads.save({ url, ...fileName(url) });
   } catch {
     toast("Download is not available here");
   }
@@ -129,18 +115,15 @@ export async function downloadVideo(value: string): Promise<void> {
     toast("Preparing video…");
     const video = await redditVideo(url);
     if (!video) {
-      await downloads.download({ url, ...fileName(url) });
+      await downloads.save({ url, ...fileName(url) });
       return;
     }
     if (video.silent) toast("Couldn't add the sound. Saving the video alone");
-    const blobUrl = URL.createObjectURL(
-      new Blob([video.data as Uint8Array<ArrayBuffer>], { type: "video/mp4" }),
-    );
-    try {
-      await downloads.download({ url: blobUrl, filename: video.name });
-    } finally {
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-    }
+    await downloads.save({
+      data: video.data,
+      filename: video.name,
+      type: "video/mp4",
+    });
   } catch {
     toast("Download is not available here");
   } finally {
