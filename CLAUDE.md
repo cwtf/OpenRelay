@@ -15,6 +15,7 @@ npm run type-check     # tsc --noEmit
 npm test               # unit tests (node:test, run on the .ts sources directly)
 npm run build          # vite build into dist/ (Chrome) and dist-firefox/
 npm run test:browser   # Playwright smoke tests against the built dist/ (build first)
+npm run build:apps     # desktop installer + portable exe and Android debug APK (add `-- exe` or `-- apk` for one)
 ```
 
 Run one unit test file, or one test by name:
