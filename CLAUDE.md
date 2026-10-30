@@ -26,6 +26,16 @@ node --experimental-strip-types --test --test-name-pattern="modhash" src/extensi
 
 Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
 
+The desktop app has its own `package.json` (Electron and Playwright) in `apps/desktop/`:
+
+```sh
+cd apps/desktop
+npm ci
+npm run build          # root build, then copies reader.html, assets/, content.js into apps/desktop/openrelay/
+npm start              # run the app
+npm test               # test/smoke.mjs: browser-smoke ported to Playwright's Electron launcher
+```
+
 After rebuilding, reload the unpacked extension in `chrome://extensions` and refresh the Reddit tab. Until the extension is reloaded, the old content script keeps running and rejects new bridge actions with "Unsupported request". The reader shows that as a "reload the extension" message.
 
 ## Unit-test constraints
@@ -43,6 +53,14 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 ### Host adapter
 
 Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
+
+### Desktop app (`apps/desktop/`)
+
+Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` directly.
+
+- `src/main.js` (main process): a `BrowserWindow` on `https://www.reddit.com/` in the `persist:openrelay` session. It serves the copied build from the privileged `openrelay://reader` scheme (`bypassCSP`, so Reddit's CSP can't block the frame), with the extension's page CSP. Its IPC handlers (storage in `userData/openrelay-storage.json`, downloads) reject any sender frame whose origin isn't `openrelay://reader`. It hands `content.js` only to Reddit top frames. It also sets the new-window rules (Reddit URLs in a new window on the same session, others via `shell.openExternal`), the permission allowlist, and the View menu's `toggle-reader` item.
+- `src/preload.cjs` (sandboxed, so CommonJS and a single file): runs in every frame. On a Reddit top frame it defines `openRelayPageHost` and runs `content.js` in isolated world 1001 on `DOMContentLoaded`. That world has its own CSP and the page's security origin, so its fetches are same-origin with Reddit and it is exempt from Reddit's CSP. On the `openrelay://reader` frame it exposes `openRelayReaderHost` through `contextBridge`. Every other frame gets nothing.
+- `test/hook.cjs` is loaded with `electron -r` by the smoke test only. It sets a throwaway `userData`, keeps windows rendering when occluded, and cancels every request until the fixture routes are in place. In the test, resize the real window (`setContentSize`), not Playwright's viewport: an emulated viewport larger than the window puts clicks outside it.
 
 ### The bridge is a security boundary
 

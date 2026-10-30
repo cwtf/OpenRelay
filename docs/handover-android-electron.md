@@ -14,7 +14,7 @@ This document starts two separate pieces of work: an **Android app** that wraps 
   - `npm run check` passes (69 unit tests).
   - All four Chrome browser suites pass.
   - A fixture smoke run in Firefox 145 passes: the reader mounts, JSON loads through the bridge, and a vote is sent with the modhash.
-  - The Android and desktop apps don't exist yet.
+  - The Android app doesn't exist yet. The desktop app is started on `feat/desktop-app` (see its section), unpackaged.
 
 ## How a wrapper app runs OpenRelay
 
@@ -125,6 +125,12 @@ Verify in your session:
 
 - Fetches from the isolated world are same-origin with the page and carry its cookies. Watch for `sec-fetch-site: same-origin` and votes reaching `/api/vote` with the modhash. If they aren't, run `content.js` in the main world as Android does, and document it.
 - `postMessage` from `openrelay://reader` arrives with that exact origin.
+
+Results (branch `feat/desktop-app`, Electron 45, against fixtures):
+
+- The content script's requests carry the page's cookies, and its POSTs carry `Origin: https://www.reddit.com`. A vote reached `/api/vote` with the modhash. `sec-fetch-site` can't be observed: Playwright fulfils routed requests before the network stack adds it. The isolated world needs `setIsolatedWorldInfo` with a CSP of its own and `securityOrigin: location.origin`. Without its own CSP, Reddit's CSP blocks the content script's shadow-DOM `<style>`, which Chrome allows for extensions.
+- Bridge messages reach the page with origin `openrelay://reader`, and responses are accepted by the reader.
+- Not settled: the reader's own requests to reddit.com (images) carry Reddit's `SameSite=None` cookies, as an extension frame's do when third-party cookies are allowed. CORS still keeps the reader from reading Reddit's responses, and the smoke test checks that.
 
 Testing: Playwright can launch Electron (`_electron.launch`). The existing suites in `tools/*-smoke.mjs` serve fixture Reddit pages and assert on exact write requests. Port `browser-smoke.mjs` first, so the desktop app gets the same guarantees without ever contacting real Reddit.
 

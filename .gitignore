@@ -9,3 +9,5 @@ test-results/
 dist.crx
 dist.pem
 APK/
+# Desktop app: the shared build copied in by apps/desktop/tools/copy-dist.mjs
+apps/desktop/openrelay/
