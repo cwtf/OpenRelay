@@ -29,6 +29,16 @@ Microsoft Edge Canary for Android can sideload extensions from a `.crx` file.
 
 To update, repack **dist** with the same **dist.pem** (Chrome's **Pack extension** dialog has a **Private key file** field) and install the new **dist.crx** the same way.
 
+## Install on Firefox
+
+`npm run build` also writes a Firefox copy of the extension to **dist-firefox/** (Firefox 140 or later).
+
+1. Open **about:debugging#/runtime/this-firefox** in Firefox.
+2. Click **Load Temporary Add-on…** and select **dist-firefox/manifest.json**.
+3. Open or refresh a Reddit page.
+
+Firefox removes temporary add-ons when it restarts. To keep it installed, have Mozilla sign it, for example with `web-ext sign` as an unlisted add-on on addons.mozilla.org. Firefox for Android (142 or later) also installs only signed add-ons. The add-on ID, `openrelay-reddit@cwtf`, is set in `tools/build.mjs`; keep it unchanged once the add-on is published, or updates won't reach existing installs.
+
 ## Data and permissions
 
 A Manifest V3 content script runs only on www.reddit.com, reddit.com and old.reddit.com. It embeds the bundled reader in an extension-origin iframe, keeping the reader's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
@@ -55,7 +65,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 65 unit tests, and the production build. Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 65 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -79,5 +89,5 @@ Validated: injection, loaded-page feeds, settings persistence, the subscriptions
 - `src/shared/api.ts` — the reader's presentation models.
 - `src/extension/` — Reddit normalization, DOM extraction, message bridge, content script and toolbar worker.
 - `public/manifest.json` — extension manifest.
-- `tools/build.mjs` — extension build.
+- `tools/build.mjs` — extension build, for Chrome and Firefox.
 - `tools/browser-smoke.mjs` and `tools/vote-smoke.mjs` — browser integration checks.

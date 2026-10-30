@@ -13,7 +13,7 @@ npm ci
 npm run check          # type-check + unit tests + production build (the main gate)
 npm run type-check     # tsc --noEmit
 npm test               # unit tests (node:test, run on the .ts sources directly)
-npm run build          # vite build into dist/
+npm run build          # vite build into dist/ (Chrome) and dist-firefox/
 npm run test:browser   # Playwright smoke tests against the built dist/ (build first)
 ```
 
@@ -34,7 +34,7 @@ Unit tests run the TypeScript sources directly through Node's type stripping, wi
 
 ## Architecture
 
-The code runs in three contexts. `tools/build.mjs` builds them separately: the reader as a Vite app from `src/client/reader.html`, and `content.ts` and `background.ts` as standalone IIFE bundles. It then copies `public/manifest.json` into `dist/`.
+The code runs in three contexts. `tools/build.mjs` builds them separately: the reader as a Vite app from `src/client/reader.html`, and `content.ts` and `background.ts` as standalone IIFE bundles. It then copies `public/manifest.json` into `dist/`, and copies `dist/` to `dist-firefox/` with a Firefox manifest (`background.scripts` in place of the service worker, plus `browser_specific_settings` with the add-on ID). Only the manifest differs between the two. The browser tests cover Chrome only.
 
 1. **Content script** (`src/extension/content.ts`, Reddit page origin): mounts a full-screen closed-shadow-DOM host holding an iframe of `reader.html`, passing the page URL in the hash (`#source=…`). It marks the page `inert`, shows the "Original Reddit" exit button, and skips humanity/captcha gate pages. It polls `location.href` to remount on SPA navigation. It is also the **only** code that talks to Reddit: requests run same-origin with the user's session.
 2. **Reader** (`src/client/`, extension origin, inside the iframe): the React app. It can't reach Reddit directly. Every request goes through `bridge()` in `src/extension/bridge.ts`, a postMessage RPC to the parent page. Despite its folder, `bridge.ts` is imported by the reader.
@@ -68,5 +68,5 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 
 ## Repo notes
 
-- `dist/`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`.
+- `dist/`, `dist-firefox/`, `*.xpi`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`.
 - The README lists the unit-test count ("54 unit tests"). Update it if you add or remove tests.
