@@ -8,6 +8,9 @@ import { pageHost } from "../hosts/page";
 let host: HTMLDivElement | null = null;
 let frame: HTMLIFrameElement | null = null;
 let exitButton: HTMLButtonElement | null = null;
+let mounted = false;
+// Counts reader loads, so a reply can't reach a reader loaded after its request.
+let generation = 0;
 let active = false;
 let originalInert = false;
 let originalOverflow = "";
@@ -15,33 +18,59 @@ let mountedUrl = "";
 let dismissed = new URL(location.href).searchParams.get("openrelay") === "off";
 let lastUrl = location.href;
 const appHost = pageHost();
+// A host that shows the reader itself; otherwise the reader is our iframe.
+const view = appHost.readerView;
 const readerOrigin = new URL(appHost.readerUrl("")).origin;
 
 function show(visible: boolean) {
-  if (!host || active === visible) return;
+  if (!mounted || active === visible) return;
   active = visible;
   if (visible) {
     originalInert = document.body.inert;
     originalOverflow = document.documentElement.style.overflow;
     document.body.inert = true;
     document.documentElement.style.overflow = "hidden";
-    host.style.display = "block";
-    frame?.focus();
+    if (view) view.setVisible(true);
+    else if (host) {
+      host.style.display = "block";
+      frame?.focus();
+    }
   } else {
     document.body.inert = originalInert;
     document.documentElement.style.overflow = originalOverflow;
-    host.style.display = "none";
+    if (view) view.setVisible(false);
+    else if (host) host.style.display = "none";
   }
+}
+function unmount() {
+  show(false);
+  if (mounted) view?.close();
+  host?.remove();
+  host = null;
+  frame = null;
+  exitButton = null;
+  mounted = false;
+  generation++;
+}
+function exitToReddit() {
+  dismissed = true;
+  show(false);
 }
 function mount() {
   if (!parseRoute(location.href)) return;
-  if (host && mountedUrl === location.href) {
+  if (mounted && mountedUrl === location.href) {
     show(true);
     return;
   }
-  show(false);
-  host?.remove();
+  unmount();
   mountedUrl = location.href;
+  mounted = true;
+  const hash = String(new URLSearchParams({ source: location.href }));
+  if (view) {
+    view.open(hash);
+    show(true);
+    return;
+  }
   host = document.createElement("div");
   host.id = "openrelay-extension";
   host.style.cssText =
@@ -53,17 +82,12 @@ function mount() {
   frame = document.createElement("iframe");
   frame.title = "OpenRelay Reddit reader";
   frame.allow = "clipboard-write; fullscreen";
-  frame.src = appHost.readerUrl(
-    String(new URLSearchParams({ source: location.href })),
-  );
+  frame.src = appHost.readerUrl(hash);
   const exit = (exitButton = document.createElement("button"));
   exit.textContent = "Original Reddit";
   exit.title =
     "Return to the original page. Click the extension icon to reopen OpenRelay.";
-  exit.addEventListener("click", () => {
-    dismissed = true;
-    show(false);
-  });
+  exit.addEventListener("click", exitToReddit);
   shadow.append(style, frame, exit);
   document.documentElement.append(host);
   show(true);
@@ -84,19 +108,41 @@ async function read(path: string, accept: string) {
     );
   return response;
 }
-window.addEventListener("message", async (event) => {
-  if (event.source !== frame?.contentWindow || event.origin !== readerOrigin)
+/** Replies to the reader that's loaded now, and to no reader loaded later. */
+function replier(): (message: unknown) => void {
+  if (view) {
+    const requested = generation;
+    return (message) => {
+      if (requested === generation) view.post(message);
+    };
+  }
+  const target = frame?.contentWindow;
+  return (message) => target?.postMessage(message, readerOrigin);
+}
+window.addEventListener("message", (event) => {
+  if (
+    view ||
+    event.source !== frame?.contentWindow ||
+    event.origin !== readerOrigin
+  )
     return;
+  void receive(event.data);
+});
+// The host relays only the reader's messages, and checks their origin itself.
+view?.onMessage((message) => void receive(message));
+view?.onExit(exitToReddit);
+async function receive(data: any) {
   // Keep "Original Reddit" clear of the reader's bottom app bar.
-  if (event.data?.type === "openrelay:inset") {
-    const bottom = Number(event.data.bottom);
-    if (exitButton && Number.isFinite(bottom) && bottom >= 0 && bottom <= 200)
-      exitButton.style.bottom = `${12 + bottom}px`;
+  if (data?.type === "openrelay:inset") {
+    const bottom = Number(data.bottom);
+    if (!Number.isFinite(bottom) || bottom < 0 || bottom > 200) return;
+    if (view) view.setBottomInset(bottom);
+    else if (exitButton) exitButton.style.bottom = `${12 + bottom}px`;
     return;
   }
-  if (event.data?.type !== "openrelay:request") return;
-  const { id, action, path, payload } = event.data;
-  const target = frame.contentWindow;
+  if (data?.type !== "openrelay:request") return;
+  const { id, action, path, payload } = data;
+  const reply = replier();
   if (!Number.isSafeInteger(id)) return;
   try {
     let value: unknown;
@@ -167,21 +213,15 @@ window.addEventListener("message", async (event) => {
         throw new Error("Reddit did not return a search page.");
       value = parseSearchPage(await response.text());
     } else throw new Error("Unsupported request");
-    target?.postMessage(
-      { type: "openrelay:response", id, value },
-      readerOrigin,
-    );
+    reply({ type: "openrelay:response", id, value });
   } catch (error) {
-    target?.postMessage(
-      {
-        type: "openrelay:response",
-        id,
-        error: error instanceof Error ? error.message : "Request failed",
-      },
-      readerOrigin,
-    );
+    reply({
+      type: "openrelay:response",
+      id,
+      error: error instanceof Error ? error.message : "Request failed",
+    });
   }
-});
+}
 appHost.onToggle(() => {
   dismissed = active;
   if (active) show(false);
@@ -213,19 +253,13 @@ function autoMount() {
 setTimeout(autoMount, 500);
 setInterval(() => {
   if (isGatePage()) {
-    show(false);
-    host?.remove();
-    host = null;
-    frame = null;
+    if (mounted) unmount();
     return;
   }
-  if (!host) autoMount();
+  if (!mounted) autoMount();
   if (location.href !== lastUrl) {
     lastUrl = location.href;
-    show(false);
-    host?.remove();
-    host = null;
-    frame = null;
+    unmount();
     // Native mode persists for this tab until the toolbar button is clicked.
     autoMount();
   }

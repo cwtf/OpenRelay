@@ -29,9 +29,43 @@ export type SaveFile =
 
 export type Downloads = { save(file: SaveFile): Promise<void> };
 
+/**
+ * A message channel between the reader and the Reddit page, for a host that
+ * shows the reader outside the page (see `PageHost.readerView`). It carries the
+ * same `openrelay:*` messages as the iframe's `postMessage`; the host checks
+ * both ends' origins.
+ */
+export type HostChannel = {
+  post(message: unknown): void;
+  onMessage(listener: (message: unknown) => void): void;
+};
+
+/**
+ * The reader shown by the host itself, over the page, instead of in an iframe
+ * the content script adds. Android needs this: Reddit's CSP `frame-src` blocks
+ * the reader's origin, and a WebView can't exempt a frame from it.
+ */
+export type ReaderView = HostChannel & {
+  /** Loads the reader with this hash (as `readerUrl` would), still hidden. */
+  open(hash: string): void;
+  /** Shows or hides the reader that's already open. */
+  setVisible(visible: boolean): void;
+  /** Unloads the reader. */
+  close(): void;
+  /** How much of the bottom edge the reader's chrome uses, for the host's own controls. */
+  setBottomInset(bottom: number): void;
+  /** The host's "Original Reddit" control was used. */
+  onExit(listener: () => void): void;
+};
+
 export type ReaderHost = {
   /** Shown in diagnostics only. */
   name: string;
+  /**
+   * The channel to the Reddit page when the host shows the reader itself.
+   * Without one, the reader is in an iframe and uses `window.parent`.
+   */
+  channel?: HostChannel;
   /** `null` falls back to the frame's `localStorage` when it has one. */
   storage: HostStorage | null;
   /**
@@ -48,4 +82,6 @@ export type PageHost = {
   readerUrl(hash: string): string;
   /** The toolbar button / menu item that shows or hides the reader. */
   onToggle(listener: () => void): void;
+  /** Set when the host shows the reader itself; otherwise it's an iframe. */
+  readerView?: ReaderView;
 };

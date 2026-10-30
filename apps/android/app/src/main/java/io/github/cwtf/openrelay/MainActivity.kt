@@ -1,0 +1,356 @@
+package io.github.cwtf.openrelay
+
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Bundle
+import android.os.Message
+import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayInputStream
+import java.io.File
+
+private const val TAG = "OpenRelay"
+private const val READER_HOST = "appassets.androidplatform.net"
+private const val READER_ORIGIN = "https://$READER_HOST"
+private const val READER_URL = "$READER_ORIGIN/assets/openrelay/reader.html"
+private val REDDIT_ORIGINS =
+    setOf("https://www.reddit.com", "https://old.reddit.com", "https://reddit.com")
+
+private fun isReddit(url: Uri) =
+    url.scheme == "https" && url.host.let { it == "reddit.com" || it?.endsWith(".reddit.com") == true }
+
+/**
+ * Reddit in one WebView, with OpenRelay's content script, and the reader in a
+ * second WebView over it. Reddit's CSP blocks the reader's origin as an iframe,
+ * so the two talk through this activity: `openRelayPage` (Reddit's top frame
+ * only) and `openRelayNative` (the reader's origin only). Only the reader's
+ * channel reaches storage.
+ */
+class MainActivity : ComponentActivity() {
+    private lateinit var redditView: WebView
+    private lateinit var readerView: WebView
+    private lateinit var toggleButton: Button
+    private lateinit var storage: JsonFileStorage
+    private var pageProxy: JavaScriptReplyProxy? = null
+    private var readerProxy: JavaScriptReplyProxy? = null
+    private var readerShown = false
+    private var readerInset = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        storage = JsonFileStorage(File(filesDir, "openrelay-storage.json"))
+        val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        WebView.setWebContentsDebuggingEnabled(debuggable)
+        CookieManager.getInstance().setAcceptCookie(true)
+
+        redditView = newWebView(debuggable)
+        readerView = newWebView(debuggable).apply { visibility = View.GONE }
+        // The reader never sends Reddit's cookies (they'd be third-party here).
+        CookieManager.getInstance().setAcceptThirdPartyCookies(readerView, false)
+        toggleButton = Button(this).apply {
+            isAllCaps = false
+            setTextColor(Color.parseColor("#17283b"))
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#8494a8"))
+                cornerRadius = dp(20).toFloat()
+            }
+            minHeight = 0
+            minimumHeight = 0
+            setPadding(dp(13), dp(8), dp(13), dp(8))
+            elevation = dp(2).toFloat()
+            setOnClickListener {
+                sendToPage(JSONObject().put("kind", if (readerShown) "exit" else "toggle"))
+            }
+        }
+        val root = FrameLayout(this).apply {
+            addView(redditView)
+            addView(readerView)
+            addView(toggleButton, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.START,
+            ))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.ime(),
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        setContentView(root)
+        updateToggle()
+
+        setUpReader()
+        setUpReddit()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // TODO: ask the reader to pop its own back stack first (a host event).
+                if (redditView.canGoBack()) redditView.goBack() else finish()
+            }
+        })
+        redditView.loadUrl(intent.dataString?.takeIf { isReddit(Uri.parse(it)) } ?: "https://www.reddit.com/")
+    }
+
+    private fun newWebView(debuggable: Boolean) = WebView(this).apply {
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.setSupportMultipleWindows(true)
+        webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                if (debuggable) Log.d(TAG, "console: ${message.message()}")
+                return debuggable
+            }
+
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message,
+            ): Boolean = isUserGesture && catchNewWindow(resultMsg)
+        }
+    }
+
+    // --- The reader ---------------------------------------------------------
+
+    private fun setUpReader() {
+        val assetLoader = WebViewAssetLoader.Builder()
+            .setDomain(READER_HOST)
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+        readerView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest,
+            ): WebResourceResponse? {
+                // Everything on the reader's host is answered here, never by the network.
+                if (request.url.host != READER_HOST) return null
+                return assetLoader.shouldInterceptRequest(request.url) ?: notFound()
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                // This WebView only ever shows the reader; links leave it.
+                if (request.url.host == READER_HOST) return false
+                openUrl(request.url)
+                return true
+            }
+        }
+        WebViewCompat.addWebMessageListener(
+            readerView,
+            "openRelayNative",
+            setOf(READER_ORIGIN),
+        ) { _: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, reply: JavaScriptReplyProxy ->
+            if (sourceOrigin.toString() != READER_ORIGIN || !isMainFrame) return@addWebMessageListener
+            val data = message.data ?: return@addWebMessageListener
+            readerProxy = reply
+            // Page-bound messages pass through as they are; they can be large.
+            if (data.startsWith(POST_PREFIX)) {
+                pageProxy?.postMessage(data)
+                return@addWebMessageListener
+            }
+            val request = runCatching { JSONObject(data) }.getOrNull() ?: return@addWebMessageListener
+            if (request.optString("kind") != "rpc") return@addWebMessageListener
+            val response = JSONObject().put("kind", "rpc").put("id", request.opt("id"))
+            try {
+                response.put("value", handleStorage(request.getString("method"), request.opt("args")))
+            } catch (error: Exception) {
+                response.put("error", error.message ?: "Request failed")
+            }
+            reply.postMessage(response.toString())
+        }
+        WebViewCompat.addDocumentStartJavaScript(readerView, asset("reader-host.js"), setOf(READER_ORIGIN))
+    }
+
+    private fun handleStorage(method: String, args: Any?): Any = when (method) {
+        "storage.getAll" -> storage.getAll()
+        "storage.set" -> storage.set(args as JSONObject).let { JSONObject.NULL }
+        "storage.remove" -> storage.remove(args as JSONArray).let { JSONObject.NULL }
+        else -> throw IllegalArgumentException("Unsupported method")
+    }
+
+    private fun showReader(shown: Boolean) {
+        readerShown = shown
+        readerView.visibility = if (shown) View.VISIBLE else View.GONE
+        if (shown) readerView.requestFocus()
+        updateToggle()
+    }
+
+    private fun closeReader() {
+        showReader(false)
+        readerProxy = null
+        readerView.loadUrl("about:blank")
+    }
+
+    private fun updateToggle() {
+        toggleButton.text = if (readerShown) "Original Reddit" else "OpenRelay"
+        (toggleButton.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.leftMargin = dp(12)
+            it.bottomMargin = dp(12 + if (readerShown) readerInset else 0)
+            toggleButton.layoutParams = it
+        }
+    }
+
+    // --- Reddit -------------------------------------------------------------
+
+    private fun setUpReddit() {
+        redditView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (isReddit(request.url)) return false
+                openUrl(request.url)
+                return true
+            }
+
+            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                // A new document: its content script mounts the reader again if it should.
+                // (pageProxy stays: the new document's first message can arrive before this.)
+                closeReader()
+            }
+        }
+        WebViewCompat.addWebMessageListener(
+            redditView,
+            "openRelayPage",
+            REDDIT_ORIGINS,
+        ) { _: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, reply: JavaScriptReplyProxy ->
+            if (sourceOrigin.toString() !in REDDIT_ORIGINS || !isMainFrame) return@addWebMessageListener
+            val data = message.data ?: return@addWebMessageListener
+            pageProxy = reply
+            if (data.startsWith(POST_PREFIX)) {
+                readerProxy?.postMessage(data)
+                return@addWebMessageListener
+            }
+            val command = runCatching { JSONObject(data) }.getOrNull() ?: return@addWebMessageListener
+            when (command.optString("kind")) {
+                "open" -> {
+                    readerProxy = null
+                    readerView.loadUrl(READER_URL + "#" + command.optString("hash"))
+                }
+                "visible" -> showReader(command.optBoolean("visible"))
+                "close" -> closeReader()
+                "inset" -> {
+                    readerInset = command.optInt("bottom").coerceIn(0, 200)
+                    updateToggle()
+                }
+            }
+        }
+
+        val content = asset("page-host.js")
+            .replace("/*READER_URL*/", JSONObject.quote(READER_URL))
+            .replace("/*CONTENT_JS*/", asset("openrelay/content.js"))
+        // TODO: run in an isolated world (WebViewCompat.addJavaScriptOnEvent with
+        // getExecutionWorld) where JS_INJECTION_IN_FRAME_AND_WORLD is supported.
+        WebViewCompat.addDocumentStartJavaScript(redditView, content, REDDIT_ORIGINS)
+    }
+
+    private fun sendToPage(message: JSONObject) {
+        pageProxy?.postMessage(message.toString())
+    }
+
+    // --- New windows and links ----------------------------------------------
+
+    /** Reddit links open in the app's Reddit view (same session); others in the browser. */
+    private fun openUrl(url: Uri) {
+        if (isReddit(url)) {
+            redditView.loadUrl(url.toString())
+        } else if (url.scheme == "https" || url.scheme == "http") {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, url).addCategory(Intent.CATEGORY_BROWSABLE))
+            } catch (_: ActivityNotFoundException) {
+                Log.w(TAG, "No app to open a link")
+            }
+        }
+    }
+
+    /** `window.open` gets a throwaway WebView whose first navigation is routed by [openUrl]. */
+    private fun catchNewWindow(resultMsg: Message): Boolean {
+        val catcher = WebView(this)
+        catcher.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                openUrl(request.url)
+                view.post { view.destroy() }
+                return true
+            }
+        }
+        (resultMsg.obj as WebView.WebViewTransport).webView = catcher
+        resultMsg.sendToTarget()
+        return true
+    }
+
+    private fun asset(path: String): String =
+        assets.open(path).bufferedReader().use { it.readText() }
+
+    private fun notFound() = WebResourceResponse(
+        "text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)),
+    )
+
+    private fun dp(value: Int) = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), resources.displayMetrics,
+    ).toInt()
+
+    override fun onDestroy() {
+        redditView.destroy()
+        readerView.destroy()
+        super.onDestroy()
+    }
+
+    private companion object {
+        /** Both shims send `{"kind":"post","message":…}` for the other side, unchanged. */
+        const val POST_PREFIX = "{\"kind\":\"post\","
+    }
+}
+
+/** The reader's storage: one JSON object in app-private storage. */
+class JsonFileStorage(private val file: File) {
+    private val data: JSONObject =
+        runCatching { JSONObject(file.readText()) }.getOrDefault(JSONObject())
+
+    @Synchronized
+    fun getAll(): JSONObject = JSONObject(data.toString())
+
+    @Synchronized
+    fun set(items: JSONObject) {
+        for (key in items.keys()) data.put(key, items.get(key))
+        save()
+    }
+
+    @Synchronized
+    fun remove(keys: JSONArray) {
+        for (i in 0 until keys.length()) data.remove(keys.getString(i))
+        save()
+    }
+
+    private fun save() {
+        val temp = File(file.path + ".tmp")
+        temp.writeText(data.toString())
+        temp.renameTo(file)
+    }
+}

@@ -1,3 +1,5 @@
+import { readerHost } from "../hosts/reader";
+
 const source = new URLSearchParams(location.hash.slice(1)).get("source");
 export const pageUrl = new URL(source || "https://www.reddit.com/");
 if (
@@ -14,31 +16,38 @@ const pending = new Map<
     timer: number;
   }
 >();
-window.addEventListener("message", (event) => {
-  if (
-    event.source !== window.parent ||
-    event.origin !== pageUrl.origin ||
-    event.data?.type !== "openrelay:response"
-  )
-    return;
-  const task = pending.get(event.data.id);
+// The host's channel when it shows the reader itself, otherwise the parent page.
+const channel = readerHost().channel;
+const toPage = (message: unknown): void => {
+  if (channel) channel.post(message);
+  else window.parent.postMessage(message, pageUrl.origin);
+};
+if (channel) channel.onMessage(receive);
+else
+  window.addEventListener("message", (event) => {
+    if (event.source === window.parent && event.origin === pageUrl.origin)
+      receive(event.data);
+  });
+function receive(data: any) {
+  if (data?.type !== "openrelay:response") return;
+  const task = pending.get(data.id);
   if (!task) return;
-  pending.delete(event.data.id);
+  pending.delete(data.id);
   clearTimeout(task.timer);
   // The reader loads straight from disk, but Chrome keeps the old page script
   // until the extension is reloaded, so newer requests are rejected.
-  if (event.data.error === "Unsupported request")
+  if (data.error === "Unsupported request")
     task.reject(
       new Error(
         "OpenRelay was updated. Reload it in chrome://extensions, then refresh this Reddit tab.",
       ),
     );
-  else if (event.data.error) task.reject(new Error(String(event.data.error)));
-  else task.resolve(event.data.value);
-});
+  else if (data.error) task.reject(new Error(String(data.error)));
+  else task.resolve(data.value);
+}
 /** Tell the page how much of the bottom edge the reader's chrome uses. */
 export const setBottomInset = (bottom: number): void =>
-  window.parent.postMessage({ type: "openrelay:inset", bottom }, pageUrl.origin);
+  toPage({ type: "openrelay:inset", bottom });
 export function bridge<T>(
   action:
     | "snapshot"
@@ -67,9 +76,6 @@ export function bridge<T>(
       );
     }, 22000);
     pending.set(id, { resolve, reject, timer });
-    window.parent.postMessage(
-      { type: "openrelay:request", id, action, path, payload },
-      pageUrl.origin,
-    );
+    toPage({ type: "openrelay:request", id, action, path, payload });
   });
 }

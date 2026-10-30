@@ -12,3 +12,10 @@ APK/
 # Desktop app: the copied shared build, and packaged installers
 apps/desktop/openrelay/
 apps/desktop/release/
+# Android app: Gradle state, build outputs, local SDK path, signing keys
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+*.jks
+*.keystore
