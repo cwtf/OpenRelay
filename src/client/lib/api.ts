@@ -63,7 +63,7 @@ export const fetchInit = async (): Promise<InitResponse> => ({
   subreddit: entryRoute.sub,
   username: null,
   loggedIn: false,
-  featured: ["popular", "all"],
+  featured: ["popular"],
   defaultSort: entryRoute.sort,
 });
 const snapshot = () => bridge<Snapshot>("snapshot");
@@ -301,16 +301,11 @@ export async function fetchReplies(
   return { replies: parent.replies, more: parent.moreReplies };
 }
 export async function fetchAbout(sub: string): Promise<AboutResponse> {
-  if (["Home", "popular", "all"].includes(sub))
+  if (["Home", "popular"].includes(sub))
     return {
       about: {
         name: sub,
-        title:
-          sub === "Home"
-            ? "Your Reddit feed"
-            : sub === "all"
-              ? "All communities"
-              : "Popular on Reddit",
+        title: sub === "Home" ? "Your Reddit feed" : "Popular on Reddit",
         nsfw: false,
       },
     };

@@ -16,9 +16,9 @@ import { Icon } from "./Icon";
 import { ReaderMarkdown } from "./ListingCards";
 import { Sheet, SheetItem } from "./Sheet";
 
-/** Home, Popular and All are feeds, not communities. */
+/** Home and Popular are feeds, not communities. */
 export const isCommunity = (sub: string) =>
-  !["home", "popular", "all"].includes(sub.toLowerCase()) && !sub.includes("+");
+  !["home", "popular"].includes(sub.toLowerCase()) && !sub.includes("+");
 
 /** Subscribe state for a community, with a toggle that updates the drawer. */
 export const useSubscribe = (sub: string) => {

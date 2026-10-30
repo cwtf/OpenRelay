@@ -591,7 +591,7 @@ try {
   await sheet.locator(".sub-row-main", { hasText: "zebra" }).waitFor();
   assert.deepEqual(
     await sheet.locator(".sub-row-main .label").allTextContents(),
-    ["Home", "Popular", "All", "Apple", "zebra"],
+    ["Home", "Popular", "Apple", "zebra"],
   );
   await sheet.getByRole("button", { name: "Add r/zebra to Favourites" }).click();
   await sheet.getByRole("button", { name: "Collapse Favourites" }).waitFor();

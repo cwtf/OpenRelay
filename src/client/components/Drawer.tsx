@@ -355,7 +355,7 @@ const feedLabel = (name: string) =>
 const byName = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
-/** Home plus the featured feeds (Popular, All), which are not communities. */
+/** Home plus the featured feeds (Popular), which are not communities. */
 const feedNames = (featured: string[]) => [...new Set(["Home", ...featured])];
 
 /**
