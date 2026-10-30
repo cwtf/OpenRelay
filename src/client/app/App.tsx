@@ -15,6 +15,7 @@ import type {
   PostSummary,
   Timeframe,
 } from "../../shared/api";
+import { readerHost } from "../../hosts/reader";
 import { Drawer } from "../components/Drawer";
 import { Icon } from "../components/Icon";
 import { MediaViewer } from "../components/MediaViewer";
@@ -358,6 +359,24 @@ const Reader = ({ init }: { init: InitResponse }) => {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [dismissTop, popScreen]);
+
+  // The host's back gesture (Android) acts like the browser's back button,
+  // and is left to the host once there's nothing left to close.
+  useEffect(() => {
+    readerHost().onBack?.(() => {
+      const overlays = overlayRef.current;
+      const open =
+        overlays.viewer ||
+        overlays.sheet ||
+        overlays.drawer ||
+        detailRef.current ||
+        stackRef.current.some((entry) => entry.phase !== "exiting");
+      if (!open) return false;
+      if (pushedStates.current > 0) window.history.back();
+      else dismissTop();
+      return true;
+    });
+  }, [dismissTop]);
 
   const back = useCallback(() => {
     if (pushedStates.current > 0) {

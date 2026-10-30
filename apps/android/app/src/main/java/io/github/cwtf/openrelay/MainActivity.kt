@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private var readerProxy: JavaScriptReplyProxy? = null
     private var readerShown = false
     private var readerInset = 0
+    private var pendingBack: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,8 +116,17 @@ class MainActivity : ComponentActivity() {
         setUpReddit()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // TODO: ask the reader to pop its own back stack first (a host event).
-                if (redditView.canGoBack()) redditView.goBack() else finish()
+                // The reader closes its own screens first; it answers with "back".
+                val reader = readerProxy
+                if (!readerShown || reader == null) return hostBack()
+                if (pendingBack != null) return
+                val fallback = Runnable {
+                    pendingBack = null
+                    hostBack()
+                }
+                pendingBack = fallback
+                readerView.postDelayed(fallback, BACK_TIMEOUT_MS)
+                reader.postMessage(JSONObject().put("kind", "back").toString())
             }
         })
         redditView.loadUrl(intent.dataString?.takeIf { isReddit(Uri.parse(it)) } ?: "https://www.reddit.com/")
@@ -179,6 +189,13 @@ class MainActivity : ComponentActivity() {
                 return@addWebMessageListener
             }
             val request = runCatching { JSONObject(data) }.getOrNull() ?: return@addWebMessageListener
+            if (request.optString("kind") == "back") {
+                val fallback = pendingBack ?: return@addWebMessageListener
+                pendingBack = null
+                readerView.removeCallbacks(fallback)
+                if (!request.optBoolean("handled")) hostBack()
+                return@addWebMessageListener
+            }
             if (request.optString("kind") != "rpc") return@addWebMessageListener
             val response = JSONObject().put("kind", "rpc").put("id", request.opt("id"))
             try {
@@ -203,6 +220,11 @@ class MainActivity : ComponentActivity() {
         readerView.visibility = if (shown) View.VISIBLE else View.GONE
         if (shown) readerView.requestFocus()
         updateToggle()
+    }
+
+    /** Back once the reader has nothing left to close: Reddit's history, then leave. */
+    private fun hostBack() {
+        if (redditView.canGoBack()) redditView.goBack() else finish()
     }
 
     private fun closeReader() {
@@ -325,6 +347,9 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /** Both shims send `{"kind":"post","message":…}` for the other side, unchanged. */
         const val POST_PREFIX = "{\"kind\":\"post\","
+
+        /** How long a back press waits for the reader before going back itself. */
+        const val BACK_TIMEOUT_MS = 500L
     }
 }
 

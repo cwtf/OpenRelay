@@ -13,12 +13,23 @@
   let nextId = 0;
   const pending = new Map();
   const pageListeners = [];
+  let backListener = null;
   port.addEventListener("message", (event) => {
     const data = JSON.parse(event.data);
     // The app forwards the page's messages by this prefix alone, so the kind
     // comes from the prefix too, not from a key the page could repeat.
     if (event.data.startsWith('{"kind":"post",')) {
       for (const listener of pageListeners) listener(data.message);
+      return;
+    }
+    if (data.kind === "back") {
+      let handled = false;
+      try {
+        handled = Boolean(backListener?.());
+      } catch {
+        // The app goes back itself.
+      }
+      send({ kind: "back", handled });
       return;
     }
     const task = data.kind === "rpc" && pending.get(data.id);
@@ -41,6 +52,9 @@
       remove: (keys) => call("storage.remove", keys).then(() => undefined),
     }),
     downloads: async () => "unavailable",
+    onBack: (listener) => {
+      backListener = listener;
+    },
     channel: Object.freeze({
       post: (message) => send({ kind: "post", message }),
       onMessage: (listener) => void pageListeners.push(listener),

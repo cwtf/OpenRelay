@@ -61,7 +61,7 @@ These come from the extension's security model; see "The bridge is a security bo
   - **The Reddit login page must load inside the app's own Reddit view.** A system browser or Custom Tab has a different cookie store.
 - **Google and Apple sign-in** refuse to run in WebViews and Electron. Users sign in with their Reddit username and password. Say so in the app's README section.
 - **Clipboard:** `copyText()` uses `navigator.clipboard` from inside an iframe. It may be refused in a WebView, which shows the "Copy is not available here" toast. If so, add a host capability.
-- **Back navigation:** the reader keeps its own back stack, and nothing outside the frame can pop it yet. The Android back button needs a new host-to-reader event. Design it in `types.ts`, for example `ReaderHost.onBack(listener): void` returning whether the press was handled.
+- **Back navigation:** the reader keeps its own back stack in its frame's history. A host whose back control doesn't reach that history calls the listener the reader registers with `ReaderHost.onBack(listener)`. It returns whether the reader went back (closed a viewer, sheet, drawer or screen); if not, the host does its own back.
 - **The reader's own UI** (iframe `allow="clipboard-write; fullscreen"`, the "Original Reddit" button, and `setBottomInset`) runs inside the page and keeps working unchanged.
 - **The content script expects to run once the page has loaded** (`document_idle` in the extension). If you inject it at document start, wrap it so it runs on `DOMContentLoaded`.
 
@@ -90,7 +90,7 @@ Suggested design:
    - **`save({url})`:** `DownloadManager` into Downloads.
    - **`save({data})`:** write through MediaStore Downloads (API 29+). Videos can be tens of MB, so send them as ArrayBuffer web messages (`WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER`) or in chunks, not base64 in one message.
 5. **Android is less isolated than the browsers.** Its content script runs in the page's main JavaScript world; Android has no isolated world. Reddit's own scripts share the globals, though not `content.js`'s private state. Reddit already holds the session, so this exposes nothing new. State it in the README's Android data section anyway.
-6. **Back button:** `OnBackPressedDispatcher` should ask the reader to go back first, through the new host event, then fall back to `webView.goBack()`.
+6. **Back button:** `OnBackPressedDispatcher` sends the reader `{"kind":"back"}` and waits up to 500 ms for its `{"kind":"back","handled":…}` answer, then, if it went unhandled, falls back to `webView.goBack()` or leaves the app.
 
 Verify in your session:
 

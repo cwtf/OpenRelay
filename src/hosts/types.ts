@@ -75,6 +75,13 @@ export type ReaderHost = {
    * can't save files.
    */
   downloads(): Promise<Downloads | "declined" | "unavailable">;
+  /**
+   * The host's own back control (Android's back gesture), for a host whose
+   * back doesn't reach the reader's history. The listener returns whether the
+   * reader went back; if not, the host does its own back. A later call
+   * replaces the listener.
+   */
+  onBack?(listener: () => boolean): void;
 };
 
 export type PageHost = {
