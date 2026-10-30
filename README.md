@@ -1,12 +1,22 @@
-# OpenRelay for Reddit — Chrome extension
+# OpenRelay for Reddit
 
 A project inspired by **Relay for Reddit**, the Android app by DBrandy. It replaces Reddit's interface with a Relay-style reader: React screens, design tokens, cards, compact/list layouts, themes, comment rails, sheets, drawer, Markdown renderer, gestures, and media viewer.
 
+OpenRelay runs as:
+
+- a **browser extension** for Chrome and Firefox, which also installs in Edge Canary on Android;
+- a **desktop app** for Windows, macOS and Linux;
+- an **Android app**.
+
+All of them run the same reader and the same code for talking to Reddit. Each one shows Reddit's own site with the reader on top, and uses your Reddit session from that site. There's no OpenRelay server and no API key.
+
 <img width="1645" height="990" alt="image" src="https://github.com/user-attachments/assets/86a7fe14-74a2-4cf4-9aed-b81fe559c4f6" />
 
-## Install
+## Downloads
 
 Release packages are on the [Releases page](https://github.com/cwtf/OpenRelay/releases): the Windows installer and portable exe, the Android APK, the Chrome extension (`.zip` and signed `.crx`) and the Firefox add-on. All but the exes, which are too large for the repository, are also in **releases/**: **releases/chrome/**, **releases/firefox/** and **releases/android/**. `npm run build:apps` rebuilds all of them (`-- chrome`, `-- firefox`, `-- exe` or `-- apk` for some), and `-- --publish` uploads them to the release for the current version.
+
+## Install in Chrome
 
 The built extension is in **dist/**, or unzip **releases/chrome/OpenRelay-*-chrome.zip** and use that folder.
 
@@ -18,20 +28,7 @@ The built extension is in **dist/**, or unzip **releases/chrome/OpenRelay-*-chro
 
 Click **Original Reddit** at the bottom left to restore the loaded page. Click the extension toolbar icon to reopen the reader. Native mode persists during navigation in that document; Reddit links opened through voting/reply actions include `openrelay=off` to keep their controls visible.
 
-## Install on Android (Edge Canary)
-
-Microsoft Edge Canary for Android can sideload extensions from a `.crx` file.
-
-1. Use **releases/chrome/OpenRelay-*.crx**. To pack it yourself, `npm run build:apps -- chrome` signs it with **dist.pem** in the repo root. Without that key, pack **dist** in **chrome://extensions** with **Developer mode** on (**Pack extension**); Chrome writes **dist.crx** and a new private key, **dist.pem**, next to the folder. Keep the key to sign later updates, and don't share it.
-2. Copy the `.crx` to your phone.
-3. Install **Microsoft Edge Canary** from Google Play.
-4. In Edge Canary, open **Settings → About Microsoft Edge** and tap the build number repeatedly until developer options are enabled.
-5. Go back to **Settings**, open **Developer options** and tap **Extension install by crx**. Pick **dist.crx** and confirm the install.
-6. Open or refresh a Reddit page. The extension appears in Edge's **Extensions** menu, where you can toggle the reader.
-
-To update, install the new `.crx` the same way. It must be signed with the same **dist.pem** (`build:apps` does that; Chrome's **Pack extension** dialog has a **Private key file** field).
-
-## Install on Firefox
+## Install in Firefox
 
 `npm run build` also writes a Firefox copy of the extension to **dist-firefox/** (Firefox 140 or later).
 
@@ -41,9 +38,26 @@ To update, install the new `.crx` the same way. It must be signed with the same 
 
 **releases/firefox/OpenRelay-*-unsigned.xpi** is the same add-on packed for signing or for **Load Temporary Add-on…**. Firefox removes temporary add-ons when it restarts. To keep it installed, have Mozilla sign it, for example with `web-ext sign` as an unlisted add-on on addons.mozilla.org. Firefox for Android (142 or later) also installs only signed add-ons. The add-on ID, `openrelay-reddit@cwtf`, is set in `tools/build.mjs`; keep it unchanged once the add-on is published, or updates won't reach existing installs.
 
+## Install in Edge Canary on Android
+
+Microsoft Edge Canary for Android can sideload extensions from a `.crx` file, so the extension also runs on Android, as an alternative to the [Android app](#android-app).
+
+1. Use **releases/chrome/OpenRelay-*.crx**. To pack it yourself, `npm run build:apps -- chrome` signs it with **dist.pem** in the repo root. Without that key, pack **dist** in **chrome://extensions** with **Developer mode** on (**Pack extension**); Chrome writes **dist.crx** and a new private key, **dist.pem**, next to the folder. Keep the key to sign later updates, and don't share it.
+2. Copy the `.crx` to your phone.
+3. Install **Microsoft Edge Canary** from Google Play.
+4. In Edge Canary, open **Settings → About Microsoft Edge** and tap the build number repeatedly until developer options are enabled.
+5. Go back to **Settings**, open **Developer options** and tap **Extension install by crx**. Pick the `.crx` and confirm the install.
+6. Open or refresh a Reddit page. The extension appears in Edge's **Extensions** menu, where you can toggle the reader.
+
+To update, install the new `.crx` the same way. It must be signed with the same **dist.pem** (`build:apps` does that; Chrome's **Pack extension** dialog has a **Private key file** field).
+
 ## Desktop app (Windows, macOS, Linux)
 
-**apps/desktop/** wraps OpenRelay in Electron: a Reddit window with the reader on top, as in a browser tab with the extension. To run it from source:
+**apps/desktop/** wraps OpenRelay in Electron: a Reddit window with the reader on top, as in a browser tab with the extension.
+
+On Windows, download **OpenRelay-*-setup.exe** or the single-file **OpenRelay-*-portable.exe** from the [Releases page](https://github.com/cwtf/OpenRelay/releases). Builds for macOS and Linux aren't published, so build those yourself, as described below.
+
+To run it from source:
 
 ```sh
 npm ci
@@ -59,7 +73,35 @@ To package it, run `npm run dist` in **apps/desktop/**. It uses electron-builder
 
 Sign in to Reddit inside the app, with your Reddit username and password. Google and Apple sign-in refuse to run in embedded browsers such as Electron. **View → Toggle OpenRelay / Original Reddit** (Ctrl+Shift+R, or Cmd+Shift+R on macOS) replaces the extension's toolbar button. Reddit links, including the login page, open in another app window with the same session; other links open in your default browser.
 
+## Android app
+
+**apps/android/** wraps OpenRelay in an Android app (Android 10 or later): Reddit in one WebView, with the reader in a second WebView over it. Reddit's CSP doesn't allow the reader's origin as an iframe, so the app shows the reader itself and relays the bridge's messages between the two views.
+
+To install it, copy **releases/android/OpenRelay-*.apk** to your phone and open it. Android asks you to allow installs from the app you opened it with (your file manager or browser). The app isn't on Google Play.
+
+A button at the bottom left switches between **OpenRelay** and **Original Reddit**. Sign in to Reddit inside the app, with your Reddit username and password; Google and Apple sign-in refuse to run in WebViews. Reddit links load in the app, with the same session; other links open in your default browser.
+
+The Android app is newer than the others, and not everything works yet:
+
+- The back button goes back in Reddit's history, not the reader's own back stack.
+- The media viewer's download button is unavailable.
+- Videos can't go fullscreen.
+- It has been checked against real Reddit signed out only.
+
+To build it from source you need the Android SDK and a JDK. Build the shared code first; the Gradle build copies `reader.html`, `assets/` and `content.js` from **dist/** into the app:
+
+```sh
+npm ci
+npm run build
+cd apps/android
+./gradlew assembleDebug
+```
+
+The debug APK is **apps/android/app/build/outputs/apk/debug/app-debug.apk**. `npm run build:apps -- apk` builds the signed release APK into **releases/android/** instead. It needs **apps/android/keystore.properties** (copy **keystore.properties.example**; neither it nor the `.jks` keystore goes in git), or add `-- --debug` for a debug APK.
+
 ## Data and permissions
+
+### Browser extension
 
 A Manifest V3 content script runs only on www.reddit.com, reddit.com and old.reddit.com. It embeds the bundled reader in an extension-origin iframe, keeping the reader's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
 
@@ -74,11 +116,17 @@ The desktop app runs the same reader and content script, with the same bridge, a
 
 The content script runs in its own isolated JavaScript world in the Reddit window, as an extension's does, so Reddit's scripts can't reach it, and the session modhash stays inside it. The reader is served from the app's own `openrelay://reader` origin. Only that origin gets the app's storage and download channels; the main process checks the sender's origin for each request. Reddit pages get only the content script. Pages in the app may write to the clipboard (the reader's Copy) and go fullscreen (videos); every other permission request is refused. Downloads open a save dialog and go where you choose.
 
+### Android app
+
+The Android app runs the same reader and content script, with the same bridge, allowlists and Giphy exception, and sends nothing anywhere else. Its only permission is `INTERNET`. Reddit's cookies live in the app's own WebView cookie store, separate from your browsers. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the app's private storage, which is excluded from Android backups.
+
+The reader is served from the app's own `https://appassets.androidplatform.net` origin, answered from the APK and never from the network, and its WebView doesn't send Reddit's cookies. The app gives each WebView one message channel: Reddit's channel only to Reddit's top frame, and the reader's only to the reader's origin. Only the reader's channel reaches storage. Android's WebView has no isolated worlds, so unlike the browsers and desktop app, the content script runs in Reddit's own JavaScript world. It starts before Reddit's scripts, takes its channel off the global object and locks its host in place, and the session modhash stays inside the content script. Reddit's scripts already hold your session, so this exposes nothing new to them.
+
 ## Limits
 
 Reddit can block or rate-limit its JSON endpoints. Reading the currently loaded feed still works when its markup is available; direct post pages fall back to loaded text/comments with a notice. Fresh feeds, search, more comments, and full media details require Reddit to return data. DOM fallback contains only loaded material and may lose Markdown formatting or media details.
 
-Reddit-hosted videos use HLS streaming to play their separate audio and video tracks together. If streaming fails, the viewer falls back to the MP4 and shows **Audio unavailable**; that fallback may have no sound. Videos without a playlist use their MP4 directly. Account/profile/moderation screens remain native. The address bar keeps the original Reddit URL while navigating inside the reader; use Share/Copy link for the selected post. Original Reddit returns to the original page.
+Reddit-hosted videos use HLS streaming to play their separate audio and video tracks together. If streaming fails, the viewer falls back to the MP4 and shows **Audio unavailable**; that fallback may have no sound. Videos without a playlist use their MP4 directly. The reader opens on feed, post and search pages. It has its own profile, inbox, moderator and friends screens, but Reddit's own pages for those, and settings, stay native when you open them directly. The address bar keeps the original Reddit URL while navigating inside the reader; use Share/Copy link for the selected post. Original Reddit returns to the original page.
 
 The reader has its own in-frame back stack; complete browser forward-history restoration across reader screens is not implemented.
 
@@ -107,6 +155,8 @@ The account test (`tools/account-smoke.mjs`) walks Profile, User, Compose, Inbox
 
 The browser test profile blocks third-party cookies, to check that settings and favourites survive a reload.
 
+The media test (`tools/media-smoke.mjs`) opens tall, wide and tiny images in the media viewer and checks that each is scaled to fit the screen.
+
 The video test (`tools/video-smoke.mjs`) uses a generated HLS clip with a separate audio playlist and verifies a decoded, non-silent audio signal, seeking, cleanup and reopening, silent video, GIF playback, and MP4 fallback after playlist/audio errors. The streaming library is bundled with the reader and loaded only for streamed videos. The desktop tests run the same video checks with `--desktop`.
 
 The desktop app has its own port of the browser test, `apps/desktop/test/smoke.mjs`, which drives the real app through Playwright's Electron launcher against the same fixtures. A test-only hook gives it a throwaway profile under `test-results/` and cancels every request until the fixtures are in place. The port also checks that the content script's requests carry the page's session and origin, that bridge messages come from `openrelay://reader`, that neither host leaks into Reddit's page, that the reader can't read Reddit itself, the new-window rules, and that settings survive a restart. Build first, then:
@@ -128,5 +178,10 @@ Validated: injection, loaded-page feeds, settings persistence, the subscriptions
 - `src/hosts/` — what the reader and content script need from the app running them (storage, downloads, reader URL, toggle), with the browser-extension implementation.
 - `public/manifest.json` — extension manifest.
 - `tools/build.mjs` — extension build, for Chrome and Firefox.
-- `tools/browser-smoke.mjs` and `tools/vote-smoke.mjs` — browser integration checks.
-- `apps/desktop/` — the Electron desktop app (`src/main.js`, `src/preload.cjs`) and its smoke test.
+- `tools/build-apps.mjs` and `tools/extension-packages.mjs` — release packages for every platform, and the Chrome zip and signed `.crx`.
+- `tools/*-smoke.mjs` — browser integration checks (browser, vote, account, media and video), with fixtures in `tools/fixtures/`.
+- `apps/desktop/` — the Electron desktop app (`src/main.js`, `src/preload.cjs`) and its smoke tests.
+- `apps/android/` — the Android app (`MainActivity.kt`, and the `page-host.js` and `reader-host.js` shims in its assets).
+- `assets/branding/` — the Open Thread icon; `tools/build-icons.py` generates every platform's icons from it.
+- `releases/` — the official packages, one folder per platform.
+- `docs/` — guides to packaging the desktop app and to the wrapper apps' design.

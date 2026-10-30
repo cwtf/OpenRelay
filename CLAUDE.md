@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-OpenRelay for Reddit is a Manifest V3 Chrome extension that replaces Reddit's UI with a React reader modelled on the Android app Relay for Reddit. Many behaviours (pane rules, swipe actions, comment collapsing) intentionally copy Relay, and code comments often cite Relay's own logic.
+OpenRelay for Reddit replaces Reddit's UI with a React reader modelled on the Android app Relay for Reddit. It ships as a Manifest V3 browser extension (Chrome and Firefox), an Electron desktop app (`apps/desktop/`) and an Android WebView app (`apps/android/`), all built from the same `dist/`. Many behaviours (pane rules, swipe actions, comment collapsing) intentionally copy Relay, and code comments often cite Relay's own logic.
 
 ## Commands
 
@@ -97,4 +97,4 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 
 - `dist/`, `dist-firefox/`, `*.xpi`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`, `apps/android/keystore.properties` or the `.jks` keystore.
 - `releases/` holds the official packages that `build:apps` puts there, one subfolder per platform. `android/`, `chrome/` and `firefox/` are committed (`.gitignore` re-includes their `.zip` and `.xpi` files); `desktop/` is git-ignored, because the exes are about 98 MiB, too close to GitHub's 100 MiB file limit, and they're published only as GitHub Release assets (`--publish`). The script refuses to copy a committed package over 100 MiB. The `.crx` is signed with `dist.pem` by `tools/extension-packages.mjs` (CRX3 and zip in plain Node), so the extension ID stays `hgeofllbbcejfkcojkpkdkpkkdijgbaj`. The desktop build's `compression: "maximum"`, English-only `electronLanguages` and the installer's `differentialPackage: false` (solid compression; there's no electron-updater) keep the downloads small.
-- The README lists the unit-test count ("69 unit tests"). Update it if you add or remove tests.
+- The README lists the unit-test count ("70 unit tests"). Update it if you add or remove tests.
