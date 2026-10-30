@@ -96,10 +96,14 @@ const PostRow = ({
         <PostFlags post={post} />
         <PostMeta post={post} showSub={showSub} />
         <div className="list-stats">
-          <span className="score">
-            <Icon name="up" size={14} />
-            {compact(post.score)}
-          </span>
+          <VoteLinks
+            thingId={post.id}
+            permalink={post.permalink}
+            score={post.score}
+            vote={post.vote}
+            kind="post"
+            variant="inline"
+          />
           <span>
             <Icon name="comment" size={14} />
             {compact(post.comments)}

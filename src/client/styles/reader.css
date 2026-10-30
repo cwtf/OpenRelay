@@ -672,6 +672,7 @@
 
 .list-stats {
   display: none;
+  align-items: center;
   gap: 10px;
   font-size: calc(12.5px * var(--ts));
   color: var(--text-2);
@@ -682,12 +683,12 @@
   display: flex;
 }
 
-.list-stats .score {
-  color: var(--score);
-  font-weight: 600;
+/* Line the up arrow's icon, not its touch target, up with the meta above. */
+.list-stats .vote {
+  margin-left: -4px;
 }
 
-.list-stats span {
+.list-stats > span:not(.vote) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
