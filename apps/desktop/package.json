@@ -11,7 +11,7 @@
     "build": "npm --prefix ../.. run build && node tools/copy-dist.mjs",
     "start": "electron .",
     "dist": "npm run build && electron-builder",
-    "test": "node test/smoke.mjs",
+    "test": "node test/smoke.mjs && node ../../tools/video-smoke.mjs --desktop",
     "test:packaged": "node test/packaged-smoke.mjs && node test/smoke.mjs release/win-unpacked/resources/app.asar"
   },
   "engines": {

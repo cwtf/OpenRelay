@@ -2451,6 +2451,15 @@ img.avatar {
   white-space: nowrap;
 }
 
+.viewer-audio-notice {
+  position: absolute;
+  bottom: 80px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #000b;
+  color: #fff;
+  pointer-events: none;
+}
 .viewer-error {
   display: grid;
   place-items: center;

@@ -82,11 +82,14 @@ export function normalizePost(p: Raw): PostDetail {
   const gallery = (p.gallery_data?.items ?? [])
     .map((item: Raw) => image(p.media_metadata?.[item.media_id]?.s))
     .filter(Boolean);
-  if (video && safeUrl(video.fallback_url)) {
+  const mp4 = safeUrl(video?.fallback_url);
+  const hls = safeUrl(video?.hls_url);
+  if (video && (mp4 || hls)) {
     media = {
       kind: "video",
       video: {
-        mp4: safeUrl(video.fallback_url),
+        ...(mp4 ? { mp4 } : {}),
+        ...(hls ? { hls } : {}),
         width: num(video.width) || 640,
         height: num(video.height) || 360,
         isGif: Boolean(video.is_gif),

@@ -8,6 +8,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react';
 import type { ViewerItem, ViewerSpec } from '../app/nav';
+import type Hls from 'hls.js';
 import {
   copyText,
   downloadImage,
@@ -354,25 +355,80 @@ const VideoPage = ({
     dismissing: boolean;
   } | null>(null);
   const [failed, setFailed] = useState(false);
+  const [audioUnavailable, setAudioUnavailable] = useState(false);
+  const isActive = useRef(active);
+  isActive.current = active;
   // Width / height, from Reddit's metadata until the video reports its own.
   const [ratio, setRatio] = useState(
     item.width > 0 && item.height > 0 ? item.width / item.height : 0,
   );
-  const nativeHls = (() => {
-    try {
-      return (
-        document
-          .createElement('video')
-          .canPlayType('application/vnd.apple.mpegurl') !== ''
-      );
-    } catch {
-      return false;
-    }
-  })();
-  const src =
-    nativeHls && item.hls && !item.isGif
-      ? item.hls
-      : (item.mp4 ?? (nativeHls ? item.hls : undefined));
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    let disposed = false;
+    let player: Hls | undefined;
+    let streaming = Boolean(item.hls && !item.isGif);
+    setFailed(false);
+    setAudioUnavailable(false);
+
+    const play = () => {
+      if (isActive.current) void video.play().catch(() => undefined);
+    };
+    const useMp4 = () => {
+      if (disposed) return;
+      const lostStream = streaming;
+      streaming = false;
+      player?.destroy();
+      player = undefined;
+      if (!item.mp4) {
+        setFailed(true);
+        return;
+      }
+      setAudioUnavailable(lostStream);
+      video.src = item.mp4;
+      video.load();
+      play();
+    };
+    const onError = () => {
+      if (streaming) useMp4();
+      else setFailed(true);
+    };
+    video.addEventListener('error', onError);
+
+    const start = async () => {
+      if (!streaming) return useMp4();
+      try {
+        // The full build includes separate audio renditions. Load it only
+        // for streamed video; keep all executable code in the app bundle.
+        const { default: Hls } = await import('hls.js');
+        if (disposed) return;
+        if (Hls.isSupported()) {
+          // Avoid a blob worker, which the extension and desktop CSP block.
+          player = new Hls({ enableWorker: false });
+          player.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal && streaming) useMp4();
+          });
+          player.attachMedia(video);
+          player.loadSource(item.hls!);
+          play();
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = item.hls!;
+          play();
+        } else useMp4();
+      } catch {
+        if (!disposed) useMp4();
+      }
+    };
+    void start();
+    return () => {
+      disposed = true;
+      video.removeEventListener('error', onError);
+      player?.destroy();
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    };
+  }, [item.mp4, item.hls, item.isGif]);
 
   useEffect(() => {
     const video = ref.current;
@@ -452,10 +508,9 @@ const VideoPage = ({
       onPointerUp={(event) => endDrag(event, false)}
       onPointerCancel={(event) => endDrag(event, true)}
     >
-      {src && !failed ? (
+      {(item.mp4 || item.hls) && !failed ? (
         <video
           ref={ref}
-          src={src}
           poster={item.poster}
           controls={!item.isGif}
           muted={item.isGif}
@@ -463,7 +518,6 @@ const VideoPage = ({
           autoPlay={active}
           playsInline
           preload="auto"
-          onError={() => setFailed(true)}
           onLoadedMetadata={(event) => {
             const { videoWidth: w, videoHeight: h } = event.currentTarget;
             if (w && h) setRatio(w / h);
@@ -486,6 +540,9 @@ const VideoPage = ({
           ) : null}
         </div>
       )}
+      {audioUnavailable && !failed ? (
+        <div className="viewer-audio-notice" role="status">Audio unavailable</div>
+      ) : null}
     </div>
   );
 };

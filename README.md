@@ -76,7 +76,7 @@ The content script runs in its own isolated JavaScript world in the Reddit windo
 
 Reddit can block or rate-limit its JSON endpoints. Reading the currently loaded feed still works when its markup is available; direct post pages fall back to loaded text/comments with a notice. Fresh feeds, search, more comments, and full media details require Reddit to return data. DOM fallback contains only loaded material and may lose Markdown formatting or media details.
 
-Reddit-hosted MP4 fallback streams may have no audio. Account/profile/moderation screens remain native. The address bar keeps the original Reddit URL while navigating inside the reader; use Share/Copy link for the selected post. Original Reddit returns to the original page.
+Reddit-hosted videos use HLS streaming to play their separate audio and video tracks together. If streaming fails, the viewer falls back to the MP4 and shows **Audio unavailable**; that fallback may have no sound. Videos without a playlist use their MP4 directly. Account/profile/moderation screens remain native. The address bar keeps the original Reddit URL while navigating inside the reader; use Share/Copy link for the selected post. Original Reddit returns to the original page.
 
 The reader has its own in-frame back stack; complete browser forward-history restoration across reader screens is not implemented.
 
@@ -89,7 +89,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 69 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 70 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 
@@ -104,6 +104,8 @@ Vote tests additionally cover initial selection, undo/switch, rapid-click suppre
 The account test (`tools/account-smoke.mjs`) walks Profile, User, Compose, Inbox, Moderator, Friends and New Post against fixtures, checks each write's exact request body, and checks that only `/api/*` endpoints are written to and no tabs open.
 
 The browser test profile blocks third-party cookies, to check that settings and favourites survive a reload.
+
+The video test (`tools/video-smoke.mjs`) uses a generated HLS clip with a separate audio playlist and verifies a decoded, non-silent audio signal, seeking, cleanup and reopening, silent video, GIF playback, and MP4 fallback after playlist/audio errors. The streaming library is bundled with the reader and loaded only for streamed videos. The desktop tests run the same video checks with `--desktop`.
 
 The desktop app has its own port of the browser test, `apps/desktop/test/smoke.mjs`, which drives the real app through Playwright's Electron launcher against the same fixtures. A test-only hook gives it a throwaway profile under `test-results/` and cancels every request until the fixtures are in place. The port also checks that the content script's requests carry the page's session and origin, that bridge messages come from `openrelay://reader`, that neither host leaks into Reddit's page, that the reader can't read Reddit itself, the new-window rules, and that settings survive a restart. Build first, then:
 

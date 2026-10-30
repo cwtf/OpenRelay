@@ -17,7 +17,7 @@ app.whenReady().then(() => {
     .fromPartition("persist:openrelay")
     .webRequest.onBeforeRequest((details, callback) => {
       const url = new URL(details.url);
-      const reddit = /^(www\.|old\.)?reddit\.com$/.test(url.hostname);
+      const reddit = /^(?:(www\.|old\.)?reddit\.com|v\.redd\.it)$/.test(url.hostname);
       callback({
         cancel:
           !["openrelay:", "devtools:", "chrome-error:", "data:", "blob:"].includes(url.protocol) &&

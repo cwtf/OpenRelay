@@ -128,6 +128,27 @@ test("normalizes image, gallery, video, deleted text and unsafe media", () => {
   assert.equal(safeUrl("javascript:alert(1)"), "");
   assert.equal(safeUrl("data:text/html,abc"), "");
 });
+test("preserves safe HLS sources, including videos without an MP4", () => {
+  for (const source of ["secure_media", "media", "preview"]) {
+    const key = source === "preview" ? "reddit_video_preview" : "reddit_video";
+    const hls = "https://v.redd.it/abc/HLSPlaylist.m3u8?a=1&amp;b=2";
+    const media = normalizePost({ [source]: { [key]: { hls_url: hls } } }).media;
+    assert.equal(media.kind, "video");
+    if (media.kind === "video") {
+      assert.equal(media.video.hls, hls.replace("&amp;", "&"));
+      assert.equal(media.video.mp4, undefined);
+    }
+  }
+  const media = normalizePost({
+    media: { reddit_video: {
+      fallback_url: "https://v.redd.it/abc/DASH_720.mp4",
+      hls_url: "javascript:alert(1)",
+    } },
+  }).media;
+  assert.equal(media.kind, "video");
+  if (media.kind === "video") assert.equal(media.video.hls, undefined);
+});
+
 test("keeps a crosspost's original and takes its media like Relay", () => {
   const crosspost = (original: Record<string, unknown>, own = {}) =>
     normalizePost({
