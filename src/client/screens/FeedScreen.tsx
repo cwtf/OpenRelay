@@ -37,6 +37,7 @@ import {
   snapshotLayout,
   type LayoutSnapshot,
 } from "../lib/itemAnimator";
+import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { hiddenPosts } from "../lib/storage";
 
 const SORT_ICONS: Record<FeedSort, IconName> = {
@@ -417,6 +418,13 @@ export const FeedScreen = ({
     pendingLayout.current = null;
     if (before && feedRef.current) animateLayout(feedRef.current, before);
   }, [hidden]);
+  // A post you deleted (here or from its post screen) leaves like a hidden one.
+  const deletedVersion = useDeletedVersion();
+  useEffect(() => {
+    for (const post of visible) if (isDeleted(post.id)) onHide(post.id);
+    // Only a new deletion should remove cards; `visible` is read as it is now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deletedVersion, onHide]);
 
   const chooseSort = (next: FeedSort) => {
     if (next === "top" || next === "controversial") {

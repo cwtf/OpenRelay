@@ -153,13 +153,14 @@ const ACTIONS: Record<string, Action> = {
     path: "/api/comment",
     params: (a) => ({ thing_id: thing(a.parent, "134"), text: text(a.text, 10000) }),
   },
-  // Saving posts and comments; editing your own text.
+  // Saving posts and comments; editing or deleting your own.
   save: { path: "/api/save", params: (a) => ({ id: thing(a.id, "13") }) },
   unsave: { path: "/api/unsave", params: (a) => ({ id: thing(a.id, "13") }) },
   edit: {
     path: "/api/editusertext",
     params: (a) => ({ thing_id: thing(a.id, "13"), text: text(a.text, 40000) }),
   },
+  del: { path: "/api/del", params: (a) => ({ id: thing(a.id, "13") }) },
   // Communities
   subscribe: {
     path: "/api/subscribe",

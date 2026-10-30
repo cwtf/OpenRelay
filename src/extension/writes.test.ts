@@ -173,6 +173,8 @@ test("rejects unknown actions and invalid parameters before any request", async 
     ["save", { id: "t5_sub" }],
     ["edit", { id: "t1_abc", text: "" }],
     ["edit", { id: "t4_msg", text: "x" }],
+    ["del", { id: "t4_msg" }],
+    ["del", { id: "t5_sub" }],
     ["subscribe", { action: "join", sr: "test" }],
     ["subscribe", { action: "sub", sr: "a/b" }],
     ["compose", { to: "/r/a/b", subject: "s", text: "t" }],
@@ -326,7 +328,7 @@ test("builds a short reply response from the session when /api/info fails", asyn
   assert.equal(result.comment?.vote, 1);
 });
 
-test("saves, unsaves and edits with their own parameters", async () => {
+test("saves, unsaves, edits and deletes with their own parameters", async () => {
   resetWrites();
   const { calls, fetchFn } = signedIn();
   await apiAction(fetchFn, origin, "save", { id: "t3_abc" });
@@ -342,4 +344,7 @@ test("saves, unsaves and edits with their own parameters", async () => {
     uh: "abc123modhash",
     api_type: "json",
   });
+  await apiAction(fetchFn, origin, "del", { id: "t3_abc" });
+  assert.equal(new URL(calls[4]!.url).pathname, "/api/del");
+  assert.deepEqual(sent(calls[4]!), { id: "t3_abc", uh: "abc123modhash", api_type: "json" });
 });

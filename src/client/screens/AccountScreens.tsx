@@ -50,6 +50,7 @@ import {
   type ProfileSection,
   type ProfileSort,
 } from "../lib/api";
+import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { compact, timeframeLabel } from "../lib/format";
 import { toast } from "../lib/platform";
 import { useListing } from "../lib/useListing";
@@ -82,25 +83,28 @@ const ListingRows = ({
   extra?: (item: ListingItem) => React.ReactNode;
 }) => {
   const { prefs } = usePrefs();
+  useDeletedVersion();
   return (
     <>
-      {items.map((item) =>
-        item.type === "post" ? (
-          <div className="listing-post" key={item.post.id}>
-            <PostCard
-              post={item.post}
-              layout={prefs.layout}
-              showThumbnails={prefs.showThumbnails}
-              showSub
-            />
-            {extra ? extra(item) : null}
-          </div>
-        ) : (
-          <CommentCard key={item.comment.id} comment={item.comment}>
-            {extra ? extra(item) : null}
-          </CommentCard>
-        ),
-      )}
+      {items
+        .filter((item) => !isDeleted(item.type === "post" ? item.post.id : item.comment.id))
+        .map((item) =>
+          item.type === "post" ? (
+            <div className="listing-post" key={item.post.id}>
+              <PostCard
+                post={item.post}
+                layout={prefs.layout}
+                showThumbnails={prefs.showThumbnails}
+                showSub
+              />
+              {extra ? extra(item) : null}
+            </div>
+          ) : (
+            <CommentCard key={item.comment.id} comment={item.comment}>
+              {extra ? extra(item) : null}
+            </CommentCard>
+          ),
+        )}
     </>
   );
 };

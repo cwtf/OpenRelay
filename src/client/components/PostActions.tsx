@@ -7,14 +7,19 @@ import {
   sharePost,
   toast,
 } from "../lib/platform";
+import { currentAccount } from "../lib/account";
 import { hiddenPosts } from "../lib/storage";
+import { DeleteSheet } from "./Relay";
 import { Sheet, SheetItem } from "./Sheet";
 
+/** `onDeleted` runs once Reddit has deleted your own post (the post screen closes). */
 export const openPostActions = (
   nav: Nav,
   post: PostSummary,
   onHide?: (id: string) => void,
+  onDeleted?: () => void,
 ) => {
+  const own = currentAccount()?.name.toLowerCase() === post.author.toLowerCase();
   nav.openSheet((onClosed) => (
     <Sheet title={post.title} label="Post actions" onClosed={onClosed}>
       {(close) => {
@@ -81,6 +86,17 @@ export const openPostActions = (
                   onHide(post.id);
                   toast("Post hidden");
                 })}
+              />
+            ) : null}
+            {own ? (
+              <SheetItem
+                icon="trash"
+                label="Delete"
+                onClick={run(() =>
+                  nav.openSheet((onClosed) => (
+                    <DeleteSheet id={post.id} onDeleted={onDeleted} onClosed={onClosed} />
+                  )),
+                )}
               />
             ) : null}
           </>

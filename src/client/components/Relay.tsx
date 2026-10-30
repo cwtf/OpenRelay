@@ -6,6 +6,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { setBottomInset } from "../../extension/bridge";
 import { useNav } from "../app/nav";
 import { runAction } from "../lib/api";
+import { markDeleted } from "../lib/deleted";
 import { toast } from "../lib/platform";
 import { Icon, type IconName } from "./Icon";
 import { Sheet, SheetItem } from "./Sheet";
@@ -337,6 +338,41 @@ export const ConfirmSheet = ({
     )}
   </Sheet>
 );
+
+/**
+ * Relay's "Delete..." dialog for your own post or comment. Like Relay, it
+ * waits for Reddit to confirm before the item disappears.
+ */
+export const DeleteSheet = ({
+  id,
+  onDeleted,
+  onClosed,
+}: {
+  id: string;
+  onDeleted?: (() => void) | undefined;
+  onClosed: () => void;
+}) => {
+  const kind = id.startsWith("t3_") ? "post" : "comment";
+  return (
+    <ConfirmSheet
+      title={`Delete ${kind}?`}
+      message={`Are you sure you want to delete this ${kind}?`}
+      confirm="Delete"
+      onConfirm={() =>
+        void runAction("del", { id })
+          .then(() => {
+            markDeleted(id);
+            toast(kind === "post" ? "Post deleted" : "Comment deleted");
+            onDeleted?.();
+          })
+          .catch((error: unknown) =>
+            toast(error instanceof Error ? error.message : "Delete failed"),
+          )
+      }
+      onClosed={onClosed}
+    />
+  );
+};
 
 /** Relay's "Mod" swipe action: moderate one post or comment. */
 export const ModActionsSheet = ({

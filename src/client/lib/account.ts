@@ -46,3 +46,6 @@ const subscribe = (listener: () => void) => {
 
 export const useAccount = (): Account | null =>
   useSyncExternalStore(subscribe, current);
+
+/** The signed-in account outside React, e.g. when building a sheet. */
+export const currentAccount = (): Account | null => current();

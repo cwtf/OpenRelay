@@ -17,7 +17,7 @@ import {
 import { useNav, usePane } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { CommentRow, MoreRow, type CommentSwipe } from "../components/CommentRow";
-import { ModActionsSheet } from "../components/Relay";
+import { DeleteSheet, ModActionsSheet } from "../components/Relay";
 import { Icon, type IconName } from "../components/Icon";
 import { openPostActions } from "../components/PostActions";
 import {
@@ -31,6 +31,7 @@ import {
 import { ReplySheet } from "../components/ReplySheet";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
+import { currentAccount } from "../lib/account";
 import { fetchContext, fetchPost, fetchReplies, entryRoute } from "../lib/api";
 import {
   animateLayout,
@@ -103,6 +104,15 @@ const mapTree = (
         ? { ...node, replies: mapTree(node.replies, id, fn) }
         : node,
   );
+
+const dropFromTree = (nodes: CommentNode[], id: string): CommentNode[] =>
+  nodes
+    .filter((node) => node.id !== id)
+    .map((node) =>
+      node.replies.length
+        ? { ...node, replies: dropFromTree(node.replies, id) }
+        : node,
+    );
 
 const findPath = (
   nodes: CommentNode[],
@@ -529,8 +539,30 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     [locked, scrollToComment, nav],
   );
 
+  // Relay drops a deleted comment's row and leaves its replies in the list.
+  // In the tree, a comment with replies stays as "[deleted]" to hold them.
+  const removeComment = (node: CommentNode) => {
+    if (node.replies.length || node.moreReplies) {
+      setTree((current) =>
+        current
+          ? mapTree(current, node.id, (n) => ({ ...n, author: "[deleted]", body: "[deleted]" }))
+          : current,
+      );
+      return;
+    }
+    const row = listRef.current?.querySelector<HTMLElement>(
+      `[data-cid="${CSS.escape(node.id)}"]`,
+    );
+    void fadeOutRows(row ? [row] : []).then(() => {
+      captureLayout();
+      setTree((current) => (current ? dropFromTree(current, node.id) : current));
+    });
+  };
+
   const commentActions = useCallback(
     (node: CommentNode) => {
+      const own =
+        currentAccount()?.name.toLowerCase() === node.author.toLowerCase();
       const path = tree ? findPath(tree, node.id) : null;
       const root = path?.[0];
       const parent =
@@ -601,13 +633,28 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                   label="View on Reddit"
                   onClick={run(() => openUrl(redditUrl(node.permalink)))}
                 />
+                {own ? (
+                  <SheetItem
+                    icon="trash"
+                    label="Delete"
+                    onClick={run(() =>
+                      nav.openSheet((onClosed) => (
+                        <DeleteSheet
+                          id={node.id}
+                          onDeleted={() => removeComment(node)}
+                          onClosed={onClosed}
+                        />
+                      )),
+                    )}
+                  />
+                ) : null}
               </>
             );
           }}
         </Sheet>
       ));
     },
-    // openReply/scrollToComment are stable enough for sheet lifetimes.
+    // openReply/scrollToComment/removeComment are stable enough for sheet lifetimes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tree, post, nav],
   );
@@ -730,7 +777,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
               data-ripple
               aria-label="Post actions"
               disabled={!post}
-              onClick={() => post && openPostActions(nav, post)}
+              onClick={() => post && openPostActions(nav, post, undefined, nav.back)}
             >
               <Icon name="more" size={20} />
             </button>

@@ -5,6 +5,7 @@ import { usePrefs } from "../app/prefs";
 import { Icon } from "../components/Icon";
 import { PostCard } from "../components/PostCard";
 import { fetchSearch, entryRoute } from "../lib/api";
+import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { sortLabel } from "../lib/format";
 import { openUrl } from "../lib/platform";
 import { pageUrl } from "../../extension/bridge";
@@ -16,6 +17,7 @@ const SORTS: SearchSort[] = ["relevance", "new", "top", "comments"];
 export const SearchScreen = ({ sub }: { sub: string }) => {
   const nav = useNav();
   const { prefs } = usePrefs();
+  useDeletedVersion();
   const [draft, setDraft] = useState(entryRoute.query ?? "");
   const [query, setQuery] = useState(entryRoute.query ?? "");
   const [sort, setSort] = useState<SearchSort>(
@@ -234,7 +236,7 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
               </span>
             </div>
           ) : null}
-          {posts.map((post) => (
+          {posts.filter((post) => !isDeleted(post.id)).map((post) => (
             <PostCard
               key={post.id}
               post={post}

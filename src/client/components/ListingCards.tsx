@@ -11,14 +11,17 @@ import type {
 import { useNav } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { age, fullDate } from "../lib/format";
+import { useLongPress } from "../lib/gestures";
 import { Markdown, MarkdownContext } from "../lib/markdown";
 import { Icon, type IconName } from "./Icon";
 import { inlineViewerItem } from "./PostParts";
 import { ActionStrip, type BarAction } from "./Relay";
 import { VoteLinks, useVoteToggle } from "./VoteLinks";
 import { useAccount } from "../lib/account";
-import { ModActionsSheet } from "./Relay";
+import { DeleteSheet, ModActionsSheet } from "./Relay";
 import { ReplySheet } from "./ReplySheet";
+import { Sheet, SheetItem } from "./Sheet";
+import { copyText, openUrl, redditUrl } from "../lib/platform";
 import { SwipeActions, type SwipeAction } from "./SwipeActions";
 
 /** Markdown whose links and images open inside the reader. */
@@ -90,7 +93,41 @@ export const CommentCard = ({
   const account = useAccount();
   const vote = useVoteToggle(comment.id, comment.vote, comment.score);
   const own = account?.name.toLowerCase() === comment.author.toLowerCase();
-  // Relay's listing-comment swipe actions: Up, Down, Full, Reply, Edit, Mod.
+  // Relay's listing-comment overflow menu; Delete only on your own comments.
+  const more = () =>
+    nav.openSheet((onClosed) => (
+      <Sheet title={`${comment.author} · r/${comment.subreddit}`} label="Comment actions" onClosed={onClosed}>
+        {(close) => {
+          const run = (action: () => void) => () => {
+            close();
+            action();
+          };
+          return (
+            <>
+              <SheetItem icon="copy" label="Copy text" onClick={run(() => void copyText(comment.body, "Comment copied"))} />
+              <SheetItem
+                icon="link"
+                label="Copy link"
+                onClick={run(() => void copyText(redditUrl(comment.permalink), "Link copied"))}
+              />
+              <SheetItem icon="external" label="View on Reddit" onClick={run(() => openUrl(redditUrl(comment.permalink)))} />
+              {own ? (
+                <SheetItem
+                  icon="trash"
+                  label="Delete"
+                  onClick={run(() =>
+                    nav.openSheet((onClosed) => <DeleteSheet id={comment.id} onClosed={onClosed} />),
+                  )}
+                />
+              ) : null}
+            </>
+          );
+        }}
+      </Sheet>
+    ));
+  const press = useLongPress(more);
+  // Relay's listing-comment swipe actions: Up, Down, Full, Reply, Edit, Mod,
+  // plus More for the overflow menu.
   const actions: SwipeAction[] = [
     { icon: "up", label: "Up", title: "Upvote", tone: "up", active: vote.current === 1, disabled: vote.pending, onClick: () => vote.cast(1) },
     { icon: "down", label: "Down", title: "Downvote", tone: "down", active: vote.current === -1, disabled: vote.pending, onClick: () => vote.cast(-1) },
@@ -132,6 +169,7 @@ export const CommentCard = ({
           } satisfies SwipeAction,
         ]
       : []),
+    { icon: "more", label: "More", title: "More actions", onClick: more },
   ];
   return (
     <SwipeActions actions={actions}>
@@ -140,6 +178,7 @@ export const CommentCard = ({
       data-cid={comment.id}
       tabIndex={0}
       onClick={(event) => {
+        if (press.consumeClick()) return;
         if ((event.target as Element).closest("a, button, .md-spoiler")) return;
         nav.openPost(comment.postId, comment.id);
       }}
@@ -147,6 +186,7 @@ export const CommentCard = ({
         if (event.key === "Enter" && event.target === event.currentTarget)
           nav.openPost(comment.postId, comment.id);
       }}
+      {...press.handlers}
     >
       <div className="list-title">{comment.postTitle || "Comment"}</div>
       <div className="list-info">
