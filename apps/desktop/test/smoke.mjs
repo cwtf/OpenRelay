@@ -91,6 +91,7 @@ const fixtures = async (route) => {
     frame,
     cookie: headers.cookie ?? null,
     origin: headers.origin ?? null,
+    userAgent: headers["user-agent"],
   });
   // Like Reddit, which allows no other origin to read its responses.
   // (Playwright otherwise adds CORS headers to fulfilled responses.)
@@ -803,6 +804,12 @@ try {
   const posts = requests.filter((r) => r.method !== "GET");
   assert.equal(posts.length, writes.length);
   for (const request of posts) assert.equal(request.origin, "https://www.reddit.com");
+  // Reddit sees a plain Chrome, not Electron or the app (its bot filter
+  // refuses JSON to those).
+  for (const request of requests) {
+    assert.match(request.userAgent, /Chrome\/\d/, request.path);
+    assert.doesNotMatch(request.userAgent, /Electron|OpenRelay|openrelay/i, request.path);
+  }
   // The reader itself can't read Reddit with the session.
   deny = false;
   await page.goto("https://www.reddit.com/r/test/");

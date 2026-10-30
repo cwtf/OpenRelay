@@ -5,7 +5,6 @@
 // reads JSON and a vote is posted with the modhash. Run `npm run dist` first.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -33,6 +32,7 @@ const post = {
   created_utc: 1700000000,
 };
 const writes = [];
+const userAgents = new Set();
 
 const child = spawn(
   exe,
@@ -59,6 +59,7 @@ try {
   const fixtures = async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    userAgents.add((await request.allHeaders())["user-agent"]);
     if (request.method() !== "GET") {
       writes.push({
         path: url.pathname,
@@ -111,9 +112,11 @@ try {
       body: { id: post.name, dir: "1", uh: "fixturemodhash1", api_type: "json" },
     },
   ]);
-  // The throwaway profile was used, not the real one.
-  assert.ok((await readdir(profile)).length > 0);
-  assert.equal(existsSync(resolve(process.env.APPDATA ?? "", "OpenRelay")), false);
+  // Reddit sees a plain Chrome (its bot filter refuses JSON to Electron's).
+  assert.equal(userAgents.size, 1);
+  assert.doesNotMatch([...userAgents][0], /Electron|OpenRelay|openrelay/i);
+  // The throwaway profile was used (--user-data-dir), not the real one.
+  assert.ok((await readdir(profile)).includes("Partitions"));
   console.log(
     "PASS (packaged): OpenRelay.exe starts with its fuses, serves the reader from app.asar, injects content.js, loads fixtures through the bridge and posts a vote with the modhash.",
   );

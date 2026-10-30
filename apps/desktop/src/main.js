@@ -41,6 +41,14 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// Electron's user agent names Electron and the app, and Reddit's bot filter
+// can refuse JSON to that (403). Every frame and request sends the Chrome
+// user agent it's built on instead.
+app.userAgentFallback = app.userAgentFallback.replace(
+  / (?:Electron|OpenRelay|openrelay-desktop)\/\S+/g,
+  "",
+);
+
 const isReddit = (value) => {
   try {
     const url = new URL(value);
