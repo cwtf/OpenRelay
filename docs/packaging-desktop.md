@@ -171,13 +171,23 @@ Never commit certificates or `.pfx`/`.p12` files. Keep them outside the reposito
 
 ## App icon
 
-The app uses Electron's default icon for now. To give it one, add these files to `apps/desktop/build/` (electron-builder's default resources folder) and rebuild:
+The desktop app, Android launcher and browser extension use OpenRelay's **Open Thread** icon: two white comment blocks connected by a thread rail on blue (`#1d63c4`). The vector originals are in `assets/branding/`.
 
-- `icon.ico` for Windows, 256×256 or larger. Several sizes in one file look best.
-- `icon.icns` for macOS.
-- `icon.png` for Linux, 512×512.
+The desktop resources in `apps/desktop/resources/` are checked in:
 
-electron-builder can also make all three from one `build/icon.png` of at least 512×512. Use artwork you have the rights to. The icon in `APK/` belongs to Relay for Reddit, so don't use it.
+- `icon.ico`: Windows executable, installer and uninstaller; includes 16–256 px sizes.
+- `icon.icns`: macOS app.
+- `icon.png`: 1024 px PNG for Linux and the running desktop window.
+
+Android resources include adaptive launcher icons, a monochrome layer for Android 13+ themed icons, and density-specific PNGs. The extension's toolbar and management icons are in `public/icons/` and are copied into both extension builds.
+
+To regenerate all assets after changing the geometry in `tools/build-icons.py`, install Pillow in your Python environment and run:
+
+```sh
+python tools/build-icons.py
+```
+
+Normal builds use the checked-in assets and need no Python dependency. Rebuild with `npm run build:apps` to produce the Windows installer, portable executable and Android debug APK. The unrelated reference files under `APK/` are not used.
 
 ## What the fuses do, and what they break
 

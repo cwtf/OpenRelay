@@ -36,6 +36,9 @@ await copyFile(
   resolve(root, "public/manifest.json"),
   resolve(root, "dist/manifest.json"),
 );
+await cp(resolve(root, "public/icons"), resolve(root, "dist/icons"), {
+  recursive: true,
+});
 // Firefox gets the same files in dist-firefox/. Its MV3 has no background
 // service worker, only event-page scripts, and it needs a fixed add-on ID
 // (keep it unchanged once published, or updates won't reach installs).

@@ -25,11 +25,13 @@
   "build": {
     "appId": "io.github.cwtf.openrelay",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "resources"
     },
     "files": [
       "package.json",
       "src/**",
+      "resources/icon.png",
       "openrelay/**"
     ],
     "electronFuses": {
@@ -42,12 +44,16 @@
       "grantFileProtocolExtraPrivileges": false
     },
     "win": {
+      "icon": "resources/icon.ico",
       "target": [
         "nsis",
         "portable"
       ]
     },
     "nsis": {
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "installerHeaderIcon": "resources/icon.ico",
       "artifactName": "${productName}-${version}-setup.${ext}",
       "oneClick": false,
       "perMachine": false,
@@ -57,10 +63,12 @@
       "artifactName": "${productName}-${version}-portable.${ext}"
     },
     "mac": {
+      "icon": "resources/icon.icns",
       "target": "dmg",
       "category": "public.app-category.news"
     },
     "linux": {
+      "icon": "resources/icon.png",
       "target": "AppImage",
       "category": "Network"
     }

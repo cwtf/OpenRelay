@@ -25,6 +25,7 @@ const REDDIT_ORIGINS = new Set([
 ]);
 /** The shared build, copied in by `npm run build` (tools/copy-dist.mjs). */
 const files = resolve(import.meta.dirname, "../openrelay");
+if (process.platform === "win32") app.setAppUserModelId("io.github.cwtf.openrelay");
 
 // Reddit's CSP must not stop its page from framing the reader, just as it
 // can't stop the extension's frame.
@@ -202,6 +203,7 @@ function createWindow(url = "https://www.reddit.com/") {
     width: 1280,
     height: 900,
     title: "OpenRelay",
+    icon: join(import.meta.dirname, "../resources/icon.png"),
     webPreferences: {
       partition: PARTITION,
       preload: join(import.meta.dirname, "preload.cjs"),
