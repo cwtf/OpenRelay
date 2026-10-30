@@ -6,7 +6,7 @@ A project inspired by **Relay for Reddit**, the Android app by DBrandy. It repla
 
 ## Install
 
-Release packages are in **releases/**: the Chrome extension (`.zip` and signed `.crx`) in **releases/chrome/**, the Firefox add-on in **releases/firefox/**, the Windows installer and portable exe in **releases/desktop/**, and the Android APK in **releases/android/**. `npm run build:apps` rebuilds all of them (`-- chrome`, `-- firefox`, `-- exe` or `-- apk` for some).
+Release packages are on the [Releases page](https://github.com/cwtf/OpenRelay/releases): the Windows installer and portable exe, the Android APK, the Chrome extension (`.zip` and signed `.crx`) and the Firefox add-on. All but the exes, which are too large for the repository, are also in **releases/**: **releases/chrome/**, **releases/firefox/** and **releases/android/**. `npm run build:apps` rebuilds all of them (`-- chrome`, `-- firefox`, `-- exe` or `-- apk` for some), and `-- --publish` uploads them to the release for the current version.
 
 The built extension is in **dist/**, or unzip **releases/chrome/OpenRelay-*-chrome.zip** and use that folder.
 

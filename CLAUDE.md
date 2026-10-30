@@ -15,7 +15,7 @@ npm run type-check     # tsc --noEmit
 npm test               # unit tests (node:test, run on the .ts sources directly)
 npm run build          # vite build into dist/ (Chrome) and dist-firefox/
 npm run test:browser   # Playwright smoke tests against the built dist/ (build first)
-npm run build:apps     # desktop exes, signed Android APK, Chrome .zip/.crx and unsigned Firefox .xpi into releases/<desktop|android|chrome|firefox>/ (name targets: `-- exe apk chrome firefox`; `-- --debug` for a debug APK)
+npm run build:apps     # desktop exes, signed Android APK, Chrome .zip/.crx and unsigned Firefox .xpi into releases/<desktop|android|chrome|firefox>/ (name targets: `-- exe apk chrome firefox`; `-- --debug` for a debug APK; `-- --publish` uploads them to a draft GitHub Release v<version> with gh)
 ```
 
 Run one unit test file, or one test by name:
@@ -96,5 +96,5 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 ## Repo notes
 
 - `dist/`, `dist-firefox/`, `*.xpi`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`, `apps/android/keystore.properties` or the `.jks` keystore.
-- `releases/` is committed: it holds the official packages that `build:apps` puts there, one subfolder per platform (`.gitignore` re-includes its `.zip` and `.xpi` files). The `.crx` is signed with `dist.pem` by `tools/extension-packages.mjs` (CRX3 and zip in plain Node), so the extension ID stays `hgeofllbbcejfkcojkpkdkpkkdijgbaj`. GitHub rejects files over 100 MiB, so the script refuses to copy anything larger. The desktop build's `compression: "maximum"`, English-only `electronLanguages` and the installer's `differentialPackage: false` (solid compression; there's no electron-updater) keep both exes at about 98 MiB, so an Electron upgrade can push them over.
+- `releases/` holds the official packages that `build:apps` puts there, one subfolder per platform. `android/`, `chrome/` and `firefox/` are committed (`.gitignore` re-includes their `.zip` and `.xpi` files); `desktop/` is git-ignored, because the exes are about 98 MiB, too close to GitHub's 100 MiB file limit, and they're published only as GitHub Release assets (`--publish`). The script refuses to copy a committed package over 100 MiB. The `.crx` is signed with `dist.pem` by `tools/extension-packages.mjs` (CRX3 and zip in plain Node), so the extension ID stays `hgeofllbbcejfkcojkpkdkpkkdijgbaj`. The desktop build's `compression: "maximum"`, English-only `electronLanguages` and the installer's `differentialPackage: false` (solid compression; there's no electron-updater) keep the downloads small.
 - The README lists the unit-test count ("69 unit tests"). Update it if you add or remove tests.

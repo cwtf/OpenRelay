@@ -23,3 +23,5 @@ apps/android/keystore.properties
 # ...except the official packages in releases/ (see tools/build-apps.mjs)
 !releases/**/*.zip
 !releases/**/*.xpi
+# The desktop exes are too large for the repository; they go to GitHub Releases
+releases/desktop/
