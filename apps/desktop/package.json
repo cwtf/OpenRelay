@@ -4,18 +4,65 @@
   "version": "0.1.0",
   "private": true,
   "description": "OpenRelay for Reddit as a desktop app",
+  "author": "cwtf",
   "type": "module",
   "main": "src/main.js",
   "scripts": {
     "build": "npm --prefix ../.. run build && node tools/copy-dist.mjs",
     "start": "electron .",
-    "test": "node test/smoke.mjs"
+    "dist": "npm run build && electron-builder",
+    "test": "node test/smoke.mjs",
+    "test:packaged": "node test/packaged-smoke.mjs && node test/smoke.mjs release/win-unpacked/resources/app.asar"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
     "electron": "45.1.0",
+    "electron-builder": "26.18.0",
     "playwright": "1.64.1"
+  },
+  "build": {
+    "appId": "io.github.cwtf.openrelay",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "package.json",
+      "src/**",
+      "openrelay/**"
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableCookieEncryption": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.news"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Network"
+    }
   }
 }

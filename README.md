@@ -41,7 +41,7 @@ Firefox removes temporary add-ons when it restarts. To keep it installed, have M
 
 ## Desktop app (Windows, macOS, Linux)
 
-**apps/desktop/** wraps OpenRelay in Electron: a Reddit window with the reader on top, as in a browser tab with the extension. It isn't packaged yet; run it from source:
+**apps/desktop/** wraps OpenRelay in Electron: a Reddit window with the reader on top, as in a browser tab with the extension. To run it from source:
 
 ```sh
 npm ci
@@ -52,6 +52,8 @@ npm start
 ```
 
 `npm run build` builds the shared code at the repository root and copies `reader.html`, `assets/` and `content.js` into **apps/desktop/openrelay/**.
+
+To package it, run `npm run dist` in **apps/desktop/**. It uses electron-builder to build for the platform you run it on. On Windows that is an installer, **release/OpenRelay-0.1.0-setup.exe** (per user, no administrator rights needed), and a single-file **release/OpenRelay-0.1.0-portable.exe**. On macOS it is a `.dmg`, and on Linux an AppImage. The builds aren't code-signed, so Windows SmartScreen warns on first run (**More info → Run anyway**), and macOS needs right-click → **Open**. The app still uses Electron's default icon. Packaged builds turn on Electron's security fuses. They can't be run as Node or debugged through Node's inspector, they load the app only from its integrity-checked `app.asar`, and they encrypt the cookie store with the operating system's key store.
 
 Sign in to Reddit inside the app, with your Reddit username and password. Google and Apple sign-in refuse to run in embedded browsers such as Electron. **View → Toggle OpenRelay / Original Reddit** (Ctrl+Shift+R, or Cmd+Shift+R on macOS) replaces the extension's toolbar button. Reddit links, including the login page, open in another app window with the same session; other links open in your default browser.
 
@@ -109,6 +111,8 @@ The desktop app has its own port of the browser test, `apps/desktop/test/smoke.m
 cd apps/desktop
 npm test
 ```
+
+After `npm run dist` on Windows, `npm run test:packaged` checks the packaged build. It first starts the real **OpenRelay.exe** with a throwaway profile and its network sent to a dead proxy, connects over CDP, and checks against fixtures that the reader loads from `app.asar` and a vote is posted with the modhash. It then runs the full desktop test on the packaged `app.asar`.
 
 Validated: injection, loaded-page feeds, settings persistence, the subscriptions drawer, nested comments, direct posts, layouts, themes, toolbar restore/reopen, excluded pages, JSON-denied fallback. A live public Reddit check reached Reddit's humanity challenge, so live signed-in behavior has not been verified.
 

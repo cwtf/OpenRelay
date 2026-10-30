@@ -34,7 +34,11 @@ npm ci
 npm run build          # root build, then copies reader.html, assets/, content.js into apps/desktop/openrelay/
 npm start              # run the app
 npm test               # test/smoke.mjs: browser-smoke ported to Playwright's Electron launcher
+npm run dist           # build, then package with electron-builder into release/ (Windows: NSIS setup + portable exe)
+npm run test:packaged  # Windows, after dist: the real OpenRelay.exe offline over CDP, then smoke.mjs on its app.asar
 ```
+
+Packaged builds set Electron fuses (`build.electronFuses` in `apps/desktop/package.json`), so the exe ignores `-r`, `--inspect` and `NODE_OPTIONS`. That's why `test/packaged-smoke.mjs` drives it over `--remote-debugging-port` with `--proxy-server` pointed at a dead port and `--user-data-dir` set to a throwaway profile, instead of using the test hook.
 
 After rebuilding, reload the unpacked extension in `chrome://extensions` and refresh the Reddit tab. Until the extension is reloaded, the old content script keeps running and rejects new bridge actions with "Unsupported request". The reader shows that as a "reload the extension" message.
 

@@ -14,7 +14,7 @@ This document starts two separate pieces of work: an **Android app** that wraps 
   - `npm run check` passes (69 unit tests).
   - All four Chrome browser suites pass.
   - A fixture smoke run in Firefox 145 passes: the reader mounts, JSON loads through the bridge, and a vote is sent with the modhash.
-  - The Android app doesn't exist yet. The desktop app is started on `feat/desktop-app` (see its section), unpackaged.
+  - The Android app doesn't exist yet. The desktop app is on `master` (see its section). `npm run dist` packages it with electron-builder, unsigned and with Electron's default icon.
 
 ## How a wrapper app runs OpenRelay
 

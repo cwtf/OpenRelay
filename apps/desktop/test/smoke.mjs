@@ -1,7 +1,8 @@
 // tools/browser-smoke.mjs, ported to the desktop app: the real app (main
 // process, preload, content.js in its isolated world, the openrelay:// reader)
 // against the same Reddit fixtures. test/hook.cjs keeps it offline and in a
-// throwaway profile. Build first: `npm run build`.
+// throwaway profile. Build first: `npm run build`. Pass a packaged app's
+// app.asar (e.g. release/win-unpacked/resources/app.asar) to test that instead.
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -9,8 +10,8 @@ import { resolve } from "node:path";
 const { _electron } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
-const appDir = resolve(import.meta.dirname, "..");
-const out = resolve(appDir, "../../test-results");
+const appDir = resolve(import.meta.dirname, "..", process.argv[2] || ".");
+const out = resolve(import.meta.dirname, "../../../test-results");
 await mkdir(out, { recursive: true });
 const profile = await mkdtemp(resolve(out, "desktop-profile-"));
 const READER = "openrelay://reader";
