@@ -558,6 +558,7 @@ export const FeedScreen = ({
               {refreshing ? <div className="spinner" /> : null}
               {isCommunity(sub) ? (
                 <div className="header-actions">
+                  <SubscribeButton sub={sub} />
                   <button
                     type="button"
                     className="header-action"
@@ -572,7 +573,6 @@ export const FeedScreen = ({
                   >
                     <Icon name="more" />
                   </button>
-                  <SubscribeButton sub={sub} />
                 </div>
               ) : null}
             </div>
