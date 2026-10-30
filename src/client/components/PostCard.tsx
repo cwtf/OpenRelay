@@ -2,7 +2,7 @@ import { memo, useSyncExternalStore } from 'react';
 import type { Prefs, PostSummary } from '../../shared/api';
 import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
-import { compact, plural } from '../lib/format';
+import { age, compact, fullDate, plural } from '../lib/format';
 import { useLongPress } from '../lib/gestures';
 import { useIsSelectedPost } from '../lib/panes';
 import { readPosts } from '../lib/storage';
@@ -119,15 +119,7 @@ const PostRow = ({
  * small card, or with Compact Crosspost Layout one "N Comments in r/sub"
  * link. Both open the original's comments.
  */
-const Crosspost = ({
-  original,
-  layout,
-  showThumbnails,
-}: {
-  original: PostSummary;
-  layout: Prefs['layout'];
-  showThumbnails: boolean;
-}) => {
+const Crosspost = ({ original }: { original: PostSummary }) => {
   const nav = useNav();
   const { prefs } = usePrefs();
   const read = useIsRead(original.id);
@@ -173,13 +165,49 @@ const Crosspost = ({
           aria-label={`Original post: ${original.title}`}
           {...press.handlers}
         />
-        {/* Relay draws the original with its thumbnail card in every layout. */}
-        <PostRow
-          post={original}
-          showSub
-          thumb={(showThumbnails || layout === 'cards') && wantsThumb(original)}
-          onMore={more}
-        />
+        {/* Relay's original card: "score author in sub", the title, then
+            "N Comments • domain • age • flair", with no thumbnail or buttons
+            since the crosspost above already shows the media. */}
+        <div className="crosspost-byline">
+          <span className="score">{compact(original.score)}</span>
+          <span className="name">{original.author}</span>
+          <span className="in">in</span>
+          <span className="name">{original.subreddit}</span>
+        </div>
+        <h3 className="post-title">{original.title}</h3>
+        <div className="post-meta crosspost-meta">
+          <span>{plural(original.comments, 'Comment')}</span>
+          <span className="dot" />
+          <span className="domain">
+            {original.domain || `self.${original.subreddit}`}
+          </span>
+          <span className="dot" />
+          <time
+            dateTime={new Date(original.createdAt).toISOString()}
+            title={fullDate(original.createdAt)}
+          >
+            {age(original.createdAt)}
+            {original.edited ? ' (edited)' : ''}
+          </time>
+          {original.nsfw ? (
+            <>
+              <span className="dot" />
+              <span className="nsfw">NSFW</span>
+            </>
+          ) : null}
+          {original.spoiler ? (
+            <>
+              <span className="dot" />
+              <span className="spoiler">Spoiler</span>
+            </>
+          ) : null}
+          {original.flair ? (
+            <>
+              <span className="dot" />
+              <span className="flair">{original.flair.text}</span>
+            </>
+          ) : null}
+        </div>
       </article>
     </div>
   );
@@ -214,7 +242,7 @@ export const PostCard = memo(
     ];
 
     const crosspost = post.crosspostParent ? (
-      <Crosspost original={post.crosspostParent} layout={layout} showThumbnails={showThumbnails} />
+      <Crosspost original={post.crosspostParent} />
     ) : null;
 
     const hit = (

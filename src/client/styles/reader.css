@@ -711,8 +711,8 @@
   border-radius: var(--radius-card) var(--radius-card) 4px 4px;
   background: var(--surface-2);
   color: var(--link);
-  font-size: calc(14px * var(--ts));
-  font-weight: 600;
+  font-size: calc(16px * var(--ts));
+  font-weight: 400;
   text-align: left;
 }
 
@@ -730,6 +730,10 @@
 
 .crosspost-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 14px;
   border-radius: 4px 4px var(--radius-card) var(--radius-card);
   background: var(--surface-2);
   overflow: hidden;
@@ -738,6 +742,48 @@
 .crosspost-card > *:not(.post-hit) {
   position: relative;
   z-index: 1;
+}
+
+.crosspost-byline {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: calc(14px * var(--ts));
+}
+
+.crosspost-byline .score {
+  flex: none;
+  font-size: calc(22px * var(--ts));
+  font-weight: 300;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.crosspost-byline .name {
+  font-weight: 600;
+  color: var(--link);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crosspost-byline .in {
+  flex: none;
+  font-size: calc(12px * var(--ts));
+  color: var(--text-2);
+}
+
+.crosspost-meta .flair {
+  color: var(--mod);
+}
+
+.crosspost-meta .nsfw {
+  color: var(--nsfw);
+}
+
+.crosspost-meta .spoiler {
+  color: var(--warn);
 }
 
 .crosspost-card.is-read .post-title {
