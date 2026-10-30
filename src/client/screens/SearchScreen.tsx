@@ -76,6 +76,12 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
     writeJson("search-history", next);
   };
 
+  const forget = (entry: string) => {
+    const next = history.filter((item) => item !== entry);
+    setHistory(next);
+    writeJson("search-history", next);
+  };
+
   const more = () => {
     if (!after || status !== "idle") return;
     const id = ++request.current;
@@ -175,18 +181,28 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
               <div className="sheet-section">Recent searches</div>
               <div className="sort-strip" style={{ flexWrap: "wrap" }}>
                 {history.map((entry) => (
-                  <button
-                    key={entry}
-                    type="button"
-                    className="filter-chip"
-                    data-ripple
-                    onClick={() => {
-                      setDraft(entry);
-                      submit(entry);
-                    }}
-                  >
-                    <Icon name="clock" /> {entry}
-                  </button>
+                  <span key={entry} className="filter-chip is-removable">
+                    <button
+                      type="button"
+                      className="filter-chip-main"
+                      data-ripple
+                      onClick={() => {
+                        setDraft(entry);
+                        submit(entry);
+                      }}
+                    >
+                      <Icon name="clock" /> {entry}
+                    </button>
+                    <button
+                      type="button"
+                      className="filter-chip-remove"
+                      data-ripple
+                      aria-label={`Remove “${entry}” from recent searches`}
+                      onClick={() => forget(entry)}
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </span>
                 ))}
               </div>
             </>

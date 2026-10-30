@@ -343,6 +343,40 @@
   height: 18px;
 }
 
+/* A chip with its own remove button: the chip is a wrapper around two buttons. */
+.filter-chip.is-removable {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.filter-chip.is-removable > button {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+}
+
+.filter-chip-main {
+  gap: 6px;
+  padding: 0 6px 0 10px;
+}
+
+.filter-chip-remove {
+  justify-content: center;
+  width: 30px;
+  color: var(--text-3);
+  transition: color 160ms;
+}
+
+.filter-chip-remove:hover {
+  color: var(--text);
+}
+
+.filter-chip .filter-chip-remove .icon {
+  width: 16px;
+  height: 16px;
+}
+
 .filter-chip.is-selected {
   background: var(--primary-soft);
   color: var(--on-primary-soft);
