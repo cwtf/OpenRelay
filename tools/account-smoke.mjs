@@ -229,10 +229,23 @@ try {
   await app.locator(".toast", { hasText: "All messages marked read" }).waitFor();
   assert.equal(lastWrite().path, "/api/read_all_messages");
   assert.equal(await top().locator(".message-card.is-unread").count(), 0);
-  // Context opens the reply's thread, scrolled to and highlighting the reply.
+  // Swiping a reply left reveals its actions, as on other cards.
   const reply = top().locator('[data-mid="t1_r1"]');
+  const box = await reply.boundingBox();
+  const y = box.y + Math.min(box.height / 2, 40);
+  await page.mouse.move(box.x + box.width - 30, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step++) await page.mouse.move(box.x + box.width - 30 - step * 35, y + step);
+  await page.mouse.up();
+  await app.locator(".swipe.is-open").waitFor();
+  assert.deepEqual(
+    await app.locator(".swipe.is-open .swipe-btn span").allTextContents(),
+    ["User", "Context", "Reply", "Block", "Unread"],
+  );
+  await page.keyboard.press("Escape");
+  await app.locator(".swipe.is-open").waitFor({ state: "detached" });
+  // Tapping a reply opens its thread, scrolled to and highlighting the reply.
   await reply.getByText("A reply to you").click();
-  await reply.locator(".strip-btn", { hasText: "Context" }).click();
   const target = app.locator('.comment.is-context[data-cid="t1_r1"]');
   await target.waitFor();
   await app.getByText("Single comment thread").waitFor();
@@ -316,7 +329,7 @@ try {
   assert.equal(context.pages().length, 2); // No tabs opened for these screens.
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: in-reader Profile (sections, karma, follows Layout), User (friend, message), Compose, Inbox (read, reply, read all, context scrolls to the comment), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
+    "PASS: in-reader Profile (sections, karma, follows Layout), User (friend, message), Compose, Inbox (read, reply, read all, swipe actions, tapping a reply opens its context scrolled to the comment), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
   );
 } finally {
   await context.close();

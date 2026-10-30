@@ -325,20 +325,19 @@ export const InboxScreen = () => {
     if (item.unread) markRead(item, false);
   };
 
+  // Comment notifications open the thread at that comment.
+  const openContext = (item: InboxItem) => {
+    if (!item.postId) return;
+    if (item.unread) markRead(item, false);
+    nav.openPost(item.postId, item.id.startsWith("t1_") ? item.id : undefined);
+  };
+
   const actionsFor = (item: InboxItem): BarAction[] => [
     ...(USER_RE.test(item.author)
       ? [{ icon: "user", label: "User", onClick: () => nav.openProfile(item.author) } as BarAction]
       : []),
     ...(item.postId
-      ? [
-          {
-            icon: "comment",
-            label: "Context",
-            // Comment notifications open the thread at that comment.
-            onClick: () =>
-              nav.openPost(item.postId!, item.id.startsWith("t1_") ? item.id : undefined),
-          } as BarAction,
-        ]
+      ? [{ icon: "comment", label: "Context", onClick: () => openContext(item) } as BarAction]
       : []),
     {
       icon: "reply",
@@ -436,6 +435,7 @@ export const InboxScreen = () => {
               item={item}
               expanded={open === item.id}
               onToggle={() => toggle(item)}
+              onOpen={item.postId ? () => openContext(item) : undefined}
               actions={actionsFor(item)}
             />
           ))}

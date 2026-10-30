@@ -228,31 +228,39 @@ const INBOX_TYPE: Record<InboxItem["kind"], { label: string; icon: IconName }> =
   mod_message: { label: "Mod Mail", icon: "modShield" },
 };
 
-/** An inbox entry: type line, subject, sender line and body. */
+/**
+ * An inbox entry: type line, subject, sender line and body. Swiping left
+ * reveals its actions, as on other cards.
+ */
 export const MessageCard = ({
   item,
   expanded,
   onToggle,
+  onOpen,
   actions,
 }: {
   item: InboxItem;
   expanded: boolean;
   onToggle: () => void;
+  /** When set, a tap opens the item instead of expanding its actions. */
+  onOpen?: () => void;
   actions: BarAction[];
 }) => {
   const type = INBOX_TYPE[item.kind];
+  const activate = onOpen ?? onToggle;
   return (
+    <SwipeActions actions={actions}>
     <article
       className={`list-card message-card${item.unread ? " is-unread" : ""}`}
       data-mid={item.id}
       tabIndex={0}
-      aria-expanded={expanded}
+      aria-expanded={onOpen ? undefined : expanded}
       onClick={(event) => {
         if ((event.target as Element).closest("a, button, .md-spoiler")) return;
-        onToggle();
+        activate();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter" && event.target === event.currentTarget) onToggle();
+        if (event.key === "Enter" && event.target === event.currentTarget) activate();
       }}
     >
       <div className="message-type">
@@ -286,7 +294,8 @@ export const MessageCard = ({
       <div className="list-body">
         <ReaderMarkdown source={item.body} />
       </div>
-      {expanded ? <ActionStrip actions={actions} /> : null}
+      {expanded && !onOpen ? <ActionStrip actions={actions} /> : null}
     </article>
+    </SwipeActions>
   );
 };
