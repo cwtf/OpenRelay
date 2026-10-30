@@ -53,11 +53,38 @@ const videoPost = {
     },
   },
 };
-await context.route(/^https:\/\/www\.reddit\.com\//, (route) => {
+// GIF comments: Reddit's body names the media by ID and lists its URLs in
+// media_metadata, or only `"status": "invalid"` when Giphy has the only copy.
+// The MP4s are held back until the test lets them fail.
+const gifComment = {
+  kind: "t1",
+  data: {
+    id: "g1", name: "t1_g1", parent_id: "t3_tiny", author: "u", score: 1, created_utc: 1700000000,
+    body: "Still ![gif](giphy|still) moving ![gif](giphy|moving|downsized) remote ![gif](giphy|remote)",
+    media_metadata: {
+      "giphy|still": { e: "AnimatedImage", s: { gif: "https://www.reddit.com/img/wide.svg", x: 3000, y: 500 } },
+      "giphy|moving": {
+        e: "AnimatedImage",
+        s: { gif: "https://www.reddit.com/vid/moving.gif", mp4: "https://www.reddit.com/vid/moving.mp4", x: 200, y: 100 },
+      },
+      "giphy|remote": { status: "invalid" },
+    },
+  },
+};
+let releaseMp4;
+const mp4Held = new Promise((resolve) => (releaseMp4 = resolve));
+const giphyReferrers = [];
+await context.route(/^https:\/\/i\.giphy\.com\//, async (route) => {
+  giphyReferrers.push((await route.request().allHeaders()).referer ?? "");
+  await mp4Held;
+  return route.fulfill({ status: 404, body: "" });
+});
+await context.route(/^https:\/\/www\.reddit\.com\//, async (route) => {
   const url = new URL(route.request().url());
   const shape = url.pathname.match(/^\/img\/(\w+)\.svg$/)?.[1];
   if (shape && shapes[shape])
     return route.fulfill({ contentType: "image/svg+xml", body: svg(shapes[shape]) });
+  if (url.pathname === "/vid/moving.mp4") await mp4Held;
   if (url.pathname.startsWith("/vid/")) return route.fulfill({ status: 404, body: "" });
   if (url.pathname.endsWith(".json"))
     return route.fulfill({
@@ -68,7 +95,7 @@ await context.route(/^https:\/\/www\.reddit\.com\//, (route) => {
           : url.pathname.startsWith("/comments/")
             ? [
                 { data: { children: [post(url.pathname.split("/")[2].replace(".json", ""))] } },
-                { data: { children: [] } },
+                { data: { children: url.pathname.includes("/tiny") ? [gifComment] : [] } },
               ]
             : { data: { children: [] } },
       ),
@@ -183,9 +210,37 @@ try {
   await page.screenshot({ path: resolve(out, "post-list.png") });
   await back(post);
 
+  // Comment GIFs render inline at their own shape instead of as a "GIF" link.
+  post = await openPost("A tiny image");
+  const gifs = post.locator('[data-cid="t1_g1"] .md-image');
+  await gifs.first().waitFor();
+  const still = gifs.nth(0).locator("img");
+  assert.equal(await still.getAttribute("src"), "https://www.reddit.com/img/wide.svg");
+  const stillBox = await still.boundingBox();
+  assert.ok(Math.abs(stillBox.width / stillBox.height - 6) < 0.1, "GIF keeps its shape");
+  assert.ok(stillBox.width <= 361, "GIF is at most 360px wide");
+  // An MP4 is preferred (`giphy|<id>|downsized` is listed as `giphy|<id>`).
+  const moving = gifs.nth(1).locator("video");
+  await app.locator('video[src="https://www.reddit.com/vid/moving.mp4"]').waitFor();
+  assert.equal(await moving.evaluate((v) => v.muted && v.loop), true);
+  // One Reddit has no copy of loads from Giphy, without a referrer.
+  await app.locator('video[src="https://i.giphy.com/media/remote/giphy.mp4"]').waitFor();
+  assert.equal(await post.getByText("GIF", { exact: true }).count(), 0);
+  await page.screenshot({ path: resolve(out, "comment-gifs.png") });
+  await gifs.nth(0).click();
+  await app.locator(".viewer-page img.is-fit").waitFor();
+  await app.locator("body").press("Escape");
+  await app.locator(".viewer").waitFor({ state: "detached" });
+  // A GIF that fails to load falls back to a link.
+  assert.ok(giphyReferrers.length > 0, "the Giphy GIF was requested");
+  assert.deepEqual(giphyReferrers.filter(Boolean), [], "Giphy gets no referrer");
+  releaseMp4();
+  await post.locator('[data-cid="t1_g1"] a.md-link', { hasText: "gif" }).nth(1).waitFor();
+  await back(post);
+
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row).",
+    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link.",
   );
 } finally {
   await context.close();

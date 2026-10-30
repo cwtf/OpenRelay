@@ -13,6 +13,7 @@ import type {
   PostDetail,
   PostMedia,
   FeedSort,
+  InlineMedia,
   Timeframe,
 } from "../shared/api.ts";
 
@@ -171,6 +172,30 @@ export function normalizePost(p: Raw): PostDetail {
     media,
   };
 }
+/**
+ * Media a comment body refers to by ID (`![gif](giphy|<id>)`, `![img](<id>)`),
+ * from the comment's `media_metadata`. Only entries the body uses are kept.
+ */
+function inlineMedia(c: Raw): { media?: Record<string, InlineMedia> } {
+  const meta = c.media_metadata;
+  const body = String(c.body ?? "");
+  if (!meta || typeof meta !== "object") return {};
+  const media: Record<string, InlineMedia> = {};
+  for (const [id, entry] of Object.entries(meta as Raw)) {
+    if (!body.includes(`(${id}`)) continue;
+    if (entry?.e !== "Image" && entry?.e !== "AnimatedImage") continue;
+    const url = safeUrl(entry.s?.gif ?? entry.s?.u);
+    if (!url) continue;
+    const mp4 = safeUrl(entry.s?.mp4);
+    media[id] = {
+      url,
+      width: num(entry.s?.x) || 240,
+      height: num(entry.s?.y) || 240,
+      ...(mp4 ? { mp4 } : {}),
+    };
+  }
+  return Object.keys(media).length ? { media } : {};
+}
 /** Reports and approval state, present only for moderators. */
 function modInfo(t: Raw): { mod?: ModInfo } {
   const reports: string[] = [];
@@ -207,6 +232,7 @@ export function normalizeListingComment(c: Raw): ListingComment {
     permalink: safeUrl(c.permalink),
     ...viewerVote(c.likes),
     ...modInfo(c),
+    ...inlineMedia(c),
   };
 }
 /** Posts and comments from profile and moderator listings. */
@@ -341,6 +367,7 @@ export function normalizeComments(children: Raw[] = []): {
           replies: nested.comments,
           moreReplies: nested.more,
           ...viewerVote(c.likes),
+          ...inlineMedia(c),
           ...(["moderator", "admin"].includes(c.distinguished)
             ? { distinguished: c.distinguished }
             : {}),

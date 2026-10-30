@@ -10,6 +10,7 @@ import {
   COMMENT_SORTS,
   type CommentNode,
   type CommentSort,
+  type InlineMedia,
   type PostDetail,
   type PostSummary,
 } from "../../shared/api";
@@ -20,6 +21,7 @@ import { ModActionsSheet } from "../components/Relay";
 import { Icon, type IconName } from "../components/Icon";
 import { openPostActions } from "../components/PostActions";
 import {
+  inlineViewerItem,
   MediaFrame,
   PostFlags,
   PostMeta,
@@ -633,15 +635,17 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const markdownActions = useMemo(
     () => ({
       onLink: nav.openLink,
-      onImage: (url: string) =>
+      onImage: (url: string, media?: InlineMedia) =>
         nav.openMedia({
-          items: [{ kind: "image", url }],
+          items: [inlineViewerItem(url, media)],
           index: 0,
           sourceUrl: url,
         }),
       highlight,
+      autoplayGifs: prefs.autoplayGifs,
+      giphyGifs: prefs.giphyGifs,
     }),
-    [nav, highlight],
+    [nav, highlight, prefs.autoplayGifs, prefs.giphyGifs],
   );
 
   const body = post && "body" in post ? post.body : undefined;

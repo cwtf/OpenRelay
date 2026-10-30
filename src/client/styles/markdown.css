@@ -150,7 +150,8 @@
   background: var(--surface-2);
 }
 
-.md .md-image img {
+.md .md-image img,
+.md .md-image video {
   max-height: 320px;
   width: auto;
   object-fit: contain;

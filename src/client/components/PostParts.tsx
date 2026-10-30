@@ -5,7 +5,12 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import type { Flair, ImageRef, PostSummary } from '../../shared/api';
+import type {
+  Flair,
+  ImageRef,
+  InlineMedia,
+  PostSummary,
+} from '../../shared/api';
 import type { ViewerItem, ViewerSpec } from '../app/nav';
 import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
@@ -107,6 +112,20 @@ export const PostFlags = ({ post }: { post: PostSummary }) => {
 };
 
 // ------------------------------------------------------------------ viewer helpers
+
+/** Viewer item for an image tapped in Markdown; a GIF with an MP4 plays that. */
+export const inlineViewerItem = (url: string, media?: InlineMedia): ViewerItem =>
+  media?.mp4
+    ? {
+        kind: 'video',
+        mp4: media.mp4,
+        width: media.width,
+        height: media.height,
+        isGif: true,
+      }
+    : media
+      ? { kind: 'image', url, width: media.width, height: media.height }
+      : { kind: 'image', url };
 
 export const viewerItemsFor = (post: PostSummary): ViewerItem[] => {
   const media = post.media;

@@ -2,11 +2,15 @@ import {
   createContext,
   memo,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import type { InlineMedia } from '../../shared/api';
 import { isInlineImage, normaliseHref } from './links';
 import { decodeEntities, parseBlocks, type Block } from './markdownParser';
 
@@ -19,8 +23,12 @@ export { decodeEntities };
 
 export type MarkdownActions = {
   onLink: (href: string) => void;
-  onImage: (url: string) => void;
+  /** `media` is set for an image the body refers to by ID, like a GIF. */
+  onImage: (url: string, media?: InlineMedia) => void;
   highlight: RegExp | null;
+  /** The Autoplay GIFs and Load GIFs from Giphy preferences. */
+  autoplayGifs: boolean;
+  giphyGifs: boolean;
 };
 
 const noop = () => undefined;
@@ -28,7 +36,14 @@ export const MarkdownContext = createContext<MarkdownActions>({
   onLink: noop,
   onImage: noop,
   highlight: null,
+  autoplayGifs: true,
+  giphyGifs: false,
 });
+
+/** The current body's media, keyed by the ID its `![alt](<id>)` uses. */
+const MediaContext = createContext<Record<string, InlineMedia> | undefined>(
+  undefined
+);
 
 // ---------------------------------------------------------------------------
 // Inline rendering
@@ -101,9 +116,86 @@ const Link = ({ href, children }: { href: string; children: ReactNode }) => {
   );
 };
 
-const InlineImage = ({ url, alt }: { url: string; alt: string }) => {
+/**
+ * Reserves the media's box (at most 360×320) before it loads. Giphy GIFs that
+ * Reddit has no copy of have no known size (0×0) and take their own.
+ */
+const mediaSize = ({
+  width,
+  height,
+}: InlineMedia): CSSProperties | undefined => {
+  if (!width || !height) return undefined;
+  const scale = Math.min(1, 360 / width, 320 / height);
+  return {
+    width: Math.round(width * scale),
+    height: 'auto',
+    aspectRatio: `${width} / ${height}`,
+  };
+};
+
+/**
+ * A GIF's MP4, far smaller than the GIF itself. It loads once it scrolls into
+ * view and loops silently; without autoplay, or with reduced motion, it waits
+ * on its first frame.
+ */
+const InlineVideo = ({
+  media,
+  label,
+  onSize,
+  onError,
+}: {
+  media: InlineMedia;
+  label: string;
+  onSize: (width: number, height: number) => void;
+  onError: () => void;
+}) => {
+  const { autoplayGifs } = useContext(MarkdownContext);
+  const ref = useRef<HTMLVideoElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || visible) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setVisible(true);
+      },
+      { rootMargin: '300px' }
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [visible]);
+  return (
+    <video
+      ref={ref}
+      src={visible ? media.mp4 : undefined}
+      aria-label={label}
+      style={mediaSize(media)}
+      autoPlay={
+        autoplayGifs && document.documentElement.dataset.motion !== 'reduced'
+      }
+      muted
+      loop
+      playsInline
+      onLoadedMetadata={(event) =>
+        onSize(event.currentTarget.videoWidth, event.currentTarget.videoHeight)
+      }
+      onError={onError}
+    />
+  );
+};
+
+const InlineImage = ({
+  url,
+  alt,
+  media,
+}: {
+  url: string;
+  alt: string;
+  media?: InlineMedia;
+}) => {
   const { onImage, onLink } = useContext(MarkdownContext);
   const [failed, setFailed] = useState(false);
+  const [size, setSize] = useState<{ width: number; height: number }>();
   if (failed) {
     return <Link href={url}>{alt || url}</Link>;
   }
@@ -113,22 +205,59 @@ const InlineImage = ({ url, alt }: { url: string; alt: string }) => {
       className="md-image"
       onClick={(event) => {
         event.stopPropagation();
-        onImage(url);
+        onImage(url, media && size ? { ...media, ...size } : media);
       }}
       onContextMenu={(event) => {
         event.preventDefault();
         onLink(url);
       }}
     >
-      <img
-        src={url}
-        alt={alt}
-        loading="lazy"
-        decoding="async"
-        onError={() => setFailed(true)}
-      />
+      {media?.mp4 ? (
+        <InlineVideo
+          media={media}
+          label={alt}
+          onSize={(width, height) => setSize({ width, height })}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <img
+          src={url}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          style={media ? mediaSize(media) : undefined}
+          onError={() => setFailed(true)}
+        />
+      )}
     </button>
   );
+};
+
+/** `![alt](<id>)`: an image the body refers to by ID, such as a Giphy GIF. */
+const MediaRef = ({ target, alt }: { target: string; alt: string }) => {
+  const media = useContext(MediaContext);
+  const { giphyGifs } = useContext(MarkdownContext);
+  // `giphy|<id>|downsized` may be listed under `giphy|<id>`.
+  const item =
+    media?.[target] ?? media?.[target.split('|').slice(0, 2).join('|')];
+  if (item) return <InlineImage url={item.url} alt={alt} media={item} />;
+  if (/^giphy\|/.test(target)) {
+    const id = target.split('|')[1] ?? '';
+    // Reddit often lists a Giphy GIF only as `"status": "invalid"`, with no
+    // URLs, so Giphy has the only copy.
+    if (giphyGifs && /^[A-Za-z0-9]+$/.test(id)) {
+      const giphy: InlineMedia = {
+        url: `https://i.giphy.com/media/${id}/giphy.gif`,
+        mp4: `https://i.giphy.com/media/${id}/giphy.mp4`,
+        width: 0,
+        height: 0,
+      };
+      return <InlineImage url={giphy.url} alt={alt} media={giphy} />;
+    }
+    return <Link href={`https://giphy.com/gifs/${id}`}>GIF</Link>;
+  }
+  return <Link href={target}>{alt || target}</Link>;
 };
 
 const Highlighted = ({ text }: { text: string }) => {
@@ -177,23 +306,11 @@ const RULES: InlineRule[] = [
     render: (m, key) => {
       const alt = m[1] ?? '';
       const target = m[2] ?? '';
-      if (/^giphy\|/.test(target)) {
-        const id = target.split('|')[1] ?? '';
-        return (
-          <Link key={key} href={`https://giphy.com/gifs/${id}`}>
-            GIF
-          </Link>
-        );
-      }
       if (/^emote\|/.test(target))
         return <span key={key}>{alt ? `:${alt}:` : ''}</span>;
       if (isInlineImage(target))
         return <InlineImage key={key} url={target} alt={alt} />;
-      return (
-        <Link key={key} href={target}>
-          {alt || target}
-        </Link>
-      );
+      return <MediaRef key={key} target={target} alt={alt} />;
     },
   },
   {
@@ -387,9 +504,14 @@ const renderBlocks = (blocks: Block[], prefix: string): ReactNode[] =>
     }
   });
 
-type MarkdownProps = { source: string; className?: string };
+type MarkdownProps = {
+  source: string;
+  className?: string;
+  /** Media the body refers to by ID, from the comment's `media_metadata`. */
+  media?: Record<string, InlineMedia>;
+};
 
-export const Markdown = memo(({ source, className }: MarkdownProps) => {
+export const Markdown = memo(({ source, className, media }: MarkdownProps) => {
   const { highlight } = useContext(MarkdownContext);
   const blocks = useMemo(() => parseBlocks(decodeEntities(source)), [source]);
   // `highlight` is read through context by leaf nodes; referencing it here
@@ -399,7 +521,9 @@ export const Markdown = memo(({ source, className }: MarkdownProps) => {
       className={className ? `md ${className}` : 'md'}
       data-hl={highlight ? '1' : undefined}
     >
-      {renderBlocks(blocks, 'b')}
+      <MediaContext.Provider value={media}>
+        {renderBlocks(blocks, 'b')}
+      </MediaContext.Provider>
     </div>
   );
 });

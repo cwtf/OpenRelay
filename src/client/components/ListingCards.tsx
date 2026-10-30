@@ -2,11 +2,18 @@
 // listing_comments, listing_messages and report layouts.
 
 import { useMemo, type ReactNode } from "react";
-import type { InboxItem, ListingComment, ModInfo } from "../../shared/api";
+import type {
+  InboxItem,
+  InlineMedia,
+  ListingComment,
+  ModInfo,
+} from "../../shared/api";
 import { useNav } from "../app/nav";
+import { usePrefs } from "../app/prefs";
 import { age, fullDate } from "../lib/format";
 import { Markdown, MarkdownContext } from "../lib/markdown";
 import { Icon, type IconName } from "./Icon";
+import { inlineViewerItem } from "./PostParts";
 import { ActionStrip, type BarAction } from "./Relay";
 import { VoteLinks, useVoteToggle } from "./VoteLinks";
 import { useAccount } from "../lib/account";
@@ -15,20 +22,29 @@ import { ReplySheet } from "./ReplySheet";
 import { SwipeActions, type SwipeAction } from "./SwipeActions";
 
 /** Markdown whose links and images open inside the reader. */
-export const ReaderMarkdown = ({ source }: { source: string }) => {
+export const ReaderMarkdown = ({
+  source,
+  media,
+}: {
+  source: string;
+  media?: Record<string, InlineMedia>;
+}) => {
   const nav = useNav();
+  const { prefs } = usePrefs();
   const actions = useMemo(
     () => ({
       onLink: nav.openLink,
-      onImage: (url: string) =>
-        nav.openMedia({ items: [{ kind: "image", url }], index: 0 }),
+      onImage: (url: string, inline?: InlineMedia) =>
+        nav.openMedia({ items: [inlineViewerItem(url, inline)], index: 0 }),
       highlight: null,
+      autoplayGifs: prefs.autoplayGifs,
+      giphyGifs: prefs.giphyGifs,
     }),
-    [nav],
+    [nav, prefs.autoplayGifs, prefs.giphyGifs],
   );
   return (
     <MarkdownContext.Provider value={actions}>
-      <Markdown source={source} />
+      <Markdown source={source} media={media} />
     </MarkdownContext.Provider>
   );
 };
@@ -156,7 +172,7 @@ export const CommentCard = ({
       </div>
       <ModBlock mod={comment.mod} />
       <div className="list-body">
-        <ReaderMarkdown source={comment.body} />
+        <ReaderMarkdown source={comment.body} media={comment.media} />
       </div>
       {children}
     </article>

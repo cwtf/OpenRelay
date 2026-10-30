@@ -216,6 +216,43 @@ test("preserves nested comments and missing-reply markers", () => {
   assert.equal(result.comments[0]!.moreReplies, true);
   assert.equal(result.comments[0]!.replies[0]!.parentId, "t1_c1");
 });
+test("keeps the media a comment body refers to by ID", () => {
+  const [comment] = normalizeComments([
+    {
+      kind: "t1",
+      data: {
+        id: "c1",
+        body: "![gif](giphy|abc123|downsized) and ![img](up1)",
+        media_metadata: {
+          "giphy|abc123": {
+            status: "valid",
+            e: "AnimatedImage",
+            s: {
+              x: 200,
+              y: 150,
+              gif: "https://external-preview.redd.it/abc.gif?s=1&amp;w=2",
+              mp4: "https://external-preview.redd.it/abc.gif?format=mp4",
+            },
+          },
+          up1: { e: "Image", s: { u: "https://preview.redd.it/up1.png", x: 800, y: 600 } },
+          unused: { e: "Image", s: { u: "https://preview.redd.it/unused.png" } },
+          bad: { e: "Image", s: { u: "javascript:alert(1)" } },
+        },
+      },
+    },
+  ]).comments;
+  assert.deepEqual(comment!.media, {
+    "giphy|abc123": {
+      url: "https://external-preview.redd.it/abc.gif?s=1&w=2",
+      width: 200,
+      height: 150,
+      mp4: "https://external-preview.redd.it/abc.gif?format=mp4",
+    },
+    up1: { url: "https://preview.redd.it/up1.png", width: 800, height: 600 },
+  });
+  const plain = normalizeComments([{ kind: "t1", data: { id: "c2", body: "hi" } }]);
+  assert.equal("media" in plain.comments[0]!, false);
+});
 test("normalizes subscribed communities and skips user profiles", () => {
   assert.deepEqual(
     normalizeCommunity({

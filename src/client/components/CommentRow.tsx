@@ -186,7 +186,7 @@ export const CommentRow = memo(
           </button>
         </div>
         <div className="comment-body">
-          <Markdown source={node.body} />
+          <Markdown source={node.body} media={node.media} />
         </div>
       </div>
       </SwipeActions>

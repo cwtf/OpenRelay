@@ -36,6 +36,15 @@ export type ImageRef = {
   height: number;
 };
 
+/**
+ * An image a Markdown body refers to by ID instead of URL, such as
+ * `![gif](giphy|<id>)` or an uploaded `![img](<id>)`.
+ */
+export type InlineMedia = ImageRef & {
+  /** Silent looping MP4 of an animated image. */
+  mp4?: string;
+};
+
 export type Flair = {
   text: string;
   /** Background colour as provided by Reddit (may be empty). */
@@ -143,6 +152,8 @@ export type CommentNode = {
   replies: CommentNode[];
   /** True when Reddit reports more replies that were not included. */
   moreReplies: boolean;
+  /** Media the body refers to by ID, keyed by that ID. */
+  media?: Record<string, InlineMedia>;
   /** Present when Reddit reports the signed-in viewer's vote. */
   vote?: ViewerVote;
 };
@@ -160,6 +171,7 @@ export type ListingComment = {
   permalink: string;
   vote?: ViewerVote;
   mod?: ModInfo;
+  media?: Record<string, InlineMedia>;
 };
 
 /** A profile or moderator listing entry. */
@@ -262,6 +274,8 @@ export type Prefs = {
   blurSpoilers: boolean;
   reduceMotion: boolean;
   autoplayGifs: boolean;
+  /** Load comment GIFs from Giphy when Reddit has no copy of them. */
+  giphyGifs: boolean;
   showThumbnails: boolean;
   /** Relay's "Compact Crosspost Layout": one link to the original instead of its card. */
   compactCrossposts: boolean;
@@ -280,6 +294,7 @@ export const DEFAULT_PREFS: Prefs = {
   blurSpoilers: true,
   reduceMotion: false,
   autoplayGifs: true,
+  giphyGifs: true,
   showThumbnails: true,
   compactCrossposts: false,
   paneModePortrait: "auto",

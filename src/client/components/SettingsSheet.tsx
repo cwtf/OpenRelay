@@ -275,6 +275,12 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
             value={prefs.autoplayGifs}
             onChange={set("autoplayGifs")}
           />
+          <Toggle
+            label="Load GIFs from Giphy"
+            hint="For comment GIFs Reddit has no copy of. Giphy sees your IP address"
+            value={prefs.giphyGifs}
+            onChange={set("giphyGifs")}
+          />
 
           <div className="sheet-section">Accessibility</div>
           <Toggle
