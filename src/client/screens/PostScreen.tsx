@@ -826,48 +826,48 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 </div>
               </section>
             ) : null}
-            <div className="post-toolbar">
+            {/* Relay's row of circles under the post: score, comments, reply,
+                share. View on Reddit lives in the post actions sheet. */}
+            <div className="post-actions">
               <VoteLinks
                 thingId={post.id}
-        permalink={post.permalink}
+                permalink={post.permalink}
                 score={post.score}
                 vote={post.vote}
                 kind="post"
-                variant="stat"
+                variant="pill"
               />
-              <span className="stat">
-                <Icon name="comment" />
-                {compact(post.comments)}
+              <span className="post-action">
+                <span
+                  className={`action-circle is-comments${compact(post.comments).length > 3 ? " is-long" : ""}`}
+                >
+                  {compact(post.comments)}
+                </span>
+                <span className="action-label">Comments</span>
               </span>
-              <span className="grow" />
               {!post.locked && !post.archived ? (
                 <button
                   type="button"
-                  className="icon-btn"
-                  data-ripple
+                  className="post-action"
                   aria-label="Reply to post"
                   onClick={() => openReply(post.id, post.author, post.title)}
                 >
-                  <Icon name="reply" />
+                  <span className="action-circle is-reply" data-ripple>
+                    <Icon name="reply" />
+                  </span>
+                  <span className="action-label">Reply</span>
                 </button>
               ) : null}
               <button
                 type="button"
-                className="icon-btn"
-                data-ripple
+                className="post-action"
                 aria-label="Share"
                 onClick={() => void sharePost(post.id, post.permalink)}
               >
-                <Icon name="share" />
-              </button>
-              <button
-                type="button"
-                className="icon-btn"
-                data-ripple
-                aria-label="View on Reddit"
-                onClick={() => nav.openLink(redditUrl(post.permalink))}
-              >
-                <Icon name="external" />
+                <span className="action-circle is-share" data-ripple>
+                  <Icon name="share" />
+                </span>
+                <span className="action-label">Share</span>
               </button>
             </div>
           </>

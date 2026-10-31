@@ -30,6 +30,10 @@
   --upvote: #de714e;
   --downvote: #7b5cb1;
   --vote-neutral: #74777f;
+  /* The post page's circles, after Relay: blue comments, green reply. */
+  --action-comments: #3b74d1;
+  --action-reply: #23866a;
+  --action-share: #b0476f;
   --collapsed-badge: #2d9567;
   --mod: #1c8a4e;
   --admin: #c62f3b;
@@ -112,6 +116,9 @@
   --upvote: #ce6543;
   --downvote: #6e50a4;
   --vote-neutral: #8e9099;
+  --action-comments: #5b8fe0;
+  --action-reply: #1f7a60;
+  --action-share: #a24068;
   --collapsed-badge: #19885b;
   --mod: #62d394;
   --admin: #ff7a83;
@@ -136,6 +143,8 @@
   --bg: #000000;
   --upvote: #b45231;
   --downvote: #5a3c8f;
+  --action-reply: #186a53;
+  --action-share: #8d3a5c;
   --collapsed-badge: #0d724b;
   --surface: #0b0c0e;
   --surface-2: #141619;

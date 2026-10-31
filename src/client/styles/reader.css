@@ -1252,17 +1252,128 @@
   font-size: calc(15px * var(--ts));
 }
 
-.post-toolbar {
+/* Relay's circles under the post. Outlined circles show counts, filled ones
+   act; each has its label underneath. Wide panes keep them together. */
+.post-actions {
   display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 6px 6px;
+  align-items: flex-start;
+  justify-content: space-evenly;
+  padding: 8px max(8px, calc((100% - 520px) / 2)) 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--divider);
 }
 
-.post-toolbar .grow {
-  flex: 1;
+.post-action,
+.vote-pill {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: calc(12.5px * var(--ts));
+}
+
+.post-action {
+  padding-top: 2px;
+}
+
+button.post-action {
+  border-radius: 8px;
+}
+
+.action-circle,
+.vote-pill .vote-score {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: calc(15px * var(--ts));
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.action-circle.is-long,
+.vote-pill .vote-score.is-long {
+  font-size: calc(12.5px * var(--ts));
+}
+
+.action-circle.is-comments {
+  border: 2px solid var(--action-comments);
+  color: var(--text);
+}
+
+.action-circle.is-reply,
+.action-circle.is-share {
+  color: #ffffff;
+  transition: filter 150ms;
+}
+
+.action-circle.is-reply {
+  background: var(--action-reply);
+}
+
+.action-circle.is-share {
+  background: var(--action-share);
+}
+
+.post-action:hover .action-circle {
+  filter: brightness(1.08);
+}
+
+.action-circle .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.vote-capsule {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+}
+
+.vote-pill .vote-score {
+  min-width: 0;
+  border: 2px solid var(--upvote);
+  color: var(--text);
+  transition:
+    color 150ms,
+    border-color 150ms;
+}
+
+.vote-pill[data-vote='-1'] .vote-score {
+  border-color: var(--downvote);
+}
+
+.vote-pill .vote-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.vote-pill .vote-btn .icon {
+  width: 19px;
+  height: 19px;
+}
+
+.vote-pill .vote-btn.is-up.is-selected,
+.vote-pill .vote-btn.is-down.is-selected {
+  background: transparent;
+}
+
+.vote-pill[data-vote='1'] .vote-label {
+  color: var(--upvote);
+}
+
+.vote-pill[data-vote='-1'] .vote-label {
+  color: var(--downvote);
+}
+
+.vote-pill .vote-fallback {
+  margin: 0;
+  font-size: inherit;
 }
 
 .comments-bar {

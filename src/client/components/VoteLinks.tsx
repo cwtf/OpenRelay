@@ -24,8 +24,11 @@ type VoteLinksProps = {
   /** The viewer's vote as reported by Reddit, if known. */
   vote?: Vote | undefined;
   kind: "post" | "comment";
-  variant: "stat" | "inline";
+  /** `pill`: the post page's capsule, arrows around a score ring, labelled. */
+  variant: "stat" | "inline" | "pill";
 };
+
+const pillLabel: Record<Vote, string> = { 1: "Liked", 0: "Like it", [-1]: "Disliked" };
 export const VoteLinks = ({
   thingId,
   permalink,
@@ -59,6 +62,10 @@ export const VoteLinks = ({
       </button>
     );
   };
+  const text = compact(shown);
+  const scoreEl = (
+    <span className={`vote-score${text.length > 3 ? " is-long" : ""}`}>{text}</span>
+  );
   return (
     <span
       className={`vote vote-${variant}`}
@@ -67,9 +74,24 @@ export const VoteLinks = ({
       aria-busy={state.pending}
       title={state.error || "Vote with your Reddit account"}
     >
-      {arrow(1)}
-      <span className="vote-score">{compact(shown)}</span>
-      {arrow(-1)}
+      {variant === "pill" ? (
+        <span className="vote-capsule">
+          {arrow(1)}
+          {scoreEl}
+          {arrow(-1)}
+        </span>
+      ) : (
+        <>
+          {arrow(1)}
+          {scoreEl}
+          {arrow(-1)}
+        </>
+      )}
+      {variant === "pill" && !state.fallback ? (
+        <span className="vote-label" aria-hidden="true">
+          {pillLabel[current]}
+        </span>
+      ) : null}
       {state.fallback ? (
         <a
           className="vote-fallback"
