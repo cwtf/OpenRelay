@@ -437,3 +437,19 @@ test("reads whether the viewer saved a post", () => {
   assert.equal(normalizePost({ ...base, saved: true }).saved, true);
   assert.equal("saved" in normalizePost(base), false);
 });
+
+test("tells who removed a post or comment", () => {
+  const base = { id: "r", title: "T", created_utc: 1, permalink: "/r/t/comments/r/" };
+  assert.equal(normalizePost({ ...base, removed_by_category: "moderator" }).removed, "mods");
+  assert.equal(normalizePost({ ...base, removed_by_category: "automod_filtered" }).removed, "mods");
+  assert.equal(normalizePost({ ...base, removed_by_category: "anti_evil_ops" }).removed, "reddit");
+  assert.equal(normalizePost({ ...base, removed_by_category: "deleted" }).removed, "author");
+  assert.equal(normalizePost({ ...base, selftext: "[removed]" }).removed, "mods");
+  assert.equal("removed" in normalizePost({ ...base, selftext: "Hello" }), false);
+  const { comments } = normalizeComments([
+    { kind: "t1", data: { id: "a", body: "[removed]" } },
+    { kind: "t1", data: { id: "b", body: "[deleted]" } },
+    { kind: "t1", data: { id: "c", body: "Still here" } },
+  ]);
+  assert.deepEqual(comments.map((c) => c.removed), ["mods", "author", undefined]);
+});

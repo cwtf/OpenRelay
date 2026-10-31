@@ -53,7 +53,7 @@ These come from the extension's security model; see "The bridge is a security bo
 2. **Expose `openRelayReaderHost` and the native storage and download channels only to the reader's origin.** Never expose them to reddit.com or any other frame, and validate the sender's origin on the native side too.
 3. **Keep the modhash inside `content.js`.** Don't add native APIs that hand Reddit's session or cookies to the reader.
 4. **Don't change the allowlists for a wrapper.** `READ_ROUTES` and `ACTIONS` stay the only things the bridge does.
-5. **Keep the README's data promise:** no third-party hosts apart from the existing optional Giphy GIFs, no analytics, and the inbox read with `mark=false`. Each app gets its own "Data and permissions" section in the README, covering where storage lives and what the app keeps.
+5. **Keep the README's data promise:** no third-party hosts apart from the existing optional Giphy GIFs and the Restore from archive button (Arctic Shift), no analytics, and the inbox read with `mark=false`. Each app gets its own "Data and permissions" section in the README, covering where storage lives and what the app keeps.
 
 ### Reader behaviour the wrappers must handle
 

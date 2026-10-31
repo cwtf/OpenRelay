@@ -12,6 +12,7 @@ import type {
   UserAbout,
   PostDetail,
   PostMedia,
+  Removal,
   FeedSort,
   InlineMedia,
   Timeframe,
@@ -172,8 +173,30 @@ export function normalizePost(p: Raw): PostDetail {
     ...viewerVote(p.likes),
     ...(typeof p.saved === "boolean" ? { saved: p.saved } : {}),
     ...modInfo(p),
+    ...removal(p.removed_by_category, p.selftext),
     media,
   };
+}
+const REMOVED_BY: Record<string, Removal> = {
+  moderator: "mods",
+  automod_filtered: "mods",
+  community_ops: "mods",
+  deleted: "author",
+  author: "author",
+};
+/**
+ * Who removed a post or comment. Posts carry `removed_by_category`; any other
+ * category (`reddit`, `anti_evil_ops`, `content_takedown`, …) is Reddit's own.
+ * Comments only show Reddit's placeholder body.
+ */
+function removal(category: unknown, text: unknown): { removed?: Removal } {
+  if (typeof category === "string" && category)
+    return { removed: REMOVED_BY[category] ?? "reddit" };
+  return text === "[removed]"
+    ? { removed: "mods" }
+    : text === "[deleted]"
+      ? { removed: "author" }
+      : {};
 }
 /**
  * Media a comment body refers to by ID (`![gif](giphy|<id>)`, `![img](<id>)`),
@@ -374,6 +397,7 @@ export function normalizeComments(children: Raw[] = []): {
           ...(["moderator", "admin"].includes(c.distinguished)
             ? { distinguished: c.distinguished }
             : {}),
+          ...removal(undefined, c.body),
         };
       }),
   };

@@ -3396,6 +3396,135 @@ button.appbar-title {
   text-underline-offset: 3px;
 }
 
+/* Restoring removed threads from the archive, only when asked: the bar on a
+   removed post (or above removed comments), the banner over a thread Reddit
+   refuses, and the panel offering to restore one. */
+.archive-restore {
+  padding: 6px 12px 8px;
+  background: var(--surface);
+}
+
+.archive-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 2px 4px 2px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.archive-bar.is-error {
+  color: var(--admin);
+}
+
+.archive-bar .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.archive-bar .icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.archive-bar .spinner,
+.archive-refused .spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.archive-bar .btn.is-text {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13.5px;
+}
+
+.archive-note {
+  margin: 6px 4px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.archive-captured {
+  color: var(--text-3);
+  font-size: calc(12.5px * var(--ts));
+}
+
+.archive-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--warn) 14%, var(--surface));
+  color: var(--warn);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.archive-banner .icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.archive-refused {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 24px;
+}
+
+.archive-refused > .icon {
+  width: 28px;
+  height: 28px;
+}
+
+.archive-refused p {
+  max-width: 34em;
+}
+
+.archive-refused .is-error {
+  color: var(--admin);
+}
+
+.archive-refused-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.action-circle.is-score {
+  border: 2px solid var(--outline);
+  color: var(--text-2);
+}
+
+.comment-head .badge.archive {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+
+.comment-removed {
+  color: var(--text-3);
+  font-style: italic;
+  font-size: calc(14.5px * var(--ts));
+}
+
+.comment-removed .archive-missing {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 12px;
+}
+
 /* Profile, Inbox and Moderator lists follow the Layout setting, as Relay's
    comment and message listings do: rounded cards with gaps, or flat rows. */
 .feed[data-layout='cards'] .list-card,

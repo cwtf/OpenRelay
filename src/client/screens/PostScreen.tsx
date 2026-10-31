@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   COMMENT_SORTS,
@@ -34,13 +35,27 @@ import { VoteLinks } from "../components/VoteLinks";
 import { currentAccount } from "../lib/account";
 import { fetchContext, fetchPost, fetchReplies, entryRoute } from "../lib/api";
 import {
+  ARCHIVE_NAME,
+  ARCHIVE_SORTS,
+  ArchiveError,
+  archivedComments,
+  archivedPost,
+  archivedReplies,
+  archivedThread,
+  removedComments,
+  sortArchived,
+  withArchived,
+  withArchivedPost,
+  type ArchiveFailure,
+} from "../lib/archive";
+import {
   animateLayout,
   fadeOutRows,
   snapshotLayout,
   subtreeRows,
   type LayoutSnapshot,
 } from "../lib/itemAnimator";
-import { compact, plural, sortLabel } from "../lib/format";
+import { compact, fullDate, plural, sortLabel } from "../lib/format";
 import { Markdown, MarkdownContext, decodeEntities } from "../lib/markdown";
 import {
   openUrl,
@@ -141,6 +156,35 @@ type PostScreenProps = {
 const inTree = (nodes: CommentNode[], id: string): boolean =>
   nodes.some((node) => node.id === id || inTree(node.replies, id));
 
+/**
+ * Archived copies of a removed post and its removed comments, loaded only
+ * when the reader presses "Restore from archive". `tried` holds the comments
+ * already looked up; `show` switches between them and Reddit's version.
+ */
+type Restore = {
+  status: "idle" | "loading" | "done" | ArchiveFailure;
+  post?: PostDetail;
+  postTried: boolean;
+  comments: ReadonlyMap<string, CommentNode>;
+  tried: ReadonlySet<string>;
+  show: boolean;
+};
+const NO_RESTORE: Restore = {
+  status: "idle",
+  postTried: false,
+  comments: new Map(),
+  tried: new Set(),
+  show: true,
+};
+/** Comments asked of the archive at first, and how many more each time. */
+const ARCHIVE_LIMIT = 100;
+const ARCHIVE_MORE = 200;
+const ARCHIVE_NOTE = `Loads a saved copy from ${ARCHIVE_NAME}, which sees this post's ID.`;
+const archiveMessage = (error: unknown) =>
+  error instanceof ArchiveError
+    ? error.message
+    : new ArchiveError("unreachable").message;
+
 export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const nav = useNav();
   /** In the dual-pane layout, the post pane closes instead of going back. */
@@ -182,6 +226,13 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   // Context mode: only the focused comment's thread, until "View all".
   const [thread, setThread] = useState(focus ?? null);
   const focused = useRef(false);
+  const [restore, setRestore] = useState<Restore>(NO_RESTORE);
+  // Reddit refused the thread and it was rebuilt from the archive: read-only,
+  // sorted here, and "more" loads from the archive. The ref stops the sort
+  // effect from going back to Reddit.
+  const [archiveOnly, setArchiveOnly] = useState(false);
+  const archiveOnlyRef = useRef(false);
+  const [archiveLimit, setArchiveLimit] = useState(ARCHIVE_LIMIT);
 
   // List animations: snapshot row positions before a tree change, then play
   // fade/move animations once React has committed the new rows.
@@ -233,10 +284,84 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   );
 
   useEffect(() => {
+    if (archiveOnlyRef.current) return;
     void load(sort, 40, false);
   }, [load, sort]);
 
+  /** Rebuilds the thread from the archive, for a post Reddit refuses. */
+  const restoreThread = async (nextLimit: number) => {
+    const first = !archiveOnlyRef.current;
+    if (first) setRestore((current) => ({ ...current, status: "loading" }));
+    else setStatus("more");
+    try {
+      const page = await archivedThread(postId, nextLimit);
+      requestId.current++; // Drop any Reddit request still on its way.
+      archiveOnlyRef.current = true;
+      setArchiveOnly(true);
+      setArchiveLimit(nextLimit);
+      if (!ARCHIVE_SORTS.includes(sort)) setSort("top");
+      setPost(page.post);
+      setBodyLoaded(true);
+      captureLayout();
+      setTree(page.comments);
+      setMoreRoot(page.moreComments);
+      setNotice("");
+      setStatus("idle");
+      setRestore((current) => ({ ...current, status: "done" }));
+    } catch (err) {
+      if (first)
+        setRestore((current) => ({
+          ...current,
+          status: err instanceof ArchiveError ? err.kind : "unreachable",
+        }));
+      else {
+        toast(archiveMessage(err));
+        setStatus("idle");
+      }
+    }
+  };
+
+  /** Fills in the removed post and comments Reddit still shows. */
+  const restoreRemoved = async (postIsRemoved: boolean, ids: string[]) => {
+    if (!post) return;
+    const wantPost = postIsRemoved && !restore.postTried;
+    setRestore((current) => ({ ...current, status: "loading" }));
+    try {
+      const [copy, found] = await Promise.all([
+        wantPost
+          ? archivedPost(post.id).catch((err: unknown) => {
+              if (err instanceof ArchiveError && err.kind === "missing")
+                return undefined;
+              throw err;
+            })
+          : undefined,
+        ids.length
+          ? archivedComments(ids)
+          : new Map<string, CommentNode>(),
+      ]);
+      captureLayout();
+      setRestore((current) => {
+        const comments = new Map([...current.comments, ...found]);
+        const kept = copy ?? current.post;
+        return {
+          status: kept || comments.size ? "done" : "missing",
+          ...(kept ? { post: kept } : {}),
+          postTried: current.postTried || wantPost,
+          comments,
+          tried: new Set([...current.tried, ...ids]),
+          show: true,
+        };
+      });
+    } catch {
+      setRestore((current) => ({ ...current, status: "unreachable" }));
+    }
+  };
+
   const loadMoreRoot = () => {
+    if (archiveOnly) {
+      void restoreThread(archiveLimit + ARCHIVE_MORE);
+      return;
+    }
     const next = limit + 60;
     setLimit(next);
     setStatus("more");
@@ -250,6 +375,12 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
 
   const changeSort = (next: CommentSort) => {
     if (next === sort) return;
+    if (archiveOnly) {
+      // An archived thread is sorted here, so nothing reloads.
+      setSort(next);
+      scrollerRef.current?.scrollTo({ top: 0 });
+      return;
+    }
     setTree(null);
     setStatus("loading");
     setLimit(40);
@@ -291,12 +422,9 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       if (!post) return;
       setLoadingIds((current) => new Set(current).add(parent.id));
       try {
-        const result = await fetchReplies(
-          post.id,
-          parent.id,
-          sort,
-          post.author,
-        );
+        const result = archiveOnly
+          ? await archivedReplies(post.id, parent.id)
+          : await fetchReplies(post.id, parent.id, sort, post.author);
         captureLayout();
         setTree((current) =>
           current
@@ -318,7 +446,30 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
         });
       }
     },
-    [post, sort, captureLayout],
+    [post, sort, captureLayout, archiveOnly],
+  );
+
+  // What the archive can restore in a thread Reddit still shows. Removals by
+  // their authors are left alone.
+  const postRemoved =
+    !archiveOnly && bodyLoaded && post?.removed && post.removed !== "author"
+      ? post.removed
+      : undefined;
+  const removedIds = useMemo(
+    () => (tree && !archiveOnly ? removedComments(tree) : []),
+    [tree, archiveOnly],
+  );
+  const untried = removedIds.filter((id) => !restore.tried.has(id));
+  const shownTree = useMemo(
+    () =>
+      !tree
+        ? tree
+        : archiveOnly
+          ? sortArchived(tree, sort)
+          : restore.show && restore.tried.size
+            ? withArchived(tree, restore.comments, restore.tried)
+            : tree,
+    [tree, archiveOnly, sort, restore],
   );
 
   const rows = useMemo(() => {
@@ -339,9 +490,9 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
           out.push({ type: "more", parent: node, depth: depth + 1 });
       }
     };
-    if (tree) walk(tree, 0);
+    if (shownTree) walk(shownTree, 0);
     return out;
-  }, [tree, collapsed]);
+  }, [shownTree, collapsed]);
 
   useLayoutEffect(() => {
     collapsedRef.current = collapsed;
@@ -582,7 +733,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
             };
             return (
               <>
-                {!node.locked && !post?.locked ? (
+                {!node.locked && !post?.locked && !archiveOnly ? (
                   <SheetItem
                     icon="reply"
                     label="Reply"
@@ -633,7 +784,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                   label="View on Reddit"
                   onClick={run(() => openUrl(redditUrl(node.permalink)))}
                 />
-                {own ? (
+                {own && !archiveOnly ? (
                   <SheetItem
                     icon="trash"
                     label="Delete"
@@ -656,14 +807,14 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     },
     // openReply/scrollToComment/removeComment are stable enough for sheet lifetimes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tree, post, nav],
+    [tree, post, nav, archiveOnly],
   );
 
   const openSortSheet = () =>
     nav.openSheet((onClosed) => (
       <Sheet title="Sort comments" onClosed={onClosed}>
         {(close) =>
-          COMMENT_SORTS.map((option) => (
+          (archiveOnly ? ARCHIVE_SORTS : COMMENT_SORTS).map((option) => (
             <SheetItem
               key={option}
               icon={SORT_ICONS[option]}
@@ -695,7 +846,181 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     [nav, highlight, prefs.autoplayGifs, prefs.giphyGifs],
   );
 
-  const body = post && "body" in post ? post.body : undefined;
+  const shown: PostDetail | null =
+    post && restore.show && restore.post && !archiveOnly
+      ? withArchivedPost(post, restore.post)
+      : post;
+  // A removed post's "[removed]" body gives way to the restore bar.
+  const body = postRemoved && shown === post ? undefined : shown?.body;
+  const capturedAt = shown?.capturedAt;
+  const captured = capturedAt ? (
+    <p className="archive-captured">
+      {archiveOnly
+        ? `Captured ${fullDate(capturedAt)} · score and counts as of then`
+        : `Archived copy · captured ${fullDate(capturedAt)}`}
+    </p>
+  ) : null;
+
+  /** The bar on a removed post, or above removed comments, that restores
+   *  them from the archive when pressed, and reports what it found. */
+  const restoreBar = () => {
+    const removedCount = plural(removedIds.length, "comment");
+    const lead = postRemoved
+      ? `Removed by ${postRemoved === "reddit" ? "Reddit" : "the moderators"}${
+          removedIds.length ? ` · ${removedCount} removed` : ""
+        }`
+      : `${removedCount} removed by the moderators`;
+    const button = (label: string, onClick: () => void) => (
+      <button type="button" className="btn is-text" onClick={onClick}>
+        {label}
+      </button>
+    );
+    const restoreButton = (label: string) =>
+      button(label, () => void restoreRemoved(Boolean(postRemoved), untried));
+    let icon: IconName = "shield";
+    let message = lead;
+    let failed = false;
+    let actions: ReactNode = null;
+    switch (restore.status) {
+      case "idle":
+        actions = restoreButton("Restore from archive");
+        break;
+      case "loading":
+        message = "Looking in the archive…";
+        break;
+      case "unreachable":
+        icon = "info";
+        message = new ArchiveError("unreachable").message;
+        failed = true;
+        actions = restoreButton("Retry");
+        break;
+      case "missing":
+        icon = "info";
+        message = `The archive has no copy of ${
+          !postRemoved
+            ? "these comments"
+            : restore.tried.size
+              ? "this post or its comments"
+              : "this post"
+        }.`;
+        failed = true;
+        if (untried.length) actions = restoreButton(`Restore ${untried.length} more`);
+        break;
+      case "done":
+        if (!restore.show) {
+          actions = button("Show archive copy", () => {
+            captureLayout();
+            setRestore((current) => ({ ...current, show: true }));
+          });
+          break;
+        }
+        icon = "archive";
+        message = [
+          restore.post || !restore.postTried
+            ? "Restored from archive"
+            : "No archived copy of the post",
+          restore.tried.size
+            ? `${[...restore.tried].filter((id) => restore.comments.has(id)).length} of ${plural(restore.tried.size, "comment")}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        actions = (
+          <>
+            {untried.length ? restoreButton(`Restore ${untried.length} more`) : null}
+            {button("Show removed", () => {
+              captureLayout();
+              setRestore((current) => ({ ...current, show: false }));
+            })}
+          </>
+        );
+    }
+    return (
+      <div className="archive-restore">
+        <div className={`archive-bar${failed ? " is-error" : ""}`} role="status">
+          {restore.status === "loading" ? (
+            <span className="spinner" aria-hidden />
+          ) : (
+            <Icon name={icon} />
+          )}
+          <span className="grow">{message}</span>
+          {actions}
+        </div>
+        {restore.status === "idle" || restore.status === "loading" ? (
+          <p className="archive-note">{ARCHIVE_NOTE}</p>
+        ) : null}
+      </div>
+    );
+  };
+
+  /** In place of the comments when Reddit refuses the whole thread. */
+  const refusedPanel = () => {
+    const removedBy = post?.removed && post.removed !== "author" ? post.removed : undefined;
+    const failed = restore.status === "missing" || restore.status === "unreachable";
+    const message = failed
+      ? new ArchiveError(restore.status as ArchiveFailure).message
+      : removedBy
+        ? `This post was removed by ${removedBy === "reddit" ? "Reddit" : "the moderators"}, and Reddit no longer shows the thread.`
+        : /\((403|404)\)|unavailable/.test(error)
+          ? "Reddit won't show this post. It may have been removed, or its community may be private or banned."
+          : error;
+    const loading = restore.status === "loading";
+    return (
+      <div className="comments-empty archive-refused">
+        <Icon name={failed ? "info" : "shield"} />
+        <p className={failed ? "is-error" : undefined}>{message}</p>
+        <div className="archive-refused-actions">
+          {restore.status === "missing" ? (
+            <button
+              type="button"
+              className="btn is-tonal"
+              onClick={() =>
+                openUrl(
+                  redditUrl(
+                    post?.permalink ??
+                      `https://www.reddit.com/comments/${postId.replace(/^t3_/, "")}/`,
+                  ),
+                )
+              }
+            >
+              <Icon name="external" /> Open on Reddit
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn is-tonal"
+              disabled={loading}
+              onClick={() => void restoreThread(ARCHIVE_LIMIT)}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner" aria-hidden /> Looking in the archive…
+                </>
+              ) : (
+                <>
+                  <Icon name="archive" />
+                  {restore.status === "unreachable" ? "Retry archive" : "Restore from archive"}
+                </>
+              )}
+            </button>
+          )}
+          {loading ? null : (
+            <button
+              type="button"
+              className="btn is-text"
+              onClick={() => {
+                setRestore(NO_RESTORE);
+                retry();
+              }}
+            >
+              <Icon name="refresh" /> Retry Reddit
+            </button>
+          )}
+        </div>
+        {failed ? null : <p className="archive-note">{ARCHIVE_NOTE}</p>}
+      </div>
+    );
+  };
   const commentCount = post?.comments ?? 0;
 
   return (
@@ -786,57 +1111,80 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       </header>
 
       <div className="scroller post-page" ref={scrollerRef}>
-        {post ? (
+        {archiveOnly ? (
+          <div className="archive-banner" role="status">
+            <Icon name="archive" />
+            <span>
+              Archived copy. Reddit no longer shows this thread, so voting and
+              replying are off.
+            </span>
+          </div>
+        ) : null}
+        {post && shown ? (
           <>
             {/* Like Relay's comments header (its feed row plus the post text),
                 the post follows the Layout setting: full media for Cards, the
                 feed's thumbnail row for Compact and List. */}
-            {asRow(post) ? (
+            {asRow(shown) ? (
               <section
                 className="post-head post-head-row"
                 data-layout={prefs.layout}
               >
                 <div className="row-main">
-                  <PostMeta post={post} showSub />
-                  <h1 className="post-title">{post.title}</h1>
-                  <PostFlags post={post} />
+                  <PostMeta post={shown} showSub />
+                  <h1 className="post-title">{shown.title}</h1>
+                  <PostFlags post={shown} />
+                  {captured}
                 </div>
-                <Thumb post={post} />
+                <Thumb post={shown} />
               </section>
             ) : (
               <section className="post-head">
-                <PostMeta post={post} showSub />
-                <h1 className="post-title">{post.title}</h1>
-                <PostFlags post={post} />
+                <PostMeta post={shown} showSub />
+                <h1 className="post-title">{shown.title}</h1>
+                <PostFlags post={shown} />
+                {captured}
               </section>
             )}
-            {post.media.kind !== "self" && !asRow(post) ? (
+            {shown.media.kind !== "self" && !asRow(shown) ? (
               <section className="post-head-media">
-                <MediaFrame post={post} variant="detail" />
+                <MediaFrame post={shown} variant="detail" />
               </section>
             ) : null}
             {body ? (
               <section className="post-selftext">
                 <Markdown source={body} />
               </section>
-            ) : post.media.kind === "self" && !bodyLoaded && post.excerpt ? (
+            ) : shown.media.kind === "self" && !bodyLoaded && shown.excerpt ? (
               <section className="post-selftext">
                 <div className="md">
-                  <p style={{ color: "var(--text-2)" }}>{post.excerpt}</p>
+                  <p style={{ color: "var(--text-2)" }}>{shown.excerpt}</p>
                 </div>
               </section>
             ) : null}
+            {postRemoved ? restoreBar() : null}
             {/* Relay's row of circles under the post: score, comments, reply,
                 share. View on Reddit lives in the post actions sheet. */}
             <div className="post-actions">
-              <VoteLinks
-                thingId={post.id}
-                permalink={post.permalink}
-                score={post.score}
-                vote={post.vote}
-                kind="post"
-                variant="pill"
-              />
+              {archiveOnly ? (
+                <span className="post-action" title="Score when archived">
+                  <span
+                    className={`action-circle is-score${compact(post.score).length > 3 ? " is-long" : ""}`}
+                  >
+                    {compact(post.score)}
+                  </span>
+                  <span className="action-label">Score</span>
+                </span>
+              ) : (
+                <VoteLinks
+                  thingId={post.id}
+                  permalink={post.permalink}
+                  score={post.score}
+                  vote={post.vote}
+                  kind="post"
+                  variant="pill"
+                />
+              )}
               <span className="post-action">
                 <span
                   className={`action-circle is-comments${compact(post.comments).length > 3 ? " is-long" : ""}`}
@@ -845,12 +1193,12 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 </span>
                 <span className="action-label">Comments</span>
               </span>
-              {!post.locked && !post.archived ? (
+              {!post.locked && !post.archived && !archiveOnly ? (
                 <button
                   type="button"
                   className="post-action"
                   aria-label="Reply to post"
-                  onClick={() => openReply(post.id, post.author, post.title)}
+                  onClick={() => openReply(post.id, shown.author, shown.title)}
                 >
                   <span className="action-circle is-reply" data-ripple>
                     <Icon name="reply" />
@@ -944,12 +1292,15 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
               </button>
             </div>
           ) : null}
+          {!postRemoved && removedIds.length ? restoreBar() : null}
           {notice ? (
             <div className="feed-end" role="status">
               {notice}
             </div>
           ) : null}
-          {status === "error" ? (
+          {status === "error" && !bodyLoaded ? (
+            refusedPanel()
+          ) : status === "error" ? (
             <div className="comments-empty">
               <p>{error}</p>
               <button type="button" className="btn is-tonal" onClick={retry}>
@@ -959,7 +1310,9 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
           ) : null}
           {tree && !tree.length ? (
             <div className="comments-empty">
-              No comments yet. Start the conversation.
+              {archiveOnly
+                ? "The archive has no comments for this post."
+                : "No comments yet. Start the conversation."}
             </div>
           ) : null}
           {rows.map((row) =>
@@ -974,6 +1327,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 onToggle={toggle}
                 onActions={commentActions}
                 swipe={commentSwipe}
+                readOnly={archiveOnly}
               />
             ) : (
               <MoreRow
@@ -993,7 +1347,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
               root
               animKey="more-root"
               depth={0}
-              label="Load more comments"
+              label={archiveOnly ? "Load more from archive" : "Load more comments"}
               loading={status === "more"}
               onClick={loadMoreRoot}
             />

@@ -128,11 +128,18 @@ export type PostSummary = {
   /** Whether the signed-in viewer saved it, when Reddit reports it. */
   saved?: boolean;
   mod?: ModInfo;
+  /** Who removed it, when Reddit shows it as removed or deleted. */
+  removed?: Removal;
 };
+
+/** Moderators (AutoModerator included), Reddit itself, or the author. */
+export type Removal = "mods" | "reddit" | "author";
 
 export type PostDetail = PostSummary & {
   /** Raw Reddit markdown body for self posts. */
   body?: string;
+  /** When the archive captured it, on a copy restored from the archive. */
+  capturedAt?: number;
 };
 
 export type CommentNode = {
@@ -156,6 +163,11 @@ export type CommentNode = {
   media?: Record<string, InlineMedia>;
   /** Present when Reddit reports the signed-in viewer's vote. */
   vote?: ViewerVote;
+  /** Set when Reddit shows the body as "[removed]" or "[deleted]". */
+  removed?: Removal;
+  /** "restored": the body and author come from the archive; "missing": the
+   *  archive has no copy. */
+  archive?: "restored" | "missing";
 };
 
 /** A comment shown outside its thread (profiles, moderator queues). */

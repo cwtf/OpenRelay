@@ -1,6 +1,6 @@
 import { memo, type CSSProperties } from 'react';
 import type { CommentNode } from '../../shared/api';
-import { age, fullDate } from '../lib/format';
+import { age, compact, fullDate } from '../lib/format';
 import { useLongPress } from '../lib/gestures';
 import { Markdown } from '../lib/markdown';
 import { Icon } from './Icon';
@@ -48,6 +48,8 @@ type CommentRowProps = {
   onToggle: (id: string) => void;
   onActions: (node: CommentNode) => void;
   swipe?: CommentSwipe | undefined;
+  /** An archived thread Reddit no longer shows: no voting, replying or editing. */
+  readOnly?: boolean;
 };
 
 export const CommentRow = memo(
@@ -60,24 +62,30 @@ export const CommentRow = memo(
     onToggle,
     onActions,
     swipe,
+    readOnly,
   }: CommentRowProps) => {
     const nav = useNav();
     const account = useAccount();
     const vote = useVoteToggle(node.id, node.vote, node.score);
     const own = account?.name.toLowerCase() === node.author.toLowerCase();
+    const live = !readOnly;
     // Relay's comment swipe actions: Up, Down, User, Edit, Reply, Parent, Mod, More.
     const actions: SwipeAction[] = [
-      { icon: 'up', label: 'Up', title: 'Upvote', tone: 'up', active: vote.current === 1, disabled: vote.pending, onClick: () => vote.cast(1) },
-      { icon: 'down', label: 'Down', title: 'Downvote', tone: 'down', active: vote.current === -1, disabled: vote.pending, onClick: () => vote.cast(-1) },
+      ...(live
+        ? [
+            { icon: 'up', label: 'Up', title: 'Upvote', tone: 'up', active: vote.current === 1, disabled: vote.pending, onClick: () => vote.cast(1) } satisfies SwipeAction,
+            { icon: 'down', label: 'Down', title: 'Downvote', tone: 'down', active: vote.current === -1, disabled: vote.pending, onClick: () => vote.cast(-1) } satisfies SwipeAction,
+          ]
+        : []),
       ...(/^[\w-]{3,20}$/.test(node.author)
         ? [{ icon: 'user', label: 'User', title: `Go to u/${node.author}`, onClick: () => nav.openProfile(node.author) } satisfies SwipeAction]
         : []),
-      ...(own && swipe ? [{ icon: 'edit', label: 'Edit', title: 'Edit comment', onClick: () => swipe.edit(node) } satisfies SwipeAction] : []),
-      ...(swipe?.reply ? [{ icon: 'reply', label: 'Reply', onClick: () => swipe.reply!(node) } satisfies SwipeAction] : []),
+      ...(live && own && swipe ? [{ icon: 'edit', label: 'Edit', title: 'Edit comment', onClick: () => swipe.edit(node) } satisfies SwipeAction] : []),
+      ...(live && swipe?.reply ? [{ icon: 'reply', label: 'Reply', onClick: () => swipe.reply!(node) } satisfies SwipeAction] : []),
       ...(swipe && node.parentId.startsWith('t1_')
         ? [{ icon: 'comment', label: 'Parent', title: 'Go to parent comment', onClick: () => swipe.parent(node) } satisfies SwipeAction]
         : []),
-      ...(account?.isMod && swipe ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => swipe.moderate(node) } satisfies SwipeAction] : []),
+      ...(live && account?.isMod && swipe ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => swipe.moderate(node) } satisfies SwipeAction] : []),
       { icon: 'more', label: 'More', title: 'More actions', onClick: () => onActions(node) },
     ];
     const press = useLongPress(() => onActions(node));
@@ -146,15 +154,24 @@ export const CommentRow = memo(
           {node.distinguished === 'moderator' ? (
             <span className="badge mod">MOD</span>
           ) : null}
+          {node.archive === 'restored' ? (
+            <span className="badge archive" title="Restored from the archive">ARCHIVE</span>
+          ) : null}
           {node.authorFlair ? <FlairChip flair={node.authorFlair} /> : null}
-          <VoteLinks
-            thingId={node.id}
-            permalink={node.permalink}
-            score={node.score}
-            vote={node.vote}
-            kind="comment"
-            variant="inline"
-          />
+          {live ? (
+            <VoteLinks
+              thingId={node.id}
+              permalink={node.permalink}
+              score={node.score}
+              vote={node.vote}
+              kind="comment"
+              variant="inline"
+            />
+          ) : (
+            <span className="vote vote-inline" title="Score when archived">
+              <span className="vote-score">{compact(node.score)}</span>
+            </span>
+          )}
           <time
             dateTime={new Date(node.createdAt).toISOString()}
             title={fullDate(node.createdAt)}
@@ -186,7 +203,16 @@ export const CommentRow = memo(
           </button>
         </div>
         <div className="comment-body">
-          <Markdown source={node.body} media={node.media} />
+          {node.removed ? (
+            <p className="comment-removed">
+              {node.removed === 'author' ? 'Deleted by its author' : '[removed]'}
+              {node.archive === 'missing' ? (
+                <span className="archive-missing">Not in the archive</span>
+              ) : null}
+            </p>
+          ) : (
+            <Markdown source={node.body} media={node.media} />
+          )}
         </div>
       </div>
       </SwipeActions>

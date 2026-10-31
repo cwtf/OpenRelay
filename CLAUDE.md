@@ -25,7 +25,7 @@ node --experimental-strip-types --test src/client/lib/panes.test.ts
 node --experimental-strip-types --test --test-name-pattern="modhash" src/extension/writes.test.ts
 ```
 
-Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
+Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`, `archive-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
 
 The desktop app has its own `package.json` (Electron and Playwright) in `apps/desktop/`:
 
@@ -78,7 +78,7 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 - `action`: a write, which must be an entry in the `ACTIONS` table in `src/extension/writes.ts`, with validated params. **New writes go there.**
 - `me`: account name and avatar only.
 
-The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, and host access to Reddit's image hosts for offline images), no third-party hosts, and the inbox read with `mark=false`. Keep changes consistent with it.
+The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, and host access to Reddit's image hosts for offline images), no third-party hosts apart from the optional Giphy GIFs and Arctic Shift (`lib/archive.ts`, fetched only when you press Restore from archive on a removed post), and the inbox read with `mark=false`. Keep changes consistent with it.
 
 ### Data flow
 
