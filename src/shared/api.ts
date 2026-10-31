@@ -282,6 +282,10 @@ export type Prefs = {
   /** Relay's tablet setting: single or dual pane, per orientation. */
   paneModePortrait: "auto" | "single" | "dual";
   paneModeLandscape: "auto" | "single" | "dual";
+  /** Save images with posts saved for offline reading. */
+  offlineImages: boolean;
+  /** Save Reddit videos (with their sound) with posts saved for offline reading. */
+  offlineVideos: boolean;
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -299,6 +303,8 @@ export const DEFAULT_PREFS: Prefs = {
   compactCrossposts: false,
   paneModePortrait: "auto",
   paneModeLandscape: "auto",
+  offlineImages: true,
+  offlineVideos: true,
 };
 
 export type InitResponse = {

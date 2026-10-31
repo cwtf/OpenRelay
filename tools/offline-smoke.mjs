@@ -202,8 +202,35 @@ const toast = (app, text) => app.locator(".toast", { hasText: text }).waitFor();
 const save = async (app, nth) => {
   await app.locator(".toast").waitFor({ state: "detached" });
   await app.getByRole("button", { name: "More actions" }).nth(nth).click();
-  await app.getByRole("button", { name: /Save for offline/ }).click();
+  await app.getByRole("button", { name: /Save for offline|Update offline copy/ }).click();
   await toast(app, "Saved for offline reading");
+};
+/** Choose `option` in the drawer's "Save feed for offline" sheet. */
+const saveFeed = async (app, option, done) => {
+  await app.locator(".toast").waitFor({ state: "detached" });
+  await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.getByRole("button", { name: "Save feed for offline" }).click();
+  await app.getByRole("button", { name: /^Text only/ }).waitFor();
+  await page.waitForTimeout(400); // Let the sheet finish sliding in.
+  await page.screenshot({ path: resolve(out, "offline-save-feed.png") });
+  await app.getByRole("button", { name: option }).click();
+  await toast(app, done);
+};
+/** Set Settings' offline images and videos switches. */
+const offlineSettings = async (app, on) => {
+  await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
+  await app.locator(".has-drawer").waitFor({ state: "detached" });
+  await app.locator(".screen.is-feed").getByRole("button", { name: "Settings", exact: true }).click();
+  for (const name of [/^Save images/, /^Save videos/]) {
+    const toggle = app.getByRole("switch", { name });
+    if ((await toggle.getAttribute("aria-checked")) !== String(on)) await toggle.click();
+  }
+  await app.locator("body").press("Escape");
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+};
+const forget = () => {
+  commentLoads.length = mediaLoads.length = videoLoads.length = 0;
 };
 
 try {
@@ -235,7 +262,37 @@ try {
   await app.getByRole("button", { name: /Update offline copy/ }).waitFor();
   await app.getByRole("button", { name: "Remove offline copy" }).waitFor();
   await page.keyboard.press("Escape");
+
+  // From the feed, text posts only: just the text post, nothing else fetched.
+  forget();
+  await saveFeed(app, /^Text posts only/, "Saved for offline reading");
+  assert.deepEqual(commentLoads.length, 1);
+  assert.deepEqual([...mediaLoads, ...videoLoads], []);
+  // Text only: every post, without their images or videos.
+  forget();
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  await saveFeed(app, /^Text only/, "Saved 3 posts for offline reading");
+  assert.equal(commentLoads.length, 3);
+  assert.deepEqual([...mediaLoads, ...videoLoads], []);
+  // With images and videos off in Settings, a post's own save fetches neither,
+  // and the feed sheet has no "with media" choice.
+  await offlineSettings(app, false);
+  forget();
+  await save(app, 2);
+  assert.equal(commentLoads.length, 1);
+  assert.deepEqual([...mediaLoads, ...videoLoads], []);
+  await app.locator(".toast").waitFor({ state: "detached" });
+  await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.getByRole("button", { name: "Save feed for offline" }).click();
+  await app.getByRole("button", { name: /^Text only/ }).waitFor();
+  assert.equal(await app.getByRole("button", { name: /^With / }).count(), 0);
+  await app.locator("body").press("Escape");
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  await offlineSettings(app, true);
+
   // The picture is saved with its images.
+  forget();
   await save(app, 1);
   assert.deepEqual(mediaLoads.sort(), [
     "https://i.redd.it/pic.png",

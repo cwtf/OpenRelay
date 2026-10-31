@@ -1,6 +1,7 @@
 import { COMMENT_SORTS, type Prefs } from "../../shared/api";
 import { usePrefs } from "../app/prefs";
 import { sortLabel } from "../lib/format";
+import { offlineAvailable } from "../lib/offline";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
 
@@ -281,6 +282,24 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
             value={prefs.giphyGifs}
             onChange={set("giphyGifs")}
           />
+
+          {offlineAvailable() ? (
+            <>
+              <div className="sheet-section">Offline reading</div>
+              <Toggle
+                label="Save images"
+                hint="Pictures, galleries, link previews and comment images, up to 40 MB a post"
+                value={prefs.offlineImages}
+                onChange={set("offlineImages")}
+              />
+              <Toggle
+                label="Save videos"
+                hint="Reddit videos with their sound, up to 40 MB, or 15 MB each when saving a feed"
+                value={prefs.offlineVideos}
+                onChange={set("offlineVideos")}
+              />
+            </>
+          ) : null}
 
           <div className="sheet-section">Accessibility</div>
           <Toggle

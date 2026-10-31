@@ -155,8 +155,23 @@ export const offlineFeed = () => feed;
 
 let saving = false;
 
-/** Save posts one after another, reporting progress in toasts. */
-export async function saveOffline(posts: PostSummary[] | string[]): Promise<void> {
+/** What to save with each post's text. */
+export type SaveMedia = { images: boolean; videos: boolean };
+/** The images and videos Settings asks for. */
+export const savedMedia = (): SaveMedia => {
+  const prefs = loadCachedPrefs();
+  return { images: prefs.offlineImages, videos: prefs.offlineVideos };
+};
+export const TEXT_ONLY: SaveMedia = { images: false, videos: false };
+
+/**
+ * Save posts one after another, reporting progress in toasts, with the
+ * images and videos `media` asks for (by default, as set in Settings).
+ */
+export async function saveOffline(
+  posts: PostSummary[] | string[],
+  media: SaveMedia = savedMedia(),
+): Promise<void> {
   const ids = posts.map((post) => (typeof post === "string" ? post : post.id));
   if (!ids.length) return;
   if (saving) {
@@ -165,7 +180,7 @@ export async function saveOffline(posts: PostSummary[] | string[]): Promise<void
   }
   saving = true;
   // Before anything is awaited: the extension asks for permission in the click.
-  const access = mediaAccess();
+  const access = media.images ? mediaAccess() : Promise.resolve(null);
   const sort = loadCachedPrefs().commentSort;
   let saved = 0;
   let stopped = "";
@@ -173,13 +188,15 @@ export async function saveOffline(posts: PostSummary[] | string[]): Promise<void
   if (ids.length > 1) toast(`Saving ${plural(ids.length, "post")} for offline reading…`);
   try {
     const fetcher = await access;
-    textOnly = !fetcher && Boolean(readerHost().media);
+    textOnly = media.images && !fetcher && Boolean(readerHost().media);
     for (const [index, id] of ids.entries()) {
       if (index) await new Promise((resolve) => setTimeout(resolve, PAUSE_MS));
       try {
         const page = await fetchPostToSave(id, sort, COMMENT_LIMIT);
         const files = fetcher ? await fetchFiles(fetcher, page) : [];
-        const video = await fetchVideo(page, ids.length === 1 ? VIDEO_LIMIT : FEED_VIDEO_LIMIT);
+        const video = media.videos
+          ? await fetchVideo(page, ids.length === 1 ? VIDEO_LIMIT : FEED_VIDEO_LIMIT)
+          : null;
         if (video) files.push(video);
         await writeOfflineCopy(page, Date.now(), files);
         saved++;

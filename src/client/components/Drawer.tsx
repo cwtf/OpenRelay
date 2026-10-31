@@ -22,12 +22,8 @@ import { ensureAccount, useAccount } from "../lib/account";
 import { runAction, searchCommunities } from "../lib/api";
 import { compact as compactNumber } from "../lib/format";
 import { promptLogin, toast } from "../lib/platform";
-import {
-  FEED_SAVE_LIMIT,
-  offlineAvailable,
-  offlineFeed,
-  saveOffline,
-} from "../lib/offline";
+import { offlineAvailable, offlineFeed } from "../lib/offline";
+import { SaveFeedSheet } from "./SaveFeedSheet";
 import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
@@ -856,7 +852,17 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
               {item("download", "Save feed for offline", () => {
                 const { sub, posts } = offlineFeed();
                 if (sub.toLowerCase() === current.toLowerCase() && posts.length)
-                  void saveOffline(posts.slice(0, FEED_SAVE_LIMIT));
+                  nav.openSheet((onSheetClosed) => (
+                    <SaveFeedSheet
+                      title={
+                        special.has(current.toLowerCase())
+                          ? feedLabel(current)
+                          : `r/${current}`
+                      }
+                      posts={posts}
+                      onClosed={onSheetClosed}
+                    />
+                  ));
                 else toast("Load the feed first, then save it");
               })}
               {item("book", "Saved for offline", nav.openOffline)}
