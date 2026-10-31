@@ -3,6 +3,7 @@ import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
 import { allowedSearchPagePath, parseSearchPage } from "./search";
 import { readSnapshot } from "./snapshot";
+import { sourceUrl } from "./sources";
 import { pageHost } from "../hosts/page";
 
 let host: HTMLDivElement | null = null;
@@ -192,6 +193,13 @@ async function receive(data: any) {
       value = response.ok
         ? normalizeAccount(await response.json().catch(() => null))
         : null;
+    } else if (action === "navigate") {
+      // The source switcher: only Reddit's or a Lemmy instance's front page.
+      if (!active) throw new Error("OpenRelay is not active");
+      const url = sourceUrl(path);
+      if (!url) throw new Error("Invalid source");
+      setTimeout(() => location.assign(url));
+      value = null;
     } else if (action === "snapshot") {
       let loaded = readSnapshot(document);
       for (let i = 0; !loaded.posts.length && i < 10; i++) {

@@ -77,6 +77,7 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 - `vote` / `vote-status`: `votes.ts` first clicks the native Reddit vote control for that thing ID. If none is on the page, `apiVote` posts to `/api/vote`.
 - `action`: a write, which must be an entry in the `ACTIONS` table in `src/extension/writes.ts`, with validated params. **New writes go there.**
 - `me`: account name and avatar only.
+- `navigate`: the drawer's source switcher. Loads Reddit's front page or a Lemmy instance's front page in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
 
 The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, and host access to Reddit's image hosts for offline images), no third-party hosts apart from the optional Giphy GIFs and Arctic Shift (`lib/archive.ts`, fetched only when you press Restore from archive on a removed post), and the inbox read with `mark=false`. Keep changes consistent with it.
 

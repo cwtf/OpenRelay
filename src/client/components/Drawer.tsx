@@ -23,6 +23,14 @@ import { runAction, searchCommunities } from "../lib/api";
 import { compact as compactNumber } from "../lib/format";
 import { promptLogin, toast } from "../lib/platform";
 import { offlineAvailable, offlineFeed } from "../lib/offline";
+import {
+  addInstance,
+  currentSource,
+  removeInstance,
+  switchSource,
+  useSources,
+  type Source,
+} from "../lib/sources";
 import { SaveFeedSheet } from "./SaveFeedSheet";
 import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
@@ -74,6 +82,133 @@ const GoToUserSheet = ({
         </form>
       )}
     </Sheet>
+  );
+};
+
+const AddInstanceSheet = ({ onClosed }: { onClosed: () => void }) => {
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <Sheet title="Add Lemmy instance" onClosed={onClosed}>
+      {(close) => (
+        <>
+          <form
+            className="drawer-search user-go"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const added = addInstance(draft);
+              if ("error" in added) return setError(added.error);
+              close();
+              toast(`Added ${added.host}`);
+            }}
+          >
+            <Icon name="globe" size={20} />
+            <input
+              autoFocus
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError("");
+              }}
+              placeholder="lemmy.world"
+              aria-label="Instance address"
+              aria-invalid={error ? true : undefined}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              inputMode="url"
+              enterKeyHint="done"
+            />
+            <button
+              type="submit"
+              className="btn is-tonal"
+              disabled={!draft.trim()}
+            >
+              Add
+            </button>
+          </form>
+          <p className="sub-hint source-hint" role={error ? "alert" : undefined}>
+            {error ||
+              "OpenRelay can't read Lemmy yet, so the instance opens in its own web app."}
+          </p>
+        </>
+      )}
+    </Sheet>
+  );
+};
+
+/**
+ * Relay's account switcher, for sites: the current source, and when opened
+ * the others and "Add Lemmy instance". Switching loads the site in this tab.
+ */
+const SourceSwitcher = ({ onSwitch }: { onSwitch: () => void }) => {
+  const nav = useNav();
+  const sources = useSources();
+  const current = currentSource();
+  const [open, setOpen] = useState(false);
+  const others = sources.filter((source) => source.id !== current?.id);
+  const icon = (source: Source | null): IconName =>
+    !source ? "book" : source.kind === "reddit" ? "subreddit" : "globe";
+  return (
+    <>
+      <button
+        type="button"
+        className="drawer-item source-current"
+        data-ripple
+        aria-expanded={open}
+        aria-controls="drawer-sources"
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name={icon(current)} />
+        <span className="label">{current?.label ?? "Saved for offline"}</span>
+        <Icon name={open ? "chevronUp" : "chevronDown"} />
+      </button>
+      {open ? (
+        <div id="drawer-sources" role="group" aria-label="Switch source">
+          {others.map((source) => (
+            <div key={source.id} className="source-row">
+              <button
+                type="button"
+                className="drawer-item"
+                data-ripple
+                onClick={() => {
+                  onSwitch();
+                  switchSource(source);
+                }}
+              >
+                <Icon name={icon(source)} />
+                <span className="label">{source.label}</span>
+              </button>
+              {source.kind === "lemmy" ? (
+                <button
+                  type="button"
+                  className="icon-btn source-remove"
+                  aria-label={`Remove ${source.label}`}
+                  title={`Remove ${source.label}`}
+                  onClick={() => removeInstance(source.id)}
+                >
+                  <Icon name="close" size={20} />
+                </button>
+              ) : null}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="drawer-item"
+            data-ripple
+            onClick={() =>
+              nav.openSheet((onSheetClosed) => (
+                <AddInstanceSheet onClosed={onSheetClosed} />
+              ))
+            }
+          >
+            <Icon name="addCircle" />
+            <span className="label">Add Lemmy instance</span>
+          </button>
+        </div>
+      ) : null}
+      <div className="drawer-sep" />
+    </>
   );
 };
 
@@ -798,6 +933,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
         {/* Relay's navigation drawer: account destinations and Settings.
             Communities are in the sheet that opens from the feed title. */}
         <div className="drawer-body">
+          <SourceSwitcher onSwitch={close} />
           {/* Account destinations, as in Relay's drawer. */}
           {account ? (
             <>

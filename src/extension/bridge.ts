@@ -63,7 +63,8 @@ export function bridge<T>(
     | "vote"
     | "vote-status"
     | "me"
-    | "action",
+    | "action"
+    | "navigate",
   path?: string,
   payload?: {
     thingId?: string;

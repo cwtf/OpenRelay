@@ -282,6 +282,13 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
     },
   });
 });
+// A Lemmy instance the drawer's source switcher opens.
+await context.route("https://lemmy.world/**", (route) =>
+  route.fulfill({
+    contentType: "text/html",
+    body: "<!doctype html><title>Lemmy fixture</title><h1>Lemmy fixture</h1>",
+  }),
+);
 const page = await context.newPage();
 page.on("pageerror", (err) => errors.push(err.message));
 async function reader() {
@@ -530,6 +537,7 @@ try {
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
     [
+      "Reddit",
       "Profile",
       "Inbox",
       "Moderator",
@@ -758,13 +766,39 @@ try {
   await page.goto("https://old.reddit.com/r/test/");
   app = await reader();
   assert.ok(await app.getByText("u/old_user", { exact: true }).count());
+  // The drawer's source switcher: add a Lemmy instance, then open it in this tab.
+  await page.goto("https://www.reddit.com/r/test/");
+  app = await reader();
+  await app.getByRole("button", { name: "Open menu" }).click();
+  const switcher = app.locator(".drawer-item.source-current");
+  assert.equal(await switcher.getAttribute("aria-expanded"), "false");
+  await switcher.click();
+  await app.getByRole("button", { name: "Add Lemmy instance" }).click();
+  const address = app.getByLabel("Instance address");
+  await address.fill("http://lemmy.world");
+  await address.press("Enter");
+  await app.getByText("Enter an instance's address, like lemmy.world").waitFor();
+  await address.fill("!memes@Lemmy.World");
+  await address.press("Enter");
+  await app.locator(".toast", { hasText: "Added lemmy.world" }).waitFor();
+  await app.getByRole("button", { name: "Remove lemmy.world" }).click();
+  assert.equal(await app.locator(".source-row").count(), 0);
+  await app.getByRole("button", { name: "Add Lemmy instance" }).click();
+  await address.fill("lemmy.world");
+  await address.press("Enter");
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  await page.screenshot({ path: resolve(out, "drawer-sources.png") });
+  await app.locator(".source-row .drawer-item", { hasText: "lemmy.world" }).click();
+  await page.waitForURL("https://lemmy.world/");
+  await page.getByRole("heading", { name: "Lemmy fixture" }).waitFor();
+  assert.equal(await page.locator("#openrelay-extension").count(), 0);
   await page.goto("https://www.reddit.com/r/challenge/");
   await page.waitForTimeout(1000);
   assert.equal(await page.locator("#openrelay-extension").count(), 0);
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, source switcher (add, remove, open a Lemmy instance), Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

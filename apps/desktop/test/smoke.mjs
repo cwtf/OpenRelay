@@ -584,6 +584,7 @@ try {
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
     [
+      "Reddit",
       "Profile",
       "Inbox",
       "Moderator",

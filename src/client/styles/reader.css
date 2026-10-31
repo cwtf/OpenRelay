@@ -2230,6 +2230,34 @@ button.post-action {
   background: var(--divider);
 }
 
+/* Source switcher: the current site, then the others with a remove button. */
+.drawer-item.source-current .label {
+  font-weight: 600;
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.source-row .drawer-item {
+  flex: 1;
+  min-width: 0;
+  margin-right: 0;
+}
+
+.source-remove {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  color: var(--text-3);
+}
+
+.sub-hint.source-hint {
+  margin: 0 24px 16px;
+}
+
 /* Community search pill (48px, fully rounded, raised card). */
 .drawer-search {
   display: flex;

@@ -524,3 +524,7 @@ export const runAction = (
 ): Promise<{ id?: string; url?: string; comment?: CommentNode }> =>
   bridge("action", undefined, { op, args });
 
+
+/** Loads a source's front page (`sourceUrl` checks it) in the Reddit tab. */
+export const openSource = (url: string): Promise<void> =>
+  bridge("navigate", url);
