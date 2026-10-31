@@ -26,7 +26,7 @@ import { resolveLink } from "../lib/links";
 import { openUrl } from "../lib/platform";
 import { paneLayout, setSelectedPost, useWindowSize } from "../lib/panes";
 import { installRipple } from "../lib/ripple";
-import { recentCommunities } from "../lib/storage";
+import { recentCommunities } from "../lib/site";
 import { ensureAccount } from "../lib/account";
 import { ensureSubscriptions } from "../lib/subscriptions";
 import { offlineMode } from "../lib/offline";

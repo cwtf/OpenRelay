@@ -29,7 +29,7 @@ import { SubredditSheet } from "../components/Drawer";
 import { PostCard } from "../components/PostCard";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { useAccount } from "../lib/account";
-import { fetchAbout, fetchFeed } from "../lib/api";
+import { fetchAbout, fetchFeed, site } from "../lib/api";
 import { compact, hueOf, sortLabel, timeframeLabel } from "../lib/format";
 import {
   animateLayout,
@@ -477,13 +477,13 @@ export const FeedScreen = ({
           type="button"
           className="appbar-title"
           data-ripple
-          aria-label={`${sub === "Home" ? "Home" : `r/${sub}`}, ${subtitle}. Subreddit search`}
+          aria-label={`${sub === "Home" ? "Home" : site.communityLabel(sub)}, ${subtitle}. Subreddit search`}
           // As in Relay, the title opens the subscriptions / search sheet.
           onClick={() =>
             nav.openSheet((onClosed) => <SubredditSheet onClosed={onClosed} />)
           }
         >
-          <span className="name">{sub === "Home" ? "Home" : `r/${sub}`}</span>
+          <span className="name">{sub === "Home" ? "Home" : site.communityLabel(sub)}</span>
           <span className="sub">
             {subtitle}
             <Icon name="chevronDown" size={16} />
@@ -549,13 +549,13 @@ export const FeedScreen = ({
             <div className="community-row">
               <Avatar name={sub} src={picture} size={isCommunity(sub) ? "large" : undefined} />
               <div className="meta">
-                <div className="title">{about?.title || `r/${sub}`}</div>
+                <div className="title">{about?.title || site.communityLabel(sub)}</div>
                 <div className="stats">
                   {isCommunity(sub) ? <Icon name="people" size={15} /> : null}
                   {about?.subscribers !== undefined
                     ? `${compact(about.subscribers)} members`
                     : isCommunity(sub)
-                      ? `r/${sub}`
+                      ? site.communityLabel(sub)
                       : "Feed"}
                   {about?.active ? ` · ${compact(about.active)} online` : ""}
                 </div>
@@ -568,7 +568,7 @@ export const FeedScreen = ({
                     type="button"
                     className="header-action"
                     data-ripple
-                    aria-label={`r/${sub} menu`}
+                    aria-label={`${site.communityLabel(sub)} menu`}
                     title="More"
                     onClick={() =>
                       nav.openSheet((onClosed) => (

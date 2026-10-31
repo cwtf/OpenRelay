@@ -2,10 +2,11 @@ import { useSyncExternalStore } from "react";
 import type { Account } from "../../shared/api";
 import { fetchAccount } from "./api";
 import { readJson, writeJson } from "./storage";
+import { siteKey } from "./site";
 
 /** Reuse the saved account for this long before re-reading it from Reddit. */
 const MAX_AGE = 30 * 60 * 1000;
-const KEY = "account";
+const KEY = siteKey("account");
 
 type Saved = { at: number; account: Account | null };
 

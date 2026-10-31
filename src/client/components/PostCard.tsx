@@ -21,6 +21,7 @@ import { VoteLinks, useVoteToggle } from './VoteLinks';
 import { useAccount } from '../lib/account';
 import { sharePost } from '../lib/platform';
 import { toggleSaved, useSaved } from '../lib/saved';
+import { site } from '../lib/api';
 
 const useIsRead = (id: string): boolean => {
   useSyncExternalStore(readPosts.subscribe, readPosts.getVersion);
@@ -140,7 +141,7 @@ const Crosspost = ({ original }: { original: PostSummary }) => {
           onClick={open}
         >
           <span>
-            {plural(original.comments, 'Comment')} in r/{original.subreddit}
+            {plural(original.comments, 'Comment')} in {site.communityLabel(original.subreddit)}
           </span>
           <Icon name="crosspost" size={20} />
         </button>

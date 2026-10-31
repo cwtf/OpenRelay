@@ -49,6 +49,7 @@ import {
   type ModSection,
   type ProfileSection,
   type ProfileSort,
+  site,
 } from "../lib/api";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { compact, timeframeLabel } from "../lib/format";
@@ -567,7 +568,7 @@ export const ModeratorScreen = () => {
   return (
     <>
       <ScreenHeader
-        title={sub === "mod" ? "Moderator" : `r/${sub}`}
+        title={sub === "mod" ? "Moderator" : site.communityLabel(sub)}
         subtitle={`${labelOf(MOD_SECTIONS, section)}${filter === "all" ? "" : ` · ${labelOf(MOD_FILTERS, filter)}`}`}
         onTitle={pickSection}
       />
@@ -625,7 +626,7 @@ const ModSubSheet = ({
   }, [subs]);
   const choices: Choice<string>[] = [
     { value: "mod", label: "All moderated communities", icon: "modShield" },
-    ...(subs ?? []).map((name) => ({ value: name, label: `r/${name}`, icon: "subreddit" as const })),
+    ...(subs ?? []).map((name) => ({ value: name, label: site.communityLabel(name), icon: "subreddit" as const })),
   ];
   return subs ? (
     <ChoiceSheet title="Subreddit" choices={choices} selected={selected} onPick={onPick} onClosed={onClosed} />
@@ -895,7 +896,7 @@ export const RulesSheet = ({ sub, onClosed }: { sub: string; onClosed: () => voi
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unavailable"));
   }, [sub]);
   return (
-    <Sheet title={`r/${sub} rules`} onClosed={onClosed}>
+    <Sheet title={`${site.communityLabel(sub)} rules`} onClosed={onClosed}>
       {() => (
         <div className="about-body">
           {error ? (

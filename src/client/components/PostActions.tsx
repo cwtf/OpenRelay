@@ -1,4 +1,5 @@
 import type { PostSummary } from "../../shared/api";
+import { site } from "../lib/api";
 import type { Nav } from "../app/nav";
 import {
   openUrl,
@@ -48,7 +49,7 @@ export const openPostActions = (
               <SheetItem
                 icon="crosspost"
                 label="View original post"
-                hint={`r/${post.crosspostParent.subreddit}`}
+                hint={site.communityLabel(post.crosspostParent.subreddit)}
                 onClick={run(() => nav.openPost(post.crosspostParent!))}
               />
             ) : null}
@@ -74,7 +75,7 @@ export const openPostActions = (
             />
             <SheetItem
               icon="external"
-              label="View on Reddit"
+              label={`View on ${site.name}`}
               onClick={run(() => openUrl(redditUrl(post.permalink)))}
             />
             {offlineAvailable() && !offlineMode ? (
@@ -95,7 +96,7 @@ export const openPostActions = (
             {post.subreddit.toLowerCase() !== nav.current.toLowerCase() ? (
               <SheetItem
                 icon="people"
-                label={`Go to r/${post.subreddit}`}
+                label={`Go to ${site.communityLabel(post.subreddit)}`}
                 onClick={run(() => nav.openCommunity(post.subreddit))}
               />
             ) : null}

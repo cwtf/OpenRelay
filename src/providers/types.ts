@@ -59,7 +59,32 @@ export type PageProvider = {
   handle(request: PageRequest, active: boolean): Promise<unknown>;
 };
 
+/** What a site supports beyond reading; the reader hides the rest. */
+export type ReaderFeatures = {
+  /** Voting, replying, saving, subscribing and the other `runAction` writes. */
+  writes: boolean;
+  inbox: boolean;
+  friends: boolean;
+  moderation: boolean;
+  wiki: boolean;
+  /** Restoring removed posts from Arctic Shift's Reddit archive. */
+  archive: boolean;
+};
+
 export type ReaderProvider = {
+  /** The site's name, as in "Sign in to Reddit". */
+  name: string;
+  features: ReaderFeatures;
+  /** How the site writes a community's name: `r/name`, `c/name`. Feeds keep theirs. */
+  communityLabel(name: string): string;
+  /** Whether `name` is a community, not a feed like Home or Popular. */
+  isCommunity(name: string): boolean;
+  /** Whether a typed name could be a community's (`linux`, `linux@lemmy.ml`). */
+  validCommunityName(name: string): boolean;
+  /** A community's page on the site. */
+  communityUrl(name: string): string;
+  /** The site's sign-in page. */
+  loginUrl: string;
   parseRoute(href: string): PageRoute | null;
   fetchInit(): Promise<InitResponse>;
   fetchFeed(

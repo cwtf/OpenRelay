@@ -470,7 +470,23 @@ const runAction = (
 ): Promise<{ id?: string; url?: string; comment?: CommentNode }> =>
   bridge("action", undefined, { op, args });
 
+const FEEDS = ["home", "popular"];
+
 export const redditReader: ReaderProvider = {
+  name: "Reddit",
+  features: {
+    writes: true,
+    inbox: true,
+    friends: true,
+    moderation: true,
+    wiki: true,
+    archive: true,
+  },
+  communityLabel: (name) => `r/${name}`,
+  isCommunity: (name) => !FEEDS.includes(name.toLowerCase()) && !name.includes("+"),
+  validCommunityName: (name) => /^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/.test(name),
+  communityUrl: (name) => `https://www.reddit.com/r/${name}/`,
+  loginUrl: "https://www.reddit.com/login",
   parseRoute,
   fetchInit,
   fetchFeed,

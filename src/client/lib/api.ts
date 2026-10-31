@@ -25,6 +25,16 @@ export type {
 const provider: ReaderProvider = readerProvider(pageUrl.href)!;
 
 export const entryRoute = provider.parseRoute(pageUrl.href)!;
+/** The site the reader is showing: its name, features and naming rules. */
+export const site = {
+  name: provider.name,
+  features: provider.features,
+  communityLabel: provider.communityLabel,
+  isCommunity: provider.isCommunity,
+  validCommunityName: provider.validCommunityName,
+  communityUrl: provider.communityUrl,
+  loginUrl: provider.loginUrl,
+};
 export const {
   fetchInit,
   fetchFeed,

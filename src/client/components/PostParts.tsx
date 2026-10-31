@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { site } from "../lib/api";
 import type {
   Flair,
   ImageRef,
@@ -59,7 +60,7 @@ export const PostMeta = ({
     <div className="post-meta">
       {showSub ? (
         <>
-          <span className="author">r/{post.subreddit}</span>
+          <span className="author">{site.communityLabel(post.subreddit)}</span>
           <span className="dot" />
         </>
       ) : null}

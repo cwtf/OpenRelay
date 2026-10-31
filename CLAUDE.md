@@ -25,7 +25,7 @@ node --experimental-strip-types --test src/client/lib/panes.test.ts
 node --experimental-strip-types --test --test-name-pattern="modhash" src/providers/reddit/writes.test.ts
 ```
 
-Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`, `archive-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
+Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`, `archive-smoke`, `lemmy-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
 
 The desktop app has its own `package.json` (Electron and Playwright) in `apps/desktop/`:
 
@@ -57,12 +57,20 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 
 ### Providers
 
-`src/providers/` holds everything specific to a site OpenRelay reads, so another site (Lemmy is the plan) can sit beside Reddit. `hosts.ts` says which provider a page URL belongs to (`providerOf`); the bridge, the content script and the reader all choose by it. `types.ts` defines the two halves, one on each side of the bridge:
+`src/providers/` holds everything specific to a site OpenRelay reads: Reddit (`reddit/`) and Lemmy (`lemmy/`, read-only, Lemmy 0.19's v3 API). `hosts.ts` says which provider a page URL belongs to (`providerOf`: Reddit's hosts, else any public https host is Lemmy); the bridge, the content script and the reader all choose by it. `types.ts` defines the two halves, one on each side of the bridge:
 
-- `PageProvider` (content script): `parseRoute`, `isGatePage`, and `handle()`, which answers every bridge action except `navigate`. Reddit's is `reddit/page.ts`, picked by `providers/page.ts`.
-- `ReaderProvider` (reader): the fetch functions (`fetchFeed`, `fetchPost`, `runAction`, …), which build bridge requests and normalize the answers into `shared/api.ts` models. Reddit's is `reddit/reader.ts`, picked by `providers/reader.ts`.
+- `PageProvider` (content script): `parseRoute`, `isGatePage`, and `handle()`, which answers every bridge action except `navigate`. Reddit's is `reddit/page.ts` and Lemmy's `lemmy/page.ts`, picked by `providers/page.ts`.
+- `ReaderProvider` (reader): the fetch functions (`fetchFeed`, `fetchPost`, `runAction`, …), which build bridge requests and normalize the answers into `shared/api.ts` models. Reddit's is `reddit/reader.ts` and Lemmy's `lemmy/reader.ts`, picked by `providers/reader.ts`. It also tells the UI about the site: `name`, `features` (writes, inbox, friends, moderation, wiki, archive; the UI hides the rest), `communityLabel` (`r/`, `c/`), `isCommunity`, `validCommunityName`, `communityUrl` and `loginUrl`, which `api.ts` exports as `site`.
 
 `src/client/lib/api.ts` re-exports the reader provider's functions to the screens, and adds what doesn't depend on the site: the offline fallback in `fetchPost` and `openSource`. Some UI still assumes Reddit directly (`platform.ts`, `archive.ts`, the "open on Reddit" links, `client/lib/votes.ts`'s thing IDs).
+
+### Lemmy
+
+- IDs: Lemmy's numbers are only unique per instance, so posts and comments get `t3_<id>_<tag>` / `t1_<id>_<tag>` (`hostTag()` of the host). They pass the UI's `t3_`/`t1_` checks and are valid offline keys, and can't collide with Reddit's. Comments arrive flat with a `path`; `normalizeComments` builds the tree and sets `moreReplies` from `child_count`.
+- Running there: the manifest's content script is Reddit-only. Adding an instance (`addInstance` in `client/lib/sources.ts`) asks for that origin through `ReaderHost.instances` (optional host permission), then `sync()` registers `content.js` with `chrome.scripting` on the granted instances (id `openrelay-lemmy`). `web_accessible_resources` therefore matches `https://*/*`, and `reader.tsx` renders nothing unless `trustedSource()` (Reddit, offline, or a host in the list).
+- Auth: lemmy-ui and the API share an origin, so the page provider's same-origin GETs carry lemmy-ui's sign-in cookie; no token is handled. New read endpoints go in `READ_ROUTES` in `lemmy/lemmy.ts`.
+- Per-site storage: the account, subscriptions, favourites, recent communities and search history use `siteKey()` (`client/lib/site.ts`): Reddit's keys are unchanged, an instance's get `@host`.
+- The wrapper apps don't define `instances`, so there a Lemmy source opens in the browser.
 
 ### Host adapter
 
@@ -86,7 +94,7 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 - `vote` / `vote-status`: `votes.ts` first clicks the native Reddit vote control for that thing ID. If none is on the page, `apiVote` posts to `/api/vote`.
 - `action`: a write, which must be an entry in the `ACTIONS` table in `src/providers/reddit/writes.ts`, with validated params. **New writes go there.**
 - `me`: account name and avatar only.
-- `navigate`: the drawer's source switcher. Loads Reddit's front page or a Lemmy instance's front page in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
+- `navigate`: the drawer's source switcher (handled by `content.ts` itself, for every site). Loads Reddit's front page or a Lemmy instance's front page in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
 
 The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, and host access to Reddit's image hosts for offline images), no third-party hosts apart from the optional Giphy GIFs and Arctic Shift (`lib/archive.ts`, fetched only when you press Restore from archive on a removed post), and the inbox read with `mark=false`. Keep changes consistent with it.
 

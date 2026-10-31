@@ -33,7 +33,7 @@ import { ReplySheet } from "../components/ReplySheet";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
 import { currentAccount } from "../lib/account";
-import { fetchContext, fetchPost, fetchReplies, entryRoute } from "../lib/api";
+import { fetchContext, fetchPost, fetchReplies, entryRoute, site } from "../lib/api";
 import {
   ARCHIVE_NAME,
   ARCHIVE_SORTS,
@@ -450,13 +450,14 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   );
 
   // What the archive can restore in a thread Reddit still shows. Removals by
-  // their authors are left alone.
+  // their authors are left alone. The archive only has Reddit's posts.
   const postRemoved =
+    site.features.archive &&
     !archiveOnly && bodyLoaded && post?.removed && post.removed !== "author"
       ? post.removed
       : undefined;
   const removedIds = useMemo(
-    () => (tree && !archiveOnly ? removedComments(tree) : []),
+    () => (tree && !archiveOnly && site.features.archive ? removedComments(tree) : []),
     [tree, archiveOnly],
   );
   const untried = removedIds.filter((id) => !restore.tried.has(id));
@@ -781,7 +782,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 />
                 <SheetItem
                   icon="external"
-                  label="View on Reddit"
+                  label={`View on ${site.name}`}
                   onClick={run(() => openUrl(redditUrl(node.permalink)))}
                 />
                 {own && !archiveOnly ? (
@@ -1073,7 +1074,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
         ) : (
           <>
             <div className="appbar-title">
-              <span className="name">r/{post?.subreddit ?? "…"}</span>
+              <span className="name">{site.communityLabel(post?.subreddit ?? "…")}</span>
               <span className="sub">
                 {plural(commentCount, "comment")} · {sortLabel[sort]}
               </span>
@@ -1298,7 +1299,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
               {notice}
             </div>
           ) : null}
-          {status === "error" && !bodyLoaded ? (
+          {status === "error" && !bodyLoaded && site.features.archive ? (
             refusedPanel()
           ) : status === "error" ? (
             <div className="comments-empty">

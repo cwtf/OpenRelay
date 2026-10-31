@@ -9,7 +9,8 @@ import {
 import type { Community } from "../../shared/api";
 import { useNav } from "../app/nav";
 import { compact, hueOf } from "../lib/format";
-import { readJson, recentCommunities, writeJson } from "../lib/storage";
+import { readJson, writeJson } from "../lib/storage";
+import { recentCommunities } from "../lib/site";
 import {
   ensureSubscriptions,
   isFavourite,
@@ -19,7 +20,7 @@ import {
   useSubscriptions,
 } from "../lib/subscriptions";
 import { ensureAccount, useAccount } from "../lib/account";
-import { runAction, searchCommunities } from "../lib/api";
+import { runAction, searchCommunities, site } from "../lib/api";
 import { compact as compactNumber } from "../lib/format";
 import { promptLogin, toast } from "../lib/platform";
 import { offlineAvailable, offlineFeed } from "../lib/offline";
@@ -35,8 +36,8 @@ import { SaveFeedSheet } from "./SaveFeedSheet";
 import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
+import { readerHost } from "../../hosts/reader";
 
-const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/;
 const USER_RE = /^[\w-]{3,20}$/;
 
 const GoToUserSheet = ({
@@ -96,10 +97,11 @@ const AddInstanceSheet = ({ onClosed }: { onClosed: () => void }) => {
             className="drawer-search user-go"
             onSubmit={(event) => {
               event.preventDefault();
-              const added = addInstance(draft);
-              if ("error" in added) return setError(added.error);
-              close();
-              toast(`Added ${added.host}`);
+              void addInstance(draft).then((added) => {
+                if ("error" in added) return setError(added.error);
+                close();
+                toast(`Added ${added.host}`);
+              });
             }}
           >
             <Icon name="globe" size={20} />
@@ -129,7 +131,9 @@ const AddInstanceSheet = ({ onClosed }: { onClosed: () => void }) => {
           </form>
           <p className="sub-hint source-hint" role={error ? "alert" : undefined}>
             {error ||
-              "OpenRelay can't read Lemmy yet, so the instance opens in its own web app."}
+              (readerHost().instances
+                ? "OpenRelay asks for access to the instance so it can show it."
+                : "Here the instance opens in its own web app.")}
           </p>
         </>
       )}
@@ -185,7 +189,7 @@ const SourceSwitcher = ({ onSwitch }: { onSwitch: () => void }) => {
                   className="icon-btn source-remove"
                   aria-label={`Remove ${source.label}`}
                   title={`Remove ${source.label}`}
-                  onClick={() => removeInstance(source.id)}
+                  onClick={() => void removeInstance(source.id)}
                 >
                   <Icon name="close" size={20} />
                 </button>
@@ -287,8 +291,8 @@ const CommunityRow = ({
           aria-pressed={starred}
           aria-label={
             starred
-              ? `Remove r/${name} from Favourites`
-              : `Add r/${name} to Favourites`
+              ? `Remove ${site.communityLabel(name)} from Favourites`
+              : `Add ${site.communityLabel(name)} to Favourites`
           }
           onClick={() => toggleFavourite(name)}
         >
@@ -380,11 +384,11 @@ const SearchResultRow = ({
       .then(() => {
         community.subscribed = !subscribed;
         setSubscribed(!subscribed);
-        toast(subscribed ? `Left r/${community.name}` : `Joined r/${community.name}`);
+        toast(subscribed ? `Left ${site.communityLabel(community.name)}` : `Joined ${site.communityLabel(community.name)}`);
         void refreshSubscriptions();
       })
       .catch((error: unknown) =>
-        toast(error instanceof Error ? error.message : "Reddit could not do that."),
+        toast(error instanceof Error ? error.message : `${site.name} could not do that.`),
       )
       .finally(() => setBusy(false));
   };
@@ -400,7 +404,7 @@ const SearchResultRow = ({
         <span className="lines">
           <span className="label">{community.name}</span>
           <span className="detail">
-            r/{community.name}
+            {site.communityLabel(community.name)}
             {details.length ? ` · ${details.join(" · ")}` : ""}
             {community.nsfw ? <span className="sub-nsfw">NSFW</span> : null}
           </span>
@@ -413,8 +417,8 @@ const SearchResultRow = ({
           aria-pressed={subscribed}
           aria-label={
             subscribed
-              ? `Unsubscribe from r/${community.name}`
-              : `Subscribe to r/${community.name}`
+              ? `Unsubscribe from ${site.communityLabel(community.name)}`
+              : `Subscribe to ${site.communityLabel(community.name)}`
           }
           disabled={busy}
           onClick={toggle}
@@ -560,7 +564,7 @@ export const CommunityList = ({
   );
 
   // Search filters every known community; a valid name can be opened directly.
-  const typed = query.trim().replace(/^\/?r\//i, "");
+  const typed = query.trim().replace(/^\/?[rc]\/|^!/i, "");
   const needle = typed.toLowerCase();
   const matches: string[] = [];
   if (needle) {
@@ -588,7 +592,7 @@ export const CommunityList = ({
   );
   const searching = needle.length >= 2 && (remote.loading || remote.key !== needle);
   const showTyped =
-    NAME_RE.test(typed) &&
+    site.validCommunityName(typed) &&
     !matches.some((name) => name.toLowerCase() === needle) &&
     !found.some((community) => community.name.toLowerCase() === needle);
 
@@ -648,7 +652,7 @@ export const CommunityList = ({
                 info={info(typed)}
                 active={isActive(typed)}
                 onGo={onGo}
-                label={`Go to r/${typed}`}
+                label={`Go to ${site.communityLabel(typed)}`}
                 starrable={false}
               />
             ) : null}
@@ -658,14 +662,14 @@ export const CommunityList = ({
             {matches.slice(0, 60).map(row)}
             {needle.length >= 2 ? (
               <div className="search-results" aria-live="polite">
-                <div className="sub-label">Communities on Reddit</div>
+                <div className="sub-label">Communities on {site.name}</div>
                 {found.map((community) => (
                   <SearchResultRow
                     key={community.name}
                     community={community}
                     active={isActive(community.name)}
                     onGo={onGo}
-                    canSubscribe={Boolean(account)}
+                    canSubscribe={site.features.writes && Boolean(account)}
                   />
                 ))}
                 {searching && !found.length ? <SkeletonRows /> : null}
@@ -762,7 +766,7 @@ export const CommunityList = ({
                 <SkeletonRows />
               ) : subscriptions.status === "signed-out" ? (
                 <p className="sub-hint">
-                  Sign in to Reddit in this browser to see your subscribed
+                  Sign in to {site.name} in this browser to see your subscribed
                   communities here.{" "}
                   <button
                     type="button"
@@ -915,8 +919,8 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
       >
         <div className="drawer-head">
           <Avatar name={current} size="large" src={picture} />
-          <div className="title">{about?.title || `r/${current}`}</div>
-          <div className="subtitle">r/{current}</div>
+          <div className="title">{about?.title || site.communityLabel(current)}</div>
+          <div className="subtitle">{site.communityLabel(current)}</div>
           <div className="numbers">
             {about?.subscribers !== undefined ? (
               <span>
@@ -940,28 +944,34 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
               {item("accountCircle", "Profile", () =>
                 nav.openProfile(account.name),
               )}
-              {item(
-                "mail",
-                "Inbox",
-                nav.openInbox,
-                account.inboxCount ? (
-                  <span
-                    className="drawer-count"
-                    aria-label={`${account.inboxCount} unread`}
-                  >
-                    {account.inboxCount > 99 ? "99+" : account.inboxCount}
-                  </span>
-                ) : null,
-              )}
-              {account.isMod
+              {site.features.inbox
+                ? item(
+                    "mail",
+                    "Inbox",
+                    nav.openInbox,
+                    account.inboxCount ? (
+                      <span
+                        className="drawer-count"
+                        aria-label={`${account.inboxCount} unread`}
+                      >
+                        {account.inboxCount > 99 ? "99+" : account.inboxCount}
+                      </span>
+                    ) : null,
+                  )
+                : null}
+              {account.isMod && site.features.moderation
                 ? item("modShield", "Moderator", nav.openModerator)
                 : null}
-              {item("postAdd", "New Post", () =>
-                nav.openSubmit(
-                  special.has(current.toLowerCase()) ? undefined : current,
-                ),
-              )}
-              {item("people", "Friends", nav.openFriends)}
+              {site.features.writes
+                ? item("postAdd", "New Post", () =>
+                    nav.openSubmit(
+                      special.has(current.toLowerCase()) ? undefined : current,
+                    ),
+                  )
+                : null}
+              {site.features.friends
+                ? item("people", "Friends", nav.openFriends)
+                : null}
             </>
           ) : (
             <button
@@ -971,7 +981,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
               onClick={promptLogin}
             >
               <Icon name="accountCircle" />
-              <span className="label">Sign in to Reddit</span>
+              <span className="label">Sign in to {site.name}</span>
             </button>
           )}
           {item("user", "User", () =>
@@ -993,7 +1003,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
                       title={
                         special.has(current.toLowerCase())
                           ? feedLabel(current)
-                          : `r/${current}`
+                          : site.communityLabel(current)
                       }
                       feed={feed}
                       onClosed={onSheetClosed}
@@ -1009,10 +1019,10 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
         </div>
         <div className="drawer-foot">
           {account
-            ? `Signed in as u/${account.name}`
-            : "Reading from your Reddit tab"}
+            ? `Signed in as ${site.name === "Reddit" ? "u/" : "@"}${account.name}`
+            : `Reading from your ${site.name} tab`}
           <br />
-          OpenRelay · an independent reader for Reddit
+          OpenRelay · an independent reader for {site.name}
         </div>
       </nav>
     </div>

@@ -2,6 +2,7 @@
 // listing_comments, listing_messages and report layouts.
 
 import { useMemo, type ReactNode } from "react";
+import { site } from "../lib/api";
 import type {
   InboxItem,
   InlineMedia,
@@ -96,7 +97,7 @@ export const CommentCard = ({
   // Relay's listing-comment overflow menu; Delete only on your own comments.
   const more = () =>
     nav.openSheet((onClosed) => (
-      <Sheet title={`${comment.author} · r/${comment.subreddit}`} label="Comment actions" onClosed={onClosed}>
+      <Sheet title={`${comment.author} · ${site.communityLabel(comment.subreddit)}`} label="Comment actions" onClosed={onClosed}>
         {(close) => {
           const run = (action: () => void) => () => {
             close();
@@ -205,7 +206,7 @@ export const CommentCard = ({
           className="accent link-btn"
           onClick={() => nav.openCommunity(comment.subreddit)}
         >
-          r/{comment.subreddit}
+          {site.communityLabel(comment.subreddit)}
         </button>
         <span className="dot">·</span>
         <Time at={comment.createdAt} />
@@ -280,7 +281,7 @@ export const MessageCard = ({
         {item.subreddit && item.kind !== "message" ? (
           <>
             <span className="break">in</span>
-            <span className="accent">r/{item.subreddit}</span>
+            <span className="accent">{site.communityLabel(item.subreddit)}</span>
           </>
         ) : null}
         <span className="dot">·</span>

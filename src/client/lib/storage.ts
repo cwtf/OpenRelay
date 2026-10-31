@@ -225,4 +225,3 @@ export class RecentSet {
 
 export const readPosts = new RecentSet("read", 1500);
 export const hiddenPosts = new RecentSet("hidden", 1000);
-export const recentCommunities = new RecentSet("recent-subs", 12);

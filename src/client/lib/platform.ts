@@ -1,4 +1,5 @@
 import { safeUrl } from "../../providers/reddit/reddit";
+import { site } from "./api";
 import { audioFromPlaylist, muxAudioVideo } from "./mp4";
 import { readerHost } from "../../hosts/reader";
 import type { Downloads } from "../../hosts/types";
@@ -18,7 +19,7 @@ export const openUrl = (value: string): void => {
   }
   window.open(target.href, "_blank", "noopener,noreferrer");
 };
-export const promptLogin = () => openUrl("https://www.reddit.com/login");
+export const promptLogin = () => openUrl(site.loginUrl);
 export async function copyText(
   text: string,
   confirmation = "Copied",

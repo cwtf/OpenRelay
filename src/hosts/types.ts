@@ -68,6 +68,22 @@ export type SaveFile =
 export type Downloads = { save(file: SaveFile): Promise<void> };
 
 /**
+ * Running OpenRelay on the Lemmy instances the viewer added, as it runs on
+ * Reddit. Host names are bare (`lemmy.world`), already checked.
+ */
+export type InstanceAccess = {
+  /**
+   * Asks for access to an instance. Call it straight from the click handler,
+   * before awaiting anything: the browser's prompt needs the user gesture.
+   */
+  allow(host: string): Promise<"granted" | "declined">;
+  /** Gives up access to an instance the viewer removed. */
+  forget(host: string): Promise<void>;
+  /** Runs OpenRelay on exactly those of `hosts` it has access to. */
+  sync(hosts: string[]): Promise<void>;
+};
+
+/**
  * A message channel between the reader and the Reddit page, for a host that
  * shows the reader outside the page (see `PageHost.readerView`). It carries the
  * same `openrelay:*` messages as the iframe's `postMessage`; the host checks
@@ -121,6 +137,11 @@ export type ReaderHost = {
    * can't save files.
    */
   downloads(): Promise<Downloads | "declined" | "unavailable">;
+  /**
+   * Absent when the host can't run OpenRelay on Lemmy instances; they then
+   * open in the instance's own web app.
+   */
+  instances?: InstanceAccess;
   /**
    * The host's own back control (Android's back gesture), for a host whose
    * back doesn't reach the reader's history. The listener returns whether the

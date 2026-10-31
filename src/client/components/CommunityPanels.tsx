@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Moderator } from "../../shared/api";
 import { useNav } from "../app/nav";
 import { useAccount } from "../lib/account";
-import { fetchModerators, fetchWiki, runAction } from "../lib/api";
+import { fetchModerators, fetchWiki, runAction, site } from "../lib/api";
 import { compact } from "../lib/format";
 import { copyText, toast } from "../lib/platform";
 import { refreshSubscriptions } from "../lib/subscriptions";
@@ -16,9 +16,8 @@ import { Icon } from "./Icon";
 import { ReaderMarkdown } from "./ListingCards";
 import { Sheet, SheetItem } from "./Sheet";
 
-/** Home and Popular are feeds, not communities. */
-export const isCommunity = (sub: string) =>
-  !["home", "popular"].includes(sub.toLowerCase()) && !sub.includes("+");
+/** Home and Popular (All and Local on Lemmy) are feeds, not communities. */
+export const isCommunity = (sub: string) => site.isCommunity(sub);
 
 /** Subscribe state for a community, with a toggle that updates the drawer. */
 export const useSubscribe = (sub: string) => {
@@ -32,17 +31,17 @@ export const useSubscribe = (sub: string) => {
     try {
       await runAction("subscribe", { action: subscribed ? "unsub" : "sub", sr: sub });
       updateAbout(sub, { subscribed: !subscribed });
-      toast(subscribed ? `Left r/${sub}` : `Joined r/${sub}`);
+      toast(subscribed ? `Left ${site.communityLabel(sub)}` : `Joined ${site.communityLabel(sub)}`);
       void refreshSubscriptions();
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Reddit could not do that.");
+      toast(error instanceof Error ? error.message : `${site.name} could not do that.`);
     } finally {
       setBusy(false);
     }
   }, [busy, subscribed, sub]);
   return {
-    // Unknown until Reddit reports it for a signed-in viewer.
-    available: Boolean(account) && about?.subscribed !== undefined,
+    // Unknown until the site reports it for a signed-in viewer.
+    available: site.features.writes && Boolean(account) && about?.subscribed !== undefined,
     subscribed,
     busy,
     toggle,
@@ -59,7 +58,7 @@ export const SubscribeButton = ({ sub }: { sub: string }) => {
       className={`header-action${state.subscribed ? " is-on" : ""}`}
       data-ripple
       aria-pressed={state.subscribed}
-      aria-label={state.subscribed ? `Unsubscribe from r/${sub}` : `Subscribe to r/${sub}`}
+      aria-label={state.subscribed ? `Unsubscribe from ${site.communityLabel(sub)}` : `Subscribe to ${site.communityLabel(sub)}`}
       title={state.subscribed ? "Subscribed" : "Subscribe"}
       disabled={state.busy}
       onClick={() => void state.toggle()}
@@ -77,7 +76,7 @@ export const CommunityMenu = ({ sub, onClosed }: { sub: string; onClosed: () => 
     // Open after this sheet has started closing so the new one replaces it.
     window.setTimeout(() => nav.openSheet(render), 0);
   return (
-    <Sheet title={`r/${sub}`} onClosed={onClosed}>
+    <Sheet title={site.communityLabel(sub)} onClosed={onClosed}>
       {(close) => {
         const run = (fn: () => void) => () => {
           close();
@@ -90,22 +89,26 @@ export const CommunityMenu = ({ sub, onClosed }: { sub: string; onClosed: () => 
               label="View Sidebar"
               onClick={run(() => open((done) => <SidebarPanel sub={sub} onClosed={done} />))}
             />
-            <SheetItem
-              icon="globe"
-              label="View Wiki"
-              onClick={run(() => open((done) => <WikiSheet sub={sub} onClosed={done} />))}
-            />
-            <SheetItem
-              icon="book"
-              label="View Rules"
-              onClick={run(() => open((done) => <RulesSheet sub={sub} onClosed={done} />))}
-            />
+            {site.features.wiki ? (
+              <>
+                <SheetItem
+                  icon="globe"
+                  label="View Wiki"
+                  onClick={run(() => open((done) => <WikiSheet sub={sub} onClosed={done} />))}
+                />
+                <SheetItem
+                  icon="book"
+                  label="View Rules"
+                  onClick={run(() => open((done) => <RulesSheet sub={sub} onClosed={done} />))}
+                />
+              </>
+            ) : null}
             <SheetItem
               icon="modShield"
               label="View Mods"
               onClick={run(() => open((done) => <ModeratorsSheet sub={sub} onClosed={done} />))}
             />
-            {account ? (
+            {account && site.features.writes ? (
               <>
                 <SheetItem
                   icon="mail"
@@ -128,7 +131,7 @@ export const CommunityMenu = ({ sub, onClosed }: { sub: string; onClosed: () => 
               icon="share"
               label="Share"
               onClick={run(
-                () => void copyText(`https://www.reddit.com/r/${sub}/`, "Link copied"),
+                () => void copyText(site.communityUrl(sub), "Link copied"),
               )}
             />
           </>
@@ -162,7 +165,7 @@ export const SidebarPanel = ({ sub, onClosed }: { sub: string; onClosed: () => v
   return (
     <div className={`layer has-drawer${closing ? " is-closing" : ""}`}>
       <div className="scrim" onClick={close} />
-      <aside className="drawer is-right sidebar-panel" role="dialog" aria-label={`r/${sub} sidebar`}>
+      <aside className="drawer is-right sidebar-panel" role="dialog" aria-label={`${site.communityLabel(sub)} sidebar`}>
         <div className="sidebar-title">
           <span>Sidebar Info</span>
           <button type="button" className="icon-btn" aria-label="Close sidebar" onClick={close}>
@@ -173,8 +176,8 @@ export const SidebarPanel = ({ sub, onClosed }: { sub: string; onClosed: () => v
           <div className="sidebar-community">
             <Avatar name={sub} size="large" src={about?.icon} />
             <div className="meta">
-              <div className="title">{about?.title || `r/${sub}`}</div>
-              <div className="subtitle">r/{sub}</div>
+              <div className="title">{about?.title || site.communityLabel(sub)}</div>
+              <div className="subtitle">{site.communityLabel(sub)}</div>
               <div className="numbers">
                 {about?.subscribers !== undefined ? (
                   <span>
@@ -237,7 +240,7 @@ const Loaded = <T,>({
 };
 
 export const WikiSheet = ({ sub, onClosed }: { sub: string; onClosed: () => void }) => (
-  <Sheet title={`r/${sub} wiki`} className="is-tall" onClosed={onClosed}>
+  <Sheet title={`${site.communityLabel(sub)} wiki`} className="is-tall" onClosed={onClosed}>
     {() => (
       <div className="about-body sheet-scroll">
         <Loaded load={() => fetchWiki(sub)}>
@@ -262,7 +265,7 @@ export const ModeratorsSheet = ({ sub, onClosed }: { sub: string; onClosed: () =
     return years >= 1 ? `${years} ${years === 1 ? "year" : "years"}` : "Under a year";
   };
   return (
-    <Sheet title={`r/${sub} moderators`} onClosed={onClosed}>
+    <Sheet title={`${site.communityLabel(sub)} moderators`} onClosed={onClosed}>
       {(close) => (
         <Loaded load={() => fetchModerators(sub)}>
           {(mods: Moderator[]) =>

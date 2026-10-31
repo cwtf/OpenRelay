@@ -2,11 +2,12 @@ import { useSyncExternalStore } from "react";
 import type { Community } from "../../shared/api";
 import { fetchSubscriptions } from "./api";
 import { readJson, writeJson } from "./storage";
+import { siteKey } from "./site";
 
 /** Reuse saved subscriptions for this long before quietly re-syncing. */
 const MAX_AGE = 30 * 60 * 1000;
-const KEY = "subscriptions";
-const FAVOURITES = "favourite-subs";
+const KEY = siteKey("subscriptions");
+const FAVOURITES = siteKey("favourite-subs");
 
 type Saved = { at: number; items: Community[]; signedOut?: boolean };
 

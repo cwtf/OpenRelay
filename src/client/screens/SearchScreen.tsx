@@ -4,13 +4,16 @@ import { useNav } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { Icon } from "../components/Icon";
 import { PostCard } from "../components/PostCard";
-import { fetchSearch, entryRoute } from "../lib/api";
+import { fetchSearch, entryRoute, site } from "../lib/api";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { sortLabel } from "../lib/format";
 import { openUrl } from "../lib/platform";
 import { pageUrl } from "../../extension/bridge";
 import { searchPagePath } from "../../providers/reddit/search";
 import { readJson, writeJson } from "../lib/storage";
+import { siteKey } from "../lib/site";
+
+const HISTORY = siteKey("search-history");
 
 const SORTS: SearchSort[] = ["relevance", "new", "top", "comments"];
 
@@ -32,7 +35,7 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
   );
   const [error, setError] = useState("");
   const [history, setHistory] = useState<string[]>(() =>
-    readJson<string[]>("search-history", []),
+    readJson<string[]>(HISTORY, []),
   );
   const request = useRef(0);
   const input = useRef<HTMLInputElement>(null);
@@ -73,13 +76,13 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
       ...history.filter((entry) => entry !== trimmed),
     ].slice(0, 8);
     setHistory(next);
-    writeJson("search-history", next);
+    writeJson(HISTORY, next);
   };
 
   const forget = (entry: string) => {
     const next = history.filter((item) => item !== entry);
     setHistory(next);
-    writeJson("search-history", next);
+    writeJson(HISTORY, next);
   };
 
   const more = () => {
@@ -128,9 +131,9 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
             className="appbar-search"
             type="search"
             enterKeyHint="search"
-            placeholder={`Search r/${sub}`}
+            placeholder={`Search ${site.communityLabel(sub)}`}
             value={draft}
-            aria-label={`Search r/${sub}`}
+            aria-label={`Search ${site.communityLabel(sub)}`}
             onChange={(event) => setDraft(event.target.value)}
           />
         </form>
@@ -211,7 +214,7 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
               <div className="glyph">
                 <Icon name="search" size={30} />
               </div>
-              <strong>Search r/{sub}</strong>
+              <strong>Search {site.communityLabel(sub)}</strong>
               <span>Find posts by title and text.</span>
             </div>
           )}
@@ -248,7 +251,7 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
             <div className="feed-state">
               <strong>No results</strong>
               <span>
-                Nothing in r/{sub} matched “{query}”.
+                Nothing in {site.communityLabel(sub)} matched “{query}”.
               </span>
             </div>
           ) : null}

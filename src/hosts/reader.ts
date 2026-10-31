@@ -2,6 +2,7 @@ import { MEDIA_HOSTS, MEDIA_MAX_BYTES } from "./types.ts";
 import type {
   Downloads,
   HostStorage,
+  InstanceAccess,
   MediaFetcher,
   OfflineStore,
   ReaderHost,
@@ -34,10 +35,25 @@ type ChromeApi = {
   };
   permissions?: {
     request(permissions: { permissions?: string[]; origins?: string[] }): Promise<boolean>;
+    remove(permissions: { origins?: string[] }): Promise<boolean>;
+    contains(permissions: { origins?: string[] }): Promise<boolean>;
+  };
+  scripting?: {
+    getRegisteredContentScripts(filter: { ids: string[] }): Promise<{ id: string }[]>;
+    registerContentScripts(scripts: ContentScript[]): Promise<void>;
+    updateContentScripts(scripts: ContentScript[]): Promise<void>;
+    unregisterContentScripts(filter: { ids: string[] }): Promise<void>;
   };
   downloads?: {
     download(options: { url: string; filename?: string }): Promise<number>;
   };
+};
+
+type ContentScript = {
+  id: string;
+  matches: string[];
+  js: string[];
+  runAt: "document_idle";
 };
 
 const chromeApi = (): ChromeApi | null => {
@@ -147,13 +163,53 @@ async function extensionDownloads(
   };
 }
 
+const INSTANCES_SCRIPT = "openrelay-lemmy";
+const origin = (host: string) => `https://${host}/*`;
+
+/**
+ * Lemmy instances through the manifest's optional host permission for any
+ * https site, asked for one instance at a time, and a content script
+ * registered on the instances granted.
+ */
+function extensionInstances(api: ChromeApi | null): InstanceAccess | undefined {
+  const permissions = api?.permissions;
+  const scripting = api?.scripting;
+  if (!permissions || !scripting) return undefined;
+  return {
+    allow: async (host) =>
+      (await permissions.request({ origins: [origin(host)] })) ? "granted" : "declined",
+    forget: async (host) => {
+      await permissions.remove({ origins: [origin(host)] }).catch(() => false);
+    },
+    async sync(hosts) {
+      const granted: string[] = [];
+      for (const host of hosts)
+        if (await permissions.contains({ origins: [origin(host)] })) granted.push(origin(host));
+      const registered = await scripting.getRegisteredContentScripts({ ids: [INSTANCES_SCRIPT] });
+      const script: ContentScript = {
+        id: INSTANCES_SCRIPT,
+        matches: granted,
+        js: ["content.js"],
+        runAt: "document_idle",
+      };
+      if (!granted.length) {
+        if (registered.length)
+          await scripting.unregisterContentScripts({ ids: [INSTANCES_SCRIPT] });
+      } else if (registered.length) await scripting.updateContentScripts([script]);
+      else await scripting.registerContentScripts([script]);
+    },
+  };
+}
+
 function extensionHost(): ReaderHost {
   const api = chromeApi();
+  const instances = extensionInstances(api);
   return {
     name: "extension",
     storage: extensionStorage(api),
     offline: extensionOffline(api),
     media: () => extensionMedia(api),
     downloads: () => extensionDownloads(api),
+    ...(instances ? { instances } : {}),
   };
 }
