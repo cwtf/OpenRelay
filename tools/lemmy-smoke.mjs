@@ -97,8 +97,19 @@ const lemmyWrites = [];
 await context.route(/^https:\/\/lemmy\.world\//, (route) => {
   const url = new URL(route.request().url());
   if (route.request().method() !== "GET") {
-    lemmyWrites.push(url.pathname);
-    return route.fulfill({ status: 400, contentType: "application/json", body: '{"error":"no"}' });
+    const body = JSON.parse(route.request().postData() || "{}");
+    lemmyWrites.push({
+      method: route.request().method(),
+      path: url.pathname,
+      body,
+      auth: route.request().headers().authorization ?? null,
+    });
+    const reply = url.pathname === "/api/v3/comment"
+      ? { comment_view: { ...commentView(300, `0.${body.parent_id}.300`, body.content, 0), creator: creator(1, "lemmy_user"), my_vote: 1 } }
+      : url.pathname === "/api/v3/post/like"
+        ? { post_view: { ...textPost, my_vote: body.score } }
+        : {};
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify(reply) });
   }
   if (!url.pathname.startsWith("/api/")) {
     if (url.pathname.startsWith("/pictrs/"))
@@ -147,6 +158,10 @@ await context.route("https://evil.example/**", (route) =>
   route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Evil</title>" }),
 );
 
+// lemmy-ui's sign-in, as a signed-in viewer has it.
+await context.addCookies([
+  { name: "jwt", value: "aaa.bbb.ccc", domain: "lemmy.world", path: "/", secure: true },
+]);
 const page = await context.newPage();
 page.on("pageerror", (err) => errors.push(err.message));
 async function reader() {
@@ -214,7 +229,7 @@ try {
     await app
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
-    ["lemmy.world", "Profile", "User", "Save feed for offline", "Saved for offline", "Settings"],
+    ["lemmy.world", "Profile", "New Post", "User", "Save feed for offline", "Saved for offline", "Settings"],
   );
   await page.screenshot({ path: resolve(out, "lemmy-drawer.png") });
   await app.locator("body").press("Escape");
@@ -231,6 +246,20 @@ try {
   await page.waitForTimeout(400); // Let the reply finish animating in.
   assert.ok(lemmyReads.some((r) => r.startsWith("/api/v3/comment/list?parent_id=203")));
   await page.screenshot({ path: resolve(out, "lemmy-post.png") });
+
+  // Writes go to Lemmy's API with lemmy-ui's sign-in token.
+  await app.getByRole("button", { name: "Upvote this post" }).first().click();
+  await app.getByRole("button", { name: "Undo upvote this post" }).first().waitFor();
+  await app.getByRole("button", { name: "Reply to post" }).click();
+  await app.getByRole("textbox", { name: "Reply" }).fill("Try Debian.");
+  await app.getByRole("button", { name: "Send" }).click();
+  await app.locator(".toast", { hasText: "Reply sent" }).waitFor();
+  await app.getByText("Try Debian.").first().waitFor();
+  assert.deepEqual(lemmyWrites, [
+    { method: "POST", path: "/api/v3/post/like", body: { post_id: 101, score: 1 }, auth: "Bearer aaa.bbb.ccc" },
+    { method: "POST", path: "/api/v3/comment", body: { post_id: 101, content: "Try Debian." }, auth: "Bearer aaa.bbb.ccc" },
+  ]);
+  lemmyWrites.length = 0;
 
   // A bot check in front of lemmy-ui is left alone.
   await page.goto("https://lemmy.world/?challenge");
@@ -281,7 +310,7 @@ try {
   assert.deepEqual(lemmyWrites, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, drawer limited to what Lemmy supports, switch back to Reddit, reader refused on a site not added, removal unregisters; no writes, no page errors.",
+    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, switch back to Reddit, reader refused on a site not added, removal unregisters; no other writes, no page errors.",
   );
 } finally {
   await context.close();

@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CommentNode } from "../../shared/api";
 import { useAccount } from "../lib/account";
-import { runAction } from "../lib/api";
+import { runAction, site } from "../lib/api";
 import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
@@ -114,7 +114,7 @@ export const ReplySheet = ({
       })
       .catch((error: unknown) => {
         // The draft stays, so nothing typed is lost.
-        toast(error instanceof Error ? error.message : "Reddit could not post the reply.");
+        toast(error instanceof Error ? error.message : `${site.name} could not post the reply.`);
         setSending(false);
       });
   };
@@ -125,7 +125,7 @@ export const ReplySheet = ({
         !account ? (
           <div className="composer">
             <p style={{ margin: 0, color: "var(--text-2)" }}>
-              Sign in to Reddit in this browser to reply.
+              Sign in to {site.name} in this browser to reply.
             </p>
             <div className="row-actions">
               <span className="grow" />

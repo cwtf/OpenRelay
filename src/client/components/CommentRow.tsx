@@ -9,6 +9,7 @@ import { VoteLinks, useVoteToggle } from './VoteLinks';
 import { SwipeActions, type SwipeAction } from './SwipeActions';
 import { useNav } from '../app/nav';
 import { useAccount } from '../lib/account';
+import { site } from '../lib/api';
 
 const MAX_VISUAL_DEPTH = 10;
 
@@ -85,7 +86,7 @@ export const CommentRow = memo(
       ...(swipe && node.parentId.startsWith('t1_')
         ? [{ icon: 'comment', label: 'Parent', title: 'Go to parent comment', onClick: () => swipe.parent(node) } satisfies SwipeAction]
         : []),
-      ...(live && account?.isMod && swipe ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => swipe.moderate(node) } satisfies SwipeAction] : []),
+      ...(live && account?.isMod && site.features.moderation && swipe ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => swipe.moderate(node) } satisfies SwipeAction] : []),
       { icon: 'more', label: 'More', title: 'More actions', onClick: () => onActions(node) },
     ];
     const press = useLongPress(() => onActions(node));

@@ -58,7 +58,6 @@ import { useListing } from "../lib/useListing";
 import { Avatar } from "./FeedScreen";
 
 const USER_RE = /^[\w-]{3,20}$/;
-const SUB_RE = /^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/;
 
 /** Run a write and report failures; resolves to false when it failed. */
 const attempt = async (work: () => Promise<unknown>, done?: string) => {
@@ -801,10 +800,10 @@ export const SubmitScreen = ({
     resubmit: false,
   });
   const [sending, setSending] = useState(false);
-  const community = sr.trim().replace(/^\/?r\//i, "");
+  const community = sr.trim().replace(/^\/?[rc]\/|^!/i, "");
   const validUrl = /^https?:\/\/\S+\.\S+/i.test(url.trim());
   const ready =
-    SUB_RE.test(community) && title.trim().length > 0 && (kind === "self" || validUrl);
+    site.validCommunityName(community) && title.trim().length > 0 && (kind === "self" || validUrl);
 
   const showRules = () =>
     nav.openSheet((onClosed) => <RulesSheet sub={community} onClosed={onClosed} />);
@@ -851,11 +850,11 @@ export const SubmitScreen = ({
             ))}
           </div>
           <div className="field-row">
-            <Field icon="subreddit" label="Subreddit" prefix="r/" value={sr} onChange={setSr} />
+            <Field icon="subreddit" label="Subreddit" prefix={site.communityLabel("")} value={sr} onChange={setSr} />
             <button
               type="button"
               className="btn is-tonal"
-              disabled={!SUB_RE.test(community)}
+              disabled={!site.validCommunityName(community)}
               onClick={showRules}
             >
               <Icon name="book" />

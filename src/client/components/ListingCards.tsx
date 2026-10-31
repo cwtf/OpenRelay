@@ -160,7 +160,7 @@ export const CommentCard = ({
           } satisfies SwipeAction,
         ]
       : []),
-    ...(account?.isMod
+    ...(account?.isMod && site.features.moderation
       ? [
           {
             icon: "modShield",

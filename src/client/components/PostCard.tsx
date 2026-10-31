@@ -240,7 +240,7 @@ export const PostCard = memo(
       { icon: saved ? 'starFilled' : 'star', label: saved ? 'Saved' : 'Save', tone: 'saved', active: saved, onClick: () => toggleSaved(post.id, saved) },
       { icon: 'share', label: 'Share', onClick: () => void sharePost(post.id, post.permalink) },
       { icon: 'comment', label: 'Cmts', title: 'Open comments', onClick: () => nav.openPost(post) },
-      ...(account?.isMod
+      ...(account?.isMod && site.features.moderation
         ? [{ icon: 'modShield', label: 'Mod', title: 'Moderate', onClick: () => nav.openSheet((onClosed) => <ModActionsSheet id={post.id} onClosed={onClosed} />) } satisfies SwipeAction]
         : []),
       { icon: 'more', label: 'More', title: 'More actions', onClick: more },

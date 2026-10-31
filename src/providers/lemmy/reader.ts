@@ -30,8 +30,8 @@ import {
 
 /**
  * Lemmy's half of the reader's data layer: Lemmy's v3 API (0.19) through
- * the page bridge, on the instance the reader was opened from. Read-only:
- * writes, the inbox and moderation aren't supported yet.
+ * the page bridge, on the instance the reader was opened from. The inbox
+ * and moderation aren't supported yet.
  */
 const origin = pageUrl.origin;
 const entryRoute = parseRoute(pageUrl.href)!;
@@ -275,7 +275,7 @@ async function searchCommunities(text: string): Promise<Community[]> {
 export const lemmyReader: ReaderProvider = {
   name: "Lemmy",
   features: {
-    writes: false,
+    writes: true,
     inbox: false,
     friends: false,
     moderation: false,
@@ -315,8 +315,5 @@ export const lemmyReader: ReaderProvider = {
   fetchModerators: async (sub) =>
     normalizeModerators(await json("/api/v3/community" + query({ name: sub }))),
   fetchWiki: async () => "",
-  runAction: () =>
-    Promise.reject(
-      new ApiFailure("OpenRelay can only read Lemmy for now. Use Original Lemmy to vote, reply or post."),
-    ),
+  runAction: (op, args = {}) => bridge("action", undefined, { op, args }),
 };

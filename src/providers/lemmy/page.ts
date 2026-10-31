@@ -1,32 +1,14 @@
 import type { PageProvider, PageRequest } from "../types";
 import { allowedApiPath, normalizeAccount, parseRoute } from "./lemmy";
+import { call, lemmyAction, lemmyVote, sessionToken } from "./writes";
 
 /**
  * Lemmy's half of the page bridge, in the content script on the instance's
  * origin. lemmy-ui and Lemmy's API share that origin, so requests are
- * same-origin and carry lemmy-ui's sign-in cookie; the reader never sees it.
- * Read-only for now: votes and other writes are refused.
+ * same-origin and carry lemmy-ui's sign-in; the reader never sees it.
  */
-async function get(path: string): Promise<any> {
-  const response = await fetch(new URL(path, location.origin), {
-    credentials: "same-origin",
-    signal: AbortSignal.timeout(18000),
-    headers: { Accept: "application/json" },
-  });
-  if (response.status === 429)
-    throw new Error("This instance is rate limiting requests. Please wait and try again.");
-  if (!response.headers.get("content-type")?.includes("json"))
-    throw new Error(
-      `This instance did not answer with Lemmy's API (${response.status}). Use Original Lemmy to continue.`,
-    );
-  const data = await response.json();
-  if (!response.ok)
-    // Lemmy explains refusals as `{ "error": "couldnt_find_post" }`.
-    throw new Error(
-      `Lemmy could not load this content (${String(data?.error ?? response.status).replaceAll("_", " ")}).`,
-    );
-  return data;
-}
+const token = () => sessionToken(document.cookie);
+const get = (path: string) => call(fetch, location.origin, token(), "GET", path);
 
 async function handle(
   { action, path, payload }: PageRequest,
@@ -46,9 +28,22 @@ async function handle(
       throw new Error("Invalid vote status request");
     return {};
   }
-  if (action === "vote" || action === "action") {
+  if (action === "vote") {
     if (!active) throw new Error("OpenRelay is not active");
-    throw new Error("OpenRelay can only read Lemmy for now. Use Original Lemmy to vote, reply or post.");
+    const current = payload?.current;
+    if (current !== 1 && current !== 0 && current !== -1)
+      throw new Error("Invalid vote request");
+    return lemmyVote(
+      fetch,
+      location.origin,
+      token(),
+      payload?.thingId,
+      current === payload?.direction ? 0 : payload?.direction,
+    );
+  }
+  if (action === "action") {
+    if (!active) throw new Error("OpenRelay is not active");
+    return lemmyAction(fetch, location.origin, token(), payload?.op, payload?.args);
   }
   throw new Error("Unsupported request");
 }
