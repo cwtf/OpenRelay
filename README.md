@@ -99,26 +99,38 @@ cd apps/android
 
 The debug APK is **apps/android/app/build/outputs/apk/debug/app-debug.apk**. `npm run build:apps -- apk` builds the signed release APK into **releases/android/** instead. It needs **apps/android/keystore.properties** (copy **keystore.properties.example**; neither it nor the `.jks` keystore goes in git), or add `-- --debug` for a debug APK.
 
+## Offline reading
+
+Posts can be saved to read later without a connection. Choose **Save for offline** in a post's menu (⋮, or a long press on its card), or **Save feed for offline** in the main menu to save the first 25 posts of the feed you're looking at. Each post is saved with its first 200 comments, one post a second to stay within Reddit's rate limit. **Saved for offline** in the main menu lists them. A saved post's menu can update or remove its copy, and the list's trash button removes them all.
+
+Without a connection, OpenRelay opens the saved list on its own:
+
+- **Extension:** click the toolbar icon on a tab where Reddit didn't load, or on any other site. The list opens in a new tab.
+- **Desktop app:** when Reddit doesn't load, the window shows the list. **View → Saved for Offline** opens it at any time.
+- **Android app:** when Reddit doesn't load, the app shows the list. **Try Reddit** reloads Reddit.
+
+The list's globe button opens Reddit again. When Reddit is reachable but refuses a post you saved, the post screen shows the saved copy. This version saves text only: images, videos, "more comments" and voting or replying need Reddit.
+
 ## Data and permissions
 
 ### Browser extension
 
 A Manifest V3 content script runs only on www.reddit.com, reddit.com and old.reddit.com. It embeds the bundled reader in an extension-origin iframe, keeping the reader's styles separate from Reddit's. The page bridge accepts messages only from that reader frame and permits only a narrow list of read-only JSON routes, read-only vote-state queries, and a validated vote for a specific post/comment ID and direction (a forwarded click, or `/api/vote` when no control is on the page). Page-origin messages cannot invoke these operations.
 
-No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The only permission is `storage`. The media viewer's download button asks for the optional `downloads` permission the first time you use it, because Reddit's image hosts don't let the reader fetch images itself. Declining it leaves the button unused; right-click → **Save image as…** still works for images without it. Reddit keeps a video's sound in a separate file, so a video download fetches both from v.redd.it and joins them into one MP4 in the reader, without re-encoding. Requests use the Reddit tab's normal same-origin session; the subscription list, profiles, inbox, moderation queues, friends and community rules come from Reddit's read-only JSON listings and need you to be signed in to Reddit. The inbox is read with `mark=false`, so opening it does not mark messages read. If Reddit refuses its JSON search, the reader loads Reddit's own search page with the tab's session, keeps only the post IDs, and loads those posts from `/api/info.json`, or from each post's own page if that is refused too. Nothing is sent to any server other than Reddit, with one exception: Reddit often has no copy of a Giphy GIF posted in a comment, so the reader loads that GIF from `i.giphy.com`, which sees your IP address but no referrer or Reddit data. Turn off **Load GIFs from Giphy** in Settings to show those GIFs as links instead. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run.
+No API key, server, extra host permissions, browsing-history permission, or third-party analytics are needed. The permissions are `storage`, and `unlimitedStorage` so that posts saved for offline reading aren't limited to Chrome's 10 MB (Chrome shows no prompt for it; Firefox lists it when installing). The media viewer's download button asks for the optional `downloads` permission the first time you use it, because Reddit's image hosts don't let the reader fetch images itself. Declining it leaves the button unused; right-click → **Save image as…** still works for images without it. Reddit keeps a video's sound in a separate file, so a video download fetches both from v.redd.it and joins them into one MP4 in the reader, without re-encoding. Requests use the Reddit tab's normal same-origin session; the subscription list, profiles, inbox, moderation queues, friends and community rules come from Reddit's read-only JSON listings and need you to be signed in to Reddit. The inbox is read with `mark=false`, so opening it does not mark messages read. If Reddit refuses its JSON search, the reader loads Reddit's own search page with the tab's session, keeps only the post IDs, and loads those posts from `/api/info.json`, or from each post's own page if that is refused too. Nothing is sent to any server other than Reddit, with one exception: Reddit often has no copy of a Giphy GIF posted in a comment, so the reader loads that GIF from `i.giphy.com`, which sees your IP address but no referrer or Reddit data. Turn off **Load GIFs from Giphy** in Settings to show those GIFs as links instead. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `chrome.storage.local`, because Chrome denies `localStorage` to the reader frame when third-party cookies are blocked. Values saved in `localStorage` by earlier versions are imported on first run. Posts saved for offline reading are kept there too, under their own `openrelay-offline:` keys, and only on this device.
 
 Chrome's content-script model is documented at:
 [Content scripts — Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts).
 
 ### Desktop app
 
-The desktop app runs the same reader and content script, with the same bridge, allowlists and Giphy exception, and sends nothing anywhere else: no analytics, no update checks. Reddit's cookies live in the app's own session, separate from your browsers, in the app's user-data folder (`%APPDATA%\OpenRelay` on Windows, `~/Library/Application Support/OpenRelay` on macOS, `~/.config/OpenRelay` on Linux). Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the same folder.
+The desktop app runs the same reader and content script, with the same bridge, allowlists and Giphy exception, and sends nothing anywhere else: no analytics, no update checks. Reddit's cookies live in the app's own session, separate from your browsers, in the app's user-data folder (`%APPDATA%\OpenRelay` on Windows, `~/Library/Application Support/OpenRelay` on macOS, `~/.config/OpenRelay` on Linux). Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the same folder, and posts saved for offline reading in its `offline` folder.
 
 The content script runs in its own isolated JavaScript world in the Reddit window, as an extension's does, so Reddit's scripts can't reach it, and the session modhash stays inside it. The reader is served from the app's own `openrelay://reader` origin. Only that origin gets the app's storage and download channels; the main process checks the sender's origin for each request. Reddit pages get only the content script. Pages in the app may write to the clipboard (the reader's Copy) and go fullscreen (videos); every other permission request is refused. Downloads open a save dialog and go where you choose.
 
 ### Android app
 
-The Android app runs the same reader and content script, with the same bridge, allowlists and Giphy exception, and sends nothing anywhere else. Its only permission is `INTERNET`. Reddit's cookies live in the app's own WebView cookie store, separate from your browsers. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the app's private storage, which is excluded from Android backups.
+The Android app runs the same reader and content script, with the same bridge, allowlists and Giphy exception, and sends nothing anywhere else. Its only permission is `INTERNET`. Reddit's cookies live in the app's own WebView cookie store, separate from your browsers. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the app's private storage, and posts saved for offline reading in its `offline` folder, both excluded from Android backups.
 
 The reader is served from the app's own `https://appassets.androidplatform.net` origin, answered from the APK and never from the network, and its WebView doesn't send Reddit's cookies. The app gives each WebView one message channel: Reddit's channel only to Reddit's top frame, and the reader's only to the reader's origin. Only the reader's channel reaches storage. Android's WebView has no isolated worlds, so unlike the browsers and desktop app, the content script runs in Reddit's own JavaScript world. It starts before Reddit's scripts, takes its channel off the global object and locks its host in place, and the session modhash stays inside the content script. Reddit's scripts already hold your session, so this exposes nothing new to them.
 
@@ -139,7 +151,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 70 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 75 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

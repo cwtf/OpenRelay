@@ -22,6 +22,21 @@ export type HostStorage = {
   ): void;
 };
 
+/**
+ * Posts saved for offline reading. Kept apart from `HostStorage`, which is
+ * read whole at start, and read one entry at a time. Keys match
+ * `OFFLINE_KEY`; values are JSON-compatible. A missing entry reads as
+ * `undefined`.
+ */
+export type OfflineStore = {
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
+  remove(keys: string[]): Promise<void>;
+};
+
+/** Offline keys are safe as file names: `index`, `post:t3_abc123`. */
+export const OFFLINE_KEY = /^[a-z]+(?::[A-Za-z0-9_]{1,40})?$/;
+
 /** A file to save: a remote URL, or bytes the reader built (a video with sound). */
 export type SaveFile =
   | { url: string; filename?: string }
@@ -68,6 +83,8 @@ export type ReaderHost = {
   channel?: HostChannel;
   /** `null` falls back to the frame's `localStorage` when it has one. */
   storage: HostStorage | null;
+  /** Absent or `null` when the host can't keep posts for offline reading. */
+  offline?: OfflineStore | null;
   /**
    * Access to saving files. Call it straight from the click handler, before
    * awaiting anything: Chrome's permission prompt needs the user gesture.

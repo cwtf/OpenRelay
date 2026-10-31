@@ -1,6 +1,12 @@
 import { readerHost } from "../hosts/reader";
 
-const source = new URLSearchParams(location.hash.slice(1)).get("source");
+const params = new URLSearchParams(location.hash.slice(1));
+const source = params.get("source");
+/**
+ * Opened without Reddit (`#offline`), by the host, to read saved posts: there
+ * is no page to ask, so every request fails at once.
+ */
+export const offlineMode = params.has("offline");
 export const pageUrl = new URL(source || "https://www.reddit.com/");
 if (
   !["https:"].includes(pageUrl.protocol) ||
@@ -19,6 +25,7 @@ const pending = new Map<
 // The host's channel when it shows the reader itself, otherwise the parent page.
 const channel = readerHost().channel;
 const toPage = (message: unknown): void => {
+  if (offlineMode) return;
   if (channel) channel.post(message);
   else window.parent.postMessage(message, pageUrl.origin);
 };
@@ -67,6 +74,8 @@ export function bridge<T>(
     args?: Record<string, unknown>;
   },
 ): Promise<T> {
+  if (offlineMode)
+    return Promise.reject(new Error("You're offline. Open Reddit to do this."));
   const id = ++nextId;
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {

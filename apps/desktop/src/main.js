@@ -12,11 +12,13 @@ import {
   shell,
   webContents,
 } from "electron";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const READER_ORIGIN = "openrelay://reader";
+/** The reader without Reddit, showing the posts saved for offline reading. */
+const OFFLINE_URL = READER_ORIGIN + "/reader.html#offline";
 const PARTITION = "persist:openrelay";
 const REDDIT_ORIGINS = new Set([
   "https://www.reddit.com",
@@ -136,6 +138,36 @@ ipcMain.handle("openrelay:storage-remove", async (event, keys) => {
   broadcast(frame, changes);
 });
 
+// Posts saved for offline reading: one JSON file per key, written atomically.
+// Keys get the same check as OFFLINE_KEY in src/hosts/types.ts.
+const OFFLINE_KEY = /^[a-z]+(?::[A-Za-z0-9_]{1,40})?$/;
+const offlinePath = (key) => {
+  if (typeof key !== "string" || !OFFLINE_KEY.test(key)) throw new Error("Invalid key");
+  return join(app.getPath("userData"), "offline", key.replace(":", "-") + ".json");
+};
+ipcMain.handle("openrelay:offline-get", async (event, key) => {
+  readerFrame(event);
+  const path = offlinePath(key);
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
+  }
+});
+ipcMain.handle("openrelay:offline-set", async (event, key, value) => {
+  readerFrame(event);
+  const path = offlinePath(key);
+  await mkdir(join(app.getPath("userData"), "offline"), { recursive: true });
+  await writeFile(path + ".tmp", JSON.stringify(value));
+  await rename(path + ".tmp", path);
+});
+ipcMain.handle("openrelay:offline-remove", async (event, keys) => {
+  readerFrame(event);
+  if (!Array.isArray(keys)) throw new Error("Invalid keys");
+  await Promise.all(keys.map((key) => rm(offlinePath(key), { force: true })));
+});
+
 // Downloads: remote files through Chromium's download manager, bytes the
 // reader built (a video with sound) through a save dialog.
 const downloadNames = new Map();
@@ -214,6 +246,11 @@ function createWindow(url = "https://www.reddit.com/") {
       nodeIntegrationInSubFrames: true,
     },
   });
+  // Reddit didn't load (offline): show the posts saved for offline reading.
+  // ERR_ABORTED is a navigation another one replaced.
+  window.webContents.on("did-fail-load", (_event, code, _text, failed, isMainFrame) => {
+    if (isMainFrame && code !== -3 && isReddit(failed)) void window.loadURL(OFFLINE_URL);
+  });
   void window.loadURL(url);
   return window;
 }
@@ -255,6 +292,13 @@ function setUpMenu() {
             label: "Toggle OpenRelay / Original Reddit",
             accelerator: "CmdOrCtrl+Shift+R",
             click: (_item, window) => toggleReader(window),
+          },
+          {
+            id: "offline-posts",
+            label: "Saved for Offline",
+            click: (_item, window) =>
+              void (window ?? BrowserWindow.getAllWindows()[0] ?? createWindow())
+                .loadURL(OFFLINE_URL),
           },
           { type: "separator" },
           { role: "reload" },

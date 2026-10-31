@@ -26,6 +26,11 @@ if (location.origin === READER_ORIGIN) {
         );
       },
     },
+    offline: {
+      get: (key) => ipcRenderer.invoke("openrelay:offline-get", key),
+      set: (key, value) => ipcRenderer.invoke("openrelay:offline-set", key, value),
+      remove: (keys) => ipcRenderer.invoke("openrelay:offline-remove", keys),
+    },
     downloads: async () => ({
       save: (file) =>
         "url" in file

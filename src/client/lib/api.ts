@@ -19,7 +19,7 @@ import type {
   SearchSort,
   Timeframe,
 } from "../../shared/api";
-import { bridge, pageUrl } from "../../extension/bridge";
+import { bridge, offlineMode, pageUrl } from "../../extension/bridge";
 import {
   safeUrl,
   normalizeCommunity,
@@ -35,6 +35,8 @@ import {
 } from "../../extension/reddit";
 import { searchPagePath, type SearchPage } from "../../extension/search";
 import type { Snapshot } from "../../extension/snapshot";
+import { readOfflineCopy } from "./offlineStore";
+import { fullDate } from "./format";
 
 export class ApiFailure extends Error {
   constructor(
@@ -188,12 +190,46 @@ async function postsById(ids: string[]): Promise<PostSummary[]> {
       if (post) posts.push(post);
   return posts;
 }
-const memo = new Map<string, { at: number; value: Promise<PostResponse> }>();
+/** The copy saved for offline reading, with a notice saying so, or null. */
+async function offlineCopy(id: string): Promise<PostResponse | null> {
+  const copy = await readOfflineCopy(id).catch(() => null);
+  if (!copy) return null;
+  const { savedAt, ...page } = copy;
+  return {
+    ...page,
+    notice: `Saved for offline reading ${fullDate(savedAt)}. Votes, replies and more comments need Reddit.`,
+  };
+}
+/** A post and its comments: from Reddit, else the copy saved for offline reading. */
 export function fetchPost(
   id: string,
   sort: CommentSort,
   limit = 40,
   fresh = false,
+): Promise<PostResponse> {
+  if (offlineMode)
+    return offlineCopy(id).then((page) => {
+      if (!page) throw new ApiFailure("This post wasn't saved for offline reading.");
+      return page;
+    });
+  return redditPost(id, sort, limit, fresh).catch(async (error: unknown) => {
+    const page = await offlineCopy(id);
+    if (page) return page;
+    throw error;
+  });
+}
+/** A post and its comments from Reddit only, as saved for offline reading. */
+export const fetchPostToSave = (
+  id: string,
+  sort: CommentSort,
+  limit: number,
+): Promise<PostResponse> => redditPost(id, sort, limit, true);
+const memo = new Map<string, { at: number; value: Promise<PostResponse> }>();
+function redditPost(
+  id: string,
+  sort: CommentSort,
+  limit: number,
+  fresh: boolean,
 ): Promise<PostResponse> {
   const key = id + ":" + sort + ":" + limit;
   const hit = memo.get(key);

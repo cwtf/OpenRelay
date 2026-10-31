@@ -6,6 +6,9 @@ declare const chrome: {
   action: {
     onClicked: { addListener(fn: (tab: { id?: number }) => void): void };
   };
-  tabs: { sendMessage(id: number, message: unknown): Promise<unknown> };
+  tabs: {
+    sendMessage(id: number, message: unknown): Promise<unknown>;
+    create(options: { url: string }): Promise<unknown>;
+  };
 };
 declare module "*.css";

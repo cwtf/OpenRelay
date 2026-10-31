@@ -501,14 +501,25 @@ try {
   await page.screenshot({ path: resolve(out, "settings.png") });
   await app.locator("body").press("Escape");
   await app.locator(".has-sheet").waitFor({ state: "detached" });
-  // The drawer is Relay's navigation drawer: account destinations and Settings.
+  // The drawer is Relay's navigation drawer: account destinations, offline
+  // reading and Settings.
   await app.getByRole("button", { name: "Open menu" }).click();
   await app.getByText("Signed in as u/fixture_user").waitFor();
   assert.deepEqual(
     await app
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
-    ["Profile", "Inbox", "Moderator", "New Post", "Friends", "User", "Settings"],
+    [
+      "Profile",
+      "Inbox",
+      "Moderator",
+      "New Post",
+      "Friends",
+      "User",
+      "Save feed for offline",
+      "Saved for offline",
+      "Settings",
+    ],
   );
   assert.equal(await app.locator(".drawer .sub-row, .drawer .drawer-search").count(), 0);
   assert.equal(await app.locator(".drawer-count").textContent(), "3");

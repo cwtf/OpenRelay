@@ -51,6 +51,11 @@
       set: (items) => call("storage.set", items).then(() => undefined),
       remove: (keys) => call("storage.remove", keys).then(() => undefined),
     }),
+    offline: Object.freeze({
+      get: (key) => call("offline.get", { key }).then((value) => value ?? undefined),
+      set: (key, value) => call("offline.set", { key, value }).then(() => undefined),
+      remove: (keys) => call("offline.remove", keys).then(() => undefined),
+    }),
     downloads: async () => "unavailable",
     onBack: (listener) => {
       backListener = listener;

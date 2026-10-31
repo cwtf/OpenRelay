@@ -10,7 +10,8 @@
   },
   "description": "Read Reddit pages with OpenRelay’s cards, themes, comment threads and media viewer.",
   "permissions": [
-    "storage"
+    "storage",
+    "unlimitedStorage"
   ],
   "optional_permissions": [
     "downloads"

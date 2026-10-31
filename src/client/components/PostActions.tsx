@@ -9,6 +9,13 @@ import {
 } from "../lib/platform";
 import { currentAccount } from "../lib/account";
 import { hiddenPosts } from "../lib/storage";
+import {
+  offlineAvailable,
+  offlineMode,
+  removeFromOffline,
+  saveOffline,
+} from "../lib/offline";
+import { isSavedOffline } from "../lib/offlineStore";
 import { DeleteSheet } from "./Relay";
 import { Sheet, SheetItem } from "./Sheet";
 
@@ -29,6 +36,7 @@ export const openPostActions = (
         };
         const external =
           post.media.kind === "link" || post.media.kind === "embed";
+        const savedOffline = isSavedOffline(post.id);
         return (
           <>
             <SheetItem
@@ -69,6 +77,21 @@ export const openPostActions = (
               label="View on Reddit"
               onClick={run(() => openUrl(redditUrl(post.permalink)))}
             />
+            {offlineAvailable() && !offlineMode ? (
+              <SheetItem
+                icon="download"
+                label={savedOffline ? "Update offline copy" : "Save for offline"}
+                hint="Post and comments"
+                onClick={run(() => void saveOffline([post.id]))}
+              />
+            ) : null}
+            {savedOffline ? (
+              <SheetItem
+                icon="trash"
+                label="Remove offline copy"
+                onClick={run(() => void removeFromOffline([post.id]))}
+              />
+            ) : null}
             {post.subreddit.toLowerCase() !== nav.current.toLowerCase() ? (
               <SheetItem
                 icon="people"

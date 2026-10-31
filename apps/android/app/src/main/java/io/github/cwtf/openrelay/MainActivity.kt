@@ -16,6 +16,7 @@ import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -40,6 +41,8 @@ private const val TAG = "OpenRelay"
 private const val READER_HOST = "appassets.androidplatform.net"
 private const val READER_ORIGIN = "https://$READER_HOST"
 private const val READER_URL = "$READER_ORIGIN/assets/openrelay/reader.html"
+/** The reader without Reddit, showing the posts saved for offline reading. */
+private const val OFFLINE_URL = "$READER_URL#offline"
 private val REDDIT_ORIGINS =
     setOf("https://www.reddit.com", "https://old.reddit.com", "https://reddit.com")
 
@@ -58,15 +61,20 @@ class MainActivity : ComponentActivity() {
     private lateinit var readerView: WebView
     private lateinit var toggleButton: Button
     private lateinit var storage: JsonFileStorage
+    private lateinit var offline: OfflineFiles
     private var pageProxy: JavaScriptReplyProxy? = null
     private var readerProxy: JavaScriptReplyProxy? = null
     private var readerShown = false
+    /** The reader is showing saved posts because Reddit didn't load. */
+    private var offlineShown = false
+    private var redditFailed = false
     private var readerInset = 0
     private var pendingBack: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         storage = JsonFileStorage(File(filesDir, "openrelay-storage.json"))
+        offline = OfflineFiles(File(filesDir, "offline"))
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         WebView.setWebContentsDebuggingEnabled(debuggable)
         CookieManager.getInstance().setAcceptCookie(true)
@@ -88,7 +96,12 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(13), dp(8), dp(13), dp(8))
             elevation = dp(2).toFloat()
             setOnClickListener {
-                sendToPage(JSONObject().put("kind", if (readerShown) "exit" else "toggle"))
+                if (offlineShown) {
+                    closeReader()
+                    redditView.reload()
+                } else {
+                    sendToPage(JSONObject().put("kind", if (readerShown) "exit" else "toggle"))
+                }
             }
         }
         val root = FrameLayout(this).apply {
@@ -212,6 +225,10 @@ class MainActivity : ComponentActivity() {
         "storage.getAll" -> storage.getAll()
         "storage.set" -> storage.set(args as JSONObject).let { JSONObject.NULL }
         "storage.remove" -> storage.remove(args as JSONArray).let { JSONObject.NULL }
+        "offline.get" -> offline.get((args as JSONObject).getString("key"))
+        "offline.set" -> (args as JSONObject).let { offline.set(it.getString("key"), it.get("value")) }
+            .let { JSONObject.NULL }
+        "offline.remove" -> offline.remove(args as JSONArray).let { JSONObject.NULL }
         else -> throw IllegalArgumentException("Unsupported method")
     }
 
@@ -228,13 +245,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeReader() {
+        offlineShown = false
         showReader(false)
         readerProxy = null
         readerView.loadUrl("about:blank")
     }
 
+    /** Reddit didn't load: show the posts saved for offline reading. */
+    private fun openOffline() {
+        readerProxy = null
+        readerView.loadUrl(OFFLINE_URL)
+        offlineShown = true
+        showReader(true)
+    }
+
     private fun updateToggle() {
-        toggleButton.text = if (readerShown) "Original Reddit" else "OpenRelay"
+        toggleButton.text = when {
+            offlineShown -> "Try Reddit"
+            readerShown -> "Original Reddit"
+            else -> "OpenRelay"
+        }
         (toggleButton.layoutParams as? FrameLayout.LayoutParams)?.let {
             it.leftMargin = dp(12)
             it.bottomMargin = dp(12 + if (readerShown) readerInset else 0)
@@ -255,7 +285,17 @@ class MainActivity : ComponentActivity() {
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 // A new document: its content script mounts the reader again if it should.
                 // (pageProxy stays: the new document's first message can arrive before this.)
+                redditFailed = false
                 closeReader()
+            }
+
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (request.isForMainFrame) redditFailed = true
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                // After the error page, so it can't close the reader again.
+                if (redditFailed) openOffline()
             }
         }
         WebViewCompat.addWebMessageListener(
@@ -350,6 +390,41 @@ class MainActivity : ComponentActivity() {
 
         /** How long a back press waits for the reader before going back itself. */
         const val BACK_TIMEOUT_MS = 500L
+    }
+}
+
+/**
+ * Posts saved for offline reading: one JSON file per key in app-private
+ * storage. Keys get the same check as OFFLINE_KEY in src/hosts/types.ts.
+ */
+class OfflineFiles(private val dir: File) {
+    private val keyPattern = Regex("^[a-z]+(?::[A-Za-z0-9_]{1,40})?$")
+
+    private fun file(key: String): File {
+        require(keyPattern.matches(key)) { "Invalid key" }
+        return File(dir, key.replace(":", "-") + ".json")
+    }
+
+    @Synchronized
+    fun get(key: String): Any {
+        val file = file(key)
+        if (!file.exists()) return JSONObject.NULL
+        return JSONObject(file.readText()).get("value")
+    }
+
+    @Synchronized
+    fun set(key: String, value: Any) {
+        val file = file(key)
+        dir.mkdirs()
+        val temp = File(file.path + ".tmp")
+        // Wrapped, so any JSON value (a string too) reads back as it was.
+        temp.writeText(JSONObject().put("value", value).toString())
+        temp.renameTo(file)
+    }
+
+    @Synchronized
+    fun remove(keys: JSONArray) {
+        for (i in 0 until keys.length()) file(keys.getString(i)).delete()
     }
 }
 

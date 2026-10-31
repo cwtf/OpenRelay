@@ -25,7 +25,7 @@ node --experimental-strip-types --test src/client/lib/panes.test.ts
 node --experimental-strip-types --test --test-name-pattern="modhash" src/extension/writes.test.ts
 ```
 
-Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
+Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
 
 The desktop app has its own `package.json` (Electron and Playwright) in `apps/desktop/`:
 
@@ -57,7 +57,7 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 
 ### Host adapter
 
-Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
+Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, the offline store, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
 
 ### Desktop app (`apps/desktop/`)
 
@@ -78,7 +78,7 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 - `action`: a write, which must be an entry in the `ACTIONS` table in `src/extension/writes.ts`, with validated params. **New writes go there.**
 - `me`: account name and avatar only.
 
-The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` permission, no third-party hosts, and the inbox read with `mark=false`. Keep changes consistent with it.
+The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions, no third-party hosts, and the inbox read with `mark=false`. Keep changes consistent with it.
 
 ### Data flow
 
@@ -90,11 +90,11 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 
 - `app/App.tsx` is the shell: screen stack, drawer, sheets, media viewer, and Relay's dual-pane layout (listing left, post right). Screens navigate through `useNav()` (`NavContext` in `app/nav.ts`) and learn which pane they're in from `usePane()`. Dual-pane rules are in `lib/panes.ts`.
 - Preferences are in `app/prefs.tsx` and are applied to `document` before first render (`reader.tsx`).
-- Persistence: always use `lib/storage.ts` (`readJson`/`writeJson`/`RecentSet`), never `localStorage`. It is a synchronous in-memory cache over the host's storage (`chrome.storage.local` in the extension), loaded by `initStorage()` before the app renders. Chrome denies `localStorage` to the extension frame when third-party cookies are blocked, which the browser tests exercise.
+- Persistence: always use `lib/storage.ts` (`readJson`/`writeJson`/`RecentSet`), never `localStorage`. It is a synchronous in-memory cache over the host's storage (`chrome.storage.local` in the extension), loaded by `initStorage()` before the app renders. Posts saved for offline reading don't go there: `lib/offlineStore.ts` keeps them in the host's `OfflineStore`, read one entry at a time (`openrelay-offline:` keys in `chrome.storage.local`, an `offline/` folder of JSON files in the wrapper apps). `reader.html#offline` is the reader opened without Reddit: `bridge()` fails at once, `fetchPost` reads saved copies, and `OfflineScreen` replaces the feed. Chrome denies `localStorage` to the extension frame when third-party cookies are blocked, which the browser tests exercise.
 - Styling: `styles/theme.css` holds the design tokens/themes, `reader.css` the components, and `markdown.css` the custom Reddit Markdown renderer (`lib/markdownParser.ts` + `lib/markdown.tsx`).
 
 ## Repo notes
 
 - `dist/`, `dist-firefox/`, `*.xpi`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`, `apps/android/keystore.properties` or the `.jks` keystore.
 - `releases/` holds the official packages that `build:apps` puts there, one subfolder per platform. `android/`, `chrome/` and `firefox/` are committed (`.gitignore` re-includes their `.zip` and `.xpi` files); `desktop/` is git-ignored, because the exes are about 98 MiB, too close to GitHub's 100 MiB file limit, and they're published only as GitHub Release assets (`--publish`). The script refuses to copy a committed package over 100 MiB. The `.crx` is signed with `dist.pem` by `tools/extension-packages.mjs` (CRX3 and zip in plain Node), so the extension ID stays `hgeofllbbcejfkcojkpkdkpkkdijgbaj`. The desktop build's `compression: "maximum"`, English-only `electronLanguages` and the installer's `differentialPackage: false` (solid compression; there's no electron-updater) keep the downloads small.
-- The README lists the unit-test count ("70 unit tests"). Update it if you add or remove tests.
+- The README lists the unit-test count ("75 unit tests"). Update it if you add or remove tests.

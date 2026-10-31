@@ -101,3 +101,35 @@ test("extension downloads ask for the permission and save bytes as a file", asyn
     delete g.chrome;
   }
 });
+
+test("extension offline posts sit beside the settings without being read with them", async () => {
+  const stored: Record<string, unknown> = { "openrelay:prefs": { theme: "dark" } };
+  const pick = (keys: string[] | string | null) =>
+    Object.fromEntries(
+      Object.entries(stored).filter(
+        ([key]) => keys === null || [keys].flat().includes(key),
+      ),
+    );
+  const local = {
+    get: async (keys: string[] | string | null) => pick(keys),
+    set: async (items: Record<string, unknown>) => void Object.assign(stored, items),
+    remove: async (keys: string[] | string) => {
+      for (const key of [keys].flat()) delete stored[key];
+    },
+  };
+  g.chrome = { storage: { local } };
+  try {
+    const host = readerHost();
+    await host.offline!.set("post:t3_a", { post: { id: "t3_a" } });
+    assert.deepEqual(stored["openrelay-offline:post:t3_a"], { post: { id: "t3_a" } });
+    assert.deepEqual(await host.offline!.get("post:t3_a"), { post: { id: "t3_a" } });
+    assert.equal(await host.offline!.get("post:t3_b"), undefined);
+    // Where the browser lists keys, the settings are read alone.
+    (local as any).getKeys = async () => Object.keys(stored);
+    assert.deepEqual(Object.keys(await host.storage!.getAll()), ["openrelay:prefs"]);
+    await host.offline!.remove(["post:t3_a"]);
+    assert.deepEqual(Object.keys(stored), ["openrelay:prefs"]);
+  } finally {
+    delete g.chrome;
+  }
+});

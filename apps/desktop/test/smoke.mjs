@@ -583,7 +583,17 @@ try {
     await app
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
-    ["Profile", "Inbox", "Moderator", "New Post", "Friends", "User", "Settings"],
+    [
+      "Profile",
+      "Inbox",
+      "Moderator",
+      "New Post",
+      "Friends",
+      "User",
+      "Save feed for offline",
+      "Saved for offline",
+      "Settings",
+    ],
   );
   assert.equal(await app.locator(".drawer .sub-row, .drawer .drawer-search").count(), 0);
   assert.equal(await app.locator(".drawer-count").textContent(), "3");

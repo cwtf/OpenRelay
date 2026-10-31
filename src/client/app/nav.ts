@@ -45,6 +45,8 @@ export type Nav = {
   openInbox: () => void;
   openModerator: () => void;
   openFriends: () => void;
+  /** Posts saved for offline reading. */
+  openOffline: () => void;
   openSubmit: (sub?: string, kind?: "self" | "link") => void;
   openCompose: (draft?: { to?: string; subject?: string }) => void;
   back: () => void;

@@ -39,6 +39,7 @@ import {
 } from "../lib/itemAnimator";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { hiddenPosts } from "../lib/storage";
+import { setOfflineFeed } from "../lib/offline";
 
 const SORT_ICONS: Record<FeedSort, IconName> = {
   hot: "hot",
@@ -399,6 +400,7 @@ export const FeedScreen = ({
     () => state.posts.filter((post) => !hidden.has(post.id)),
     [state.posts, hidden],
   );
+  useEffect(() => setOfflineFeed(sub, visible), [sub, visible]);
   // Hiding a post: fade the card out, then let the rest of the list close
   // the gap, as a RecyclerView removal does.
   const feedRef = useRef<HTMLDivElement>(null);

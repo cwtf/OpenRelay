@@ -29,9 +29,12 @@ import { installRipple } from "../lib/ripple";
 import { recentCommunities } from "../lib/storage";
 import { ensureAccount } from "../lib/account";
 import { ensureSubscriptions } from "../lib/subscriptions";
+import { offlineMode } from "../lib/offline";
+import { loadOfflineIndex } from "../lib/offlineStore";
 import { FeedScreen } from "../screens/FeedScreen";
 import { PostScreen } from "../screens/PostScreen";
 import { SearchScreen } from "../screens/SearchScreen";
+import { OfflineScreen } from "../screens/OfflineScreen";
 import {
   ComposeScreen,
   FriendsScreen,
@@ -64,6 +67,7 @@ type Route =
   | { kind: "inbox" }
   | { kind: "moderator" }
   | { kind: "friends" }
+  | { kind: "offline" }
   | { kind: "submit"; sub?: string | undefined; post?: "self" | "link" | undefined }
   | { kind: "compose"; to?: string | undefined; subject?: string | undefined };
 type Entry = {
@@ -89,11 +93,13 @@ const LIST_ROUTES = new Set<Route["kind"]>([
   "inbox",
   "moderator",
   "friends",
+  "offline",
 ]);
 const isListRoute = (route: Route) => LIST_ROUTES.has(route.kind);
 
 /** The page URL's post or search, opened over the feed once at start. */
 const initialStack = (): Entry[] => {
+  if (offlineMode) return [];
   if (entryRoute.postId)
     return [
       {
@@ -247,6 +253,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
 
   // Load the viewer's subscribed communities in the background for the drawer.
   useEffect(() => {
+    void loadOfflineIndex().catch(() => undefined);
+    if (offlineMode) return;
     ensureAccount();
     ensureSubscriptions();
   }, []);
@@ -555,6 +563,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openInbox: () => push({ kind: "inbox" }),
       openModerator: () => push({ kind: "moderator" }),
       openFriends: () => push({ kind: "friends" }),
+      openOffline: () => push({ kind: "offline" }),
       openSubmit: (sub, post) => push({ kind: "submit", sub, post }),
       openCompose: (draft) => push({ kind: "compose", ...draft }),
       openMedia: (spec) => setViewer(spec),
@@ -611,15 +620,19 @@ const Reader = ({ init }: { init: InitResponse }) => {
           className={`screen is-feed${feedCovered ? " is-covered" : ""}`}
           aria-hidden={feedCovered || undefined}
         >
-          <FeedScreen
-            sub={current}
-            sort={sort}
-            timeframe={timeframe}
-            onSort={(nextSort, nextTime) => {
-              setSort(nextSort);
-              setTimeframe(nextTime);
-            }}
-          />
+          {offlineMode ? (
+            <OfflineScreen base />
+          ) : (
+            <FeedScreen
+              sub={current}
+              sort={sort}
+              timeframe={timeframe}
+              onSort={(nextSort, nextTime) => {
+                setSort(nextSort);
+                setTimeframe(nextTime);
+              }}
+            />
+          )}
         </div>
         {panes.dual && !detail ? (
           <div
@@ -667,6 +680,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
                 <ModeratorScreen />
               ) : entry.route.kind === "friends" ? (
                 <FriendsScreen />
+              ) : entry.route.kind === "offline" ? (
+                <OfflineScreen />
               ) : entry.route.kind === "submit" ? (
                 <SubmitScreen sub={entry.route.sub} kind={entry.route.post} />
               ) : (
