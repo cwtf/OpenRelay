@@ -161,7 +161,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 104 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 106 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

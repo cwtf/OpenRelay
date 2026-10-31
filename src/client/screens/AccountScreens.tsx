@@ -57,7 +57,8 @@ import { toast } from "../lib/platform";
 import { useListing } from "../lib/useListing";
 import { Avatar } from "./FeedScreen";
 
-const USER_RE = /^[\w-]{3,20}$/;
+/** A username; on Lemmy also `name@instance`. */
+const USER_RE = /^[\w-]{3,20}(?:@[a-z0-9.-]{1,253})?$/i;
 
 /** Run a write and report failures; resolves to false when it failed. */
 const attempt = async (work: () => Promise<unknown>, done?: string) => {
@@ -404,7 +405,8 @@ export const InboxScreen = () => {
   ];
 
   const sections = INBOX_SECTIONS.filter(
-    (choice) => account?.isMod || !choice.value.startsWith("moderator"),
+    (choice) =>
+      (account?.isMod && site.features.moderation) || !choice.value.startsWith("moderator"),
   );
   const pickSection = () =>
     nav.openSheet((onClosed) => (

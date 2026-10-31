@@ -9,6 +9,7 @@ import {
   normalizeAccount,
   normalizeComments,
   normalizeFollows,
+  normalizeInbox,
   normalizePost,
   parseRoute,
 } from "./lemmy.ts";
@@ -190,4 +191,43 @@ test("allows only read-only API routes", () => {
     42,
   ])
     assert.equal(allowedApiPath(path), false, String(path));
+});
+
+test("merges replies, mentions and messages into one inbox", () => {
+  const reply = (id: number, path: string, read: boolean, at: string) => ({
+    comment_reply: { id: id + 1000, read },
+    comment: { id, content: `reply ${id}`, path, published: at },
+    creator: { name: "replier", actor_id: "https://lemmy.ml/u/replier", local: false },
+    recipient: { name: "me", local: true },
+    post: { id: 101, name: "My post" },
+    community: { name: "linux", actor_id: "https://lemmy.ml/c/linux", local: false },
+  });
+  const items = normalizeInbox(
+    {
+      replies: [reply(201, "0.201", false, "2026-11-01T10:00:00Z"), reply(202, "0.150.202", true, "2026-11-01T09:00:00Z")],
+      mentions: [{ person_mention: { id: 9, read: false }, ...reply(203, "0.203", false, "2026-11-01T08:00:00Z") }],
+      messages: [
+        {
+          private_message: { id: 77, content: "Hi there", read: false, published: "2026-11-01T11:00:00Z" },
+          creator: { name: "friend", local: true },
+          recipient: { name: "me", local: true },
+        },
+      ],
+    },
+    ORIGIN,
+  );
+  assert.deepEqual(
+    items.map((item) => [item.id, item.kind, item.unread]),
+    [
+      [`t4_77_${TAG}`, "message", true],
+      [`t1_201_${TAG}`, "post_reply", true],
+      [`t1_202_${TAG}`, "comment_reply", false],
+      [`t1_203_${TAG}`, "mention", true],
+    ],
+  );
+  assert.equal(items[1]!.author, "replier@lemmy.ml");
+  assert.equal(items[1]!.postId, `t3_101_${TAG}`);
+  assert.equal(items[1]!.subreddit, "linux@lemmy.ml");
+  assert.ok(allowedApiPath("/api/v3/user/replies?unread_only=false"));
+  assert.equal(allowedApiPath("/api/v3/user/mark_all_as_read"), false);
 });

@@ -132,6 +132,22 @@ await context.route(/^https:\/\/lemmy\.world\//, (route) => {
   switch (url.pathname) {
     case "/api/v3/site":
       return answer(site);
+    case "/api/v3/user/replies":
+      return answer({
+        replies: [{ ...commentView(201, "0.201", "First comment", 1), comment_reply: { id: 1201, read: true }, recipient: creator(1, "lemmy_user") }],
+      });
+    case "/api/v3/user/mention":
+      return answer({ mentions: [] });
+    case "/api/v3/private_message/list":
+      return answer({
+        private_messages: [
+          {
+            private_message: { id: 77, content: "Welcome to Lemmy!", read: false, published: "2026-11-01T01:00:00Z", deleted: false },
+            creator: creator(5, "admin"),
+            recipient: creator(1, "lemmy_user"),
+          },
+        ],
+      });
     case "/api/v3/user/unread_count":
       return answer({ replies: 2, mentions: 0, private_messages: 0 });
     case "/api/v3/post/list":
@@ -229,7 +245,7 @@ try {
     await app
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
-    ["lemmy.world", "Profile", "New Post", "User", "Save feed for offline", "Saved for offline", "Settings"],
+    ["lemmy.world", "Profile", "Inbox", "New Post", "User", "Save feed for offline", "Saved for offline", "Settings"],
   );
   await page.screenshot({ path: resolve(out, "lemmy-drawer.png") });
   await app.locator("body").press("Escape");
@@ -260,6 +276,21 @@ try {
     { method: "POST", path: "/api/v3/comment", body: { post_id: 101, content: "Try Debian." }, auth: "Bearer aaa.bbb.ccc" },
   ]);
   lemmyWrites.length = 0;
+
+  // The inbox: replies and private messages, read without marking them.
+  await app.getByRole("button", { name: "Open menu" }).first().click();
+  await app.locator(".drawer-item", { hasText: "Inbox" }).click();
+  await app.getByText("Welcome to Lemmy!").waitFor();
+  assert.ok(lemmyReads.some((r) => r.startsWith("/api/v3/user/replies?") && r.includes("unread_only=false")));
+  assert.deepEqual(lemmyWrites, []);
+  await app.getByText("Welcome to Lemmy!").click();
+  for (let i = 0; i < 50 && !lemmyWrites.length; i++) await page.waitForTimeout(100);
+  assert.deepEqual(lemmyWrites.map((w) => [w.path, w.body]), [
+    ["/api/v3/private_message/mark_as_read", { private_message_id: 77, read: true }],
+  ]);
+  await page.screenshot({ path: resolve(out, "lemmy-inbox.png") });
+  lemmyWrites.length = 0;
+  await app.locator("body").press("Escape");
 
   // A bot check in front of lemmy-ui is left alone.
   await page.goto("https://lemmy.world/?challenge");
@@ -310,7 +341,7 @@ try {
   assert.deepEqual(lemmyWrites, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, switch back to Reddit, reader refused on a site not added, removal unregisters; no other writes, no page errors.",
+    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, switch back to Reddit, reader refused on a site not added, removal unregisters; no other writes, no page errors.",
   );
 } finally {
   await context.close();

@@ -80,15 +80,19 @@ export async function call(
 const fail = (): never => {
   throw new Error("Invalid request");
 };
-/** A post or comment of this instance, from the reader's tagged ID. */
+const KINDS = { "1": "comment", "3": "post", "4": "message" } as const;
+/** A post, comment or private message of this instance, from its reader ID. */
 function thing(value: unknown, tag: string, kinds = "13") {
   const match =
     typeof value === "string"
       ? new RegExp(`^t([${kinds}])_(\\d{1,12})_${tag}$`).exec(value)
       : null;
   if (!match) return fail();
-  return { kind: match[1] === "3" ? ("post" as const) : ("comment" as const), id: Number(match[2]) };
+  return { kind: KINDS[match[1] as keyof typeof KINDS], id: Number(match[2]) };
 }
+/** A username here (`name`) or on another instance (`name@host`). */
+const person = (value: unknown): string =>
+  typeof value === "string" && /^[\w-]{1,30}(?:@[a-z0-9.-]{1,253})?$/i.test(value) ? value : fail();
 const text = (value: unknown, max: number, required = true): string =>
   typeof value === "string" &&
   value.length <= max &&
@@ -145,6 +149,27 @@ export async function lemmyAction(
     const comment = normalizeComments([data?.comment_view], origin)[0];
     return comment ? { id: comment.id, comment } : {};
   };
+  const personId = async (name: string) => {
+    const data = await api("GET", "/api/v3/user?" + new URLSearchParams({ username: name, limit: "1" }));
+    const id = data?.person_view?.person?.id;
+    return typeof id === "number" ? id : fail();
+  };
+  /** A private message among your newest ones (Lemmy has no lookup by ID). */
+  const message = async (id: number) => {
+    for (let page = 1; page <= 5; page++) {
+      const data = await api("GET", `/api/v3/private_message/list?page=${page}&limit=50`);
+      const list: any[] = Array.isArray(data?.private_messages) ? data.private_messages : [];
+      const found = list.find((view) => view?.private_message?.id === id);
+      if (found) return found;
+      if (list.length < 50) break;
+    }
+    throw new Error("This message is unavailable.");
+  };
+  const send = async (recipientId: number, content: string): Promise<Result> => {
+    const data = await api("POST", "/api/v3/private_message", { content, recipient_id: recipientId });
+    const id = data?.private_message_view?.private_message?.id;
+    return typeof id === "number" ? { id: `t4_${id}_${tag}` } : {};
+  };
   const communityId = async (name: string) => {
     const data = await api("GET", "/api/v3/community?" + new URLSearchParams({ name }));
     const id = data?.community_view?.community?.id;
@@ -158,8 +183,15 @@ export async function lemmyAction(
       return {};
     }
     case "comment": {
-      const parent = thing(a.parent, tag);
+      const parent = thing(a.parent, tag, "134");
       const content = text(a.text, 10000);
+      // A reply to a private message is a message back to its other end.
+      if (parent.kind === "message") {
+        const [view, site] = await Promise.all([message(parent.id), api("GET", "/api/v3/site")]);
+        const me = site?.my_user?.local_user_view?.person?.id;
+        const other = view?.creator?.id === me ? view?.recipient?.id : view?.creator?.id;
+        return send(Number(other) || fail(), content);
+      }
       // Lemmy needs the post of a reply to a comment too.
       const postNumber =
         parent.kind === "post"
@@ -187,6 +219,53 @@ export async function lemmyAction(
     case "del": {
       const t = thing(a.id, tag);
       await api("POST", `/api/v3/${t.kind}/delete`, { [`${t.kind}_id`]: t.id, deleted: true });
+      return {};
+    }
+    // The inbox. A reply or mention is marked through its own record, found
+    // among the newest ones; a private message directly.
+    case "read_message":
+    case "unread_message": {
+      const t = thing(a.id, tag, "14");
+      const read = name === "read_message";
+      if (t.kind === "message") {
+        await api("POST", "/api/v3/private_message/mark_as_read", { private_message_id: t.id, read });
+        return {};
+      }
+      const filter = `?sort=New&unread_only=${read}&page=1&limit=50`;
+      const [replies, mentions] = await Promise.all([
+        api("GET", "/api/v3/user/replies" + filter),
+        api("GET", "/api/v3/user/mention" + filter),
+      ]);
+      const of = (list: unknown) =>
+        (Array.isArray(list) ? list : []).filter((view: any) => view?.comment?.id === t.id);
+      for (const view of of(replies?.replies))
+        await api("POST", "/api/v3/comment/mark_as_read", { comment_reply_id: view.comment_reply.id, read });
+      for (const view of of(mentions?.mentions))
+        await api("POST", "/api/v3/user/mention/mark_as_read", { person_mention_id: view.person_mention.id, read });
+      return {};
+    }
+    case "read_all_messages":
+      await api("POST", "/api/v3/user/mark_all_as_read", {});
+      return {};
+    case "del_msg": {
+      const t = thing(a.id, tag, "4");
+      await api("POST", "/api/v3/private_message/delete", { private_message_id: t.id, deleted: true });
+      return {};
+    }
+    case "compose": {
+      // Lemmy's messages have no subject; it leads the text instead.
+      const to = person(a.to);
+      const subject = typeof a.subject === "string" ? a.subject.trim().slice(0, 100) : "";
+      const body = text(a.text, 10000);
+      return send(await personId(to), subject ? `**${subject}**\n\n${body}` : body);
+    }
+    case "block": {
+      const t = thing(a.id, tag, "14");
+      const creator =
+        t.kind === "message"
+          ? (await message(t.id))?.creator?.id
+          : (await api("GET", `/api/v3/comment?id=${t.id}`))?.comment_view?.creator?.id;
+      await api("POST", "/api/v3/user/block", { person_id: Number(creator) || fail(), block: true });
       return {};
     }
     case "subscribe": {

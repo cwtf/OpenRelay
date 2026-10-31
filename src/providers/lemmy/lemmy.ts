@@ -2,6 +2,7 @@ import type {
   Account,
   AboutResponse,
   CommentNode,
+  InboxItem,
   CommentSort,
   Community,
   FeedSort,
@@ -341,6 +342,65 @@ export function normalizeUserListing(data: Raw, origin: string): ListingItem[] {
   return [...posts, ...comments].sort((a, b) => at(b) - at(a));
 }
 
+/** A private message's reader ID, like a Reddit message's `t4_`. */
+export const messageId = (id: unknown, tag: string): string => `t4_${num(id)}_${tag}`;
+
+/**
+ * Replies to your posts and comments (`/api/v3/user/replies`), mentions
+ * (`/api/v3/user/mention`) and private messages
+ * (`/api/v3/private_message/list`) as one inbox, newest first.
+ */
+export function normalizeInbox(
+  data: { replies?: unknown; mentions?: unknown; messages?: unknown },
+  origin: string,
+): InboxItem[] {
+  const tag = hostTag(hostOf(origin));
+  const list = (v: unknown): Raw[] => (Array.isArray(v) ? v : []);
+  const comment = (view: Raw, kind: InboxItem["kind"], read: unknown): InboxItem => {
+    const c: Raw = view?.comment ?? {};
+    return {
+      id: commentId(c.id, tag),
+      kind,
+      subject: String(view?.post?.name ?? ""),
+      body: c.deleted ? "[deleted]" : c.removed ? "[removed]" : String(c.content ?? ""),
+      author: personName(view?.creator),
+      recipient: personName(view?.recipient),
+      createdAt: time(c.published),
+      unread: read !== true,
+      subreddit: communityName(view?.community),
+      postId: postId(view?.post?.id, tag),
+      context: new URL(`/comment/${num(c.id)}`, origin).href,
+      replies: 0,
+    };
+  };
+  const items: InboxItem[] = [
+    ...list(data.replies).map((view) =>
+      comment(
+        view,
+        // A top-level comment answers your post; anything deeper, your comment.
+        String(view?.comment?.path ?? "").split(".").length > 2 ? "comment_reply" : "post_reply",
+        view?.comment_reply?.read,
+      ),
+    ),
+    ...list(data.mentions).map((view) => comment(view, "mention", view?.person_mention?.read)),
+    ...list(data.messages).map((view) => {
+      const m: Raw = view?.private_message ?? {};
+      return {
+        id: messageId(m.id, tag),
+        kind: "message" as const,
+        subject: "Private message",
+        body: m.deleted ? "[deleted]" : String(m.content ?? ""),
+        author: personName(view?.creator),
+        recipient: personName(view?.recipient),
+        createdAt: time(m.published),
+        unread: m.read !== true,
+        replies: 0,
+      };
+    }),
+  ];
+  return items.sort((a, b) => b.createdAt - a.createdAt);
+}
+
 // -- sorts
 
 const TOP: Record<Timeframe, string> = {
@@ -410,6 +470,10 @@ const READ_ROUTES = [
   "/api/v3/search",
   "/api/v3/user",
   "/api/v3/user/unread_count",
+  // The inbox, read with unread_only and never marked read by reading it.
+  "/api/v3/user/replies",
+  "/api/v3/user/mention",
+  "/api/v3/private_message/list",
 ];
 export function allowedApiPath(path: unknown): path is string {
   if (

@@ -38,7 +38,7 @@ import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
 import { readerHost } from "../../hosts/reader";
 
-const USER_RE = /^[\w-]{3,20}$/;
+const USER_RE = /^[\w-]{3,20}(?:@[a-z0-9.-]{1,253})?$/i;
 
 const GoToUserSheet = ({
   onGo,
@@ -48,7 +48,7 @@ const GoToUserSheet = ({
   onClosed: () => void;
 }) => {
   const [draft, setDraft] = useState("");
-  const name = draft.trim().replace(/^\/?u(?:ser)?\//i, "");
+  const name = draft.trim().replace(/^\/?u(?:ser)?\/|^@/i, "");
   return (
     <Sheet title="Go to user" onClosed={onClosed}>
       {(close) => (

@@ -3,6 +3,8 @@ import type {
   Account,
   Community,
   FeedResponse,
+  InboxResponse,
+  InboxSection,
   ListingResponse,
   PostResponse,
   RepliesResponse,
@@ -20,6 +22,7 @@ import {
   normalizeComments,
   normalizeCommunity,
   normalizeFollows,
+  normalizeInbox,
   normalizeModerators,
   normalizePost,
   normalizeUser,
@@ -30,8 +33,8 @@ import {
 
 /**
  * Lemmy's half of the reader's data layer: Lemmy's v3 API (0.19) through
- * the page bridge, on the instance the reader was opened from. The inbox
- * and moderation aren't supported yet.
+ * the page bridge, on the instance the reader was opened from. Moderation
+ * isn't supported yet.
  */
 const origin = pageUrl.origin;
 const entryRoute = parseRoute(pageUrl.href)!;
@@ -263,6 +266,46 @@ async function fetchUserListing(
   return { items, after: more ? String(page + 1) : null };
 }
 
+let me: Promise<Account | null> | null = null;
+/**
+ * A page of the inbox. Lemmy keeps replies, mentions and private messages
+ * apart; the mixed sections take a page of each. Read with `unread_only`,
+ * so nothing is marked read by opening it.
+ */
+async function fetchInbox(section: InboxSection, after?: string | null): Promise<InboxResponse> {
+  const page = Number(after) || 1;
+  const limit = 20;
+  const unread_only = section === "unread" ? "true" : "false";
+  const params = query({ sort: "New", unread_only, page, limit });
+  const wants = {
+    replies: ["inbox", "unread", "comments", "selfreply"].includes(section),
+    mentions: ["inbox", "unread", "mentions"].includes(section),
+    messages: ["inbox", "unread", "messages", "sent"].includes(section),
+  };
+  if (!wants.replies && !wants.mentions && !wants.messages) return { items: [], after: null };
+  const [replies, mentions, messages] = await Promise.all([
+    wants.replies ? json("/api/v3/user/replies" + params) : null,
+    wants.mentions ? json("/api/v3/user/mention" + params) : null,
+    wants.messages
+      ? json("/api/v3/private_message/list" + query({ unread_only, page, limit }))
+      : null,
+  ]);
+  let items = normalizeInbox(
+    { replies: replies?.replies, mentions: mentions?.mentions, messages: messages?.private_messages },
+    origin,
+  );
+  if (section === "comments") items = items.filter((item) => item.kind === "comment_reply");
+  if (section === "selfreply") items = items.filter((item) => item.kind === "post_reply");
+  if (section === "messages" || section === "sent") {
+    const name = (await (me ??= fetchAccount()))?.name;
+    items = items.filter((item) => (item.author === name) === (section === "sent"));
+  }
+  const full = [replies?.replies, mentions?.mentions, messages?.private_messages].some(
+    (list) => Array.isArray(list) && list.length >= limit,
+  );
+  return { items, after: full ? String(page + 1) : null };
+}
+
 async function searchCommunities(text: string): Promise<Community[]> {
   const data = await json(
     "/api/v3/search" + query({ q: text, type_: "Communities", sort: "TopAll", listing_type: "All", limit: 10 }),
@@ -276,7 +319,7 @@ export const lemmyReader: ReaderProvider = {
   name: "Lemmy",
   features: {
     writes: true,
-    inbox: false,
+    inbox: true,
     friends: false,
     moderation: false,
     wiki: false,
@@ -305,7 +348,7 @@ export const lemmyReader: ReaderProvider = {
   fetchAccount,
   fetchUserAbout,
   fetchUserListing,
-  fetchInbox: () => unavailable("The inbox"),
+  fetchInbox,
   fetchModListing: () => unavailable("Moderation"),
   searchCommunities,
   fetchModerated: async () => [],

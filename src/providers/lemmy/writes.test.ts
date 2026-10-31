@@ -119,3 +119,32 @@ test("explains Lemmy's errors", async () => {
   const { fetchFn } = fakeFetch({ "/api/v3/post/save": { error: "not_logged_in" } }, 400);
   await assert.rejects(lemmyAction(fetchFn, ORIGIN, null, "save", { id: `t3_1_${TAG}` }), /Sign in to Lemmy first/);
 });
+
+test("marks inbox items read through their own records, and sends messages", async () => {
+  const { fetchFn, sent } = fakeFetch({
+    "/api/v3/user/replies": { replies: [{ comment_reply: { id: 1201 }, comment: { id: 201 } }, { comment_reply: { id: 1202 }, comment: { id: 202 } }] },
+    "/api/v3/user/mention": { mentions: [] },
+    "/api/v3/user": { person_view: { person: { id: 42 } } },
+    "/api/v3/private_message": { private_message_view: { private_message: { id: 78 } } },
+    "/api/v3/private_message/list": {
+      private_messages: [{ private_message: { id: 77 }, creator: { id: 42 }, recipient: { id: 7 } }],
+    },
+    "/api/v3/site": { my_user: { local_user_view: { person: { id: 7 } } } },
+  });
+  await lemmyAction(fetchFn, ORIGIN, TOKEN, "read_message", { id: `t1_201_${TAG}` });
+  await lemmyAction(fetchFn, ORIGIN, TOKEN, "unread_message", { id: `t4_77_${TAG}` });
+  const composed = await lemmyAction(fetchFn, ORIGIN, TOKEN, "compose", { to: "friend@lemmy.ml", subject: "Hi", text: "Hello" });
+  const replied = await lemmyAction(fetchFn, ORIGIN, TOKEN, "comment", { parent: `t4_77_${TAG}`, text: "Back at you" });
+  const writes = sent.filter((s) => s.method === "POST").map((s) => [s.path, s.body]);
+  assert.deepEqual(writes, [
+    ["/api/v3/comment/mark_as_read", { comment_reply_id: 1201, read: true }],
+    ["/api/v3/private_message/mark_as_read", { private_message_id: 77, read: false }],
+    ["/api/v3/private_message", { content: "**Hi**\n\nHello", recipient_id: 42 }],
+    // The message came from person 42 to me (7), so the answer goes to 42.
+    ["/api/v3/private_message", { content: "Back at you", recipient_id: 42 }],
+  ]);
+  assert.ok(sent.some((s) => s.path === "/api/v3/user?username=friend%40lemmy.ml&limit=1"));
+  assert.deepEqual(composed, { id: `t4_78_${TAG}` });
+  assert.deepEqual(replied, { id: `t4_78_${TAG}` });
+  await assert.rejects(lemmyAction(fetchFn, ORIGIN, TOKEN, "compose", { to: "bad name!", text: "x" }), /Invalid request/);
+});
