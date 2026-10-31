@@ -68,9 +68,10 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 
 - IDs: Lemmy's numbers are only unique per instance, so posts and comments get `t3_<id>_<tag>` / `t1_<id>_<tag>` (`hostTag()` of the host). They pass the UI's `t3_`/`t1_` checks and are valid offline keys, and can't collide with Reddit's. Comments arrive flat with a `path`; `normalizeComments` builds the tree and sets `moreReplies` from `child_count`.
 - Running there: the manifest's content script is Reddit-only. Adding an instance (`addInstance` in `client/lib/sources.ts`) asks for that origin through `ReaderHost.instances` (optional host permission), then `sync()` registers `content.js` with `chrome.scripting` on the granted instances (id `openrelay-lemmy`). `web_accessible_resources` therefore matches `https://*/*`, and `reader.tsx` renders nothing unless `trustedSource()` (Reddit, offline, or a host in the list).
-- Auth: lemmy-ui and the API share an origin, so the page provider's same-origin GETs carry lemmy-ui's sign-in cookie; no token is handled. New read endpoints go in `READ_ROUTES` in `lemmy/lemmy.ts`.
+- Auth: lemmy-ui and the API share an origin, so the page provider's same-origin requests carry lemmy-ui's `jwt` cookie; `writes.ts` also reads it (`sessionToken`) and sends it as a bearer token, in the content script only. New read endpoints go in `READ_ROUTES` in `lemmy/lemmy.ts`; new writes in `lemmyAction` in `lemmy/writes.ts`, validating that IDs carry this instance's tag. The inbox's read state changes only through `read_message`/`unread_message`/`read_all_messages`.
 - Per-site storage: the account, subscriptions, favourites, recent communities and search history use `siteKey()` (`client/lib/site.ts`): Reddit's keys are unchanged, an instance's get `@host`.
-- The wrapper apps don't define `instances`, so there a Lemmy source opens in the browser.
+- The wrapper apps read the list from their own storage file (`INSTANCES_KEY` in `apps/desktop/src/main.js` and `MainActivity.kt`) and treat those hosts like Reddit; their `instances` access just answers "granted". Android re-registers its document-start script and page channel when the list changes.
+- `isGatePage` for Lemmy is "not lemmy-ui": no `#root` or no `isoData` script, which covers Cloudflare/Anubis bot checks.
 
 ### Host adapter
 
