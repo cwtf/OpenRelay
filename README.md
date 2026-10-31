@@ -69,7 +69,7 @@ npm start
 
 `npm run build` builds the shared code at the repository root and copies `reader.html`, `assets/` and `content.js` into **apps/desktop/openrelay/**.
 
-To package it, run `npm run dist` in **apps/desktop/**. It uses electron-builder to build for the platform you run it on. On Windows that is an installer, **release/OpenRelay-0.1.0-setup.exe** (per user, no administrator rights needed), and a single-file **release/OpenRelay-0.1.0-portable.exe**. On macOS it is a `.dmg`, and on Linux an AppImage. The builds aren't code-signed, so Windows SmartScreen warns on first run (**More info → Run anyway**), and macOS needs right-click → **Open**. The app uses OpenRelay's blue Open Thread icon. Packaged builds turn on Electron's security fuses. They can't be run as Node or debugged through Node's inspector, they load the app only from its integrity-checked `app.asar`, and they encrypt the cookie store with the operating system's key store. [docs/packaging-desktop.md](docs/packaging-desktop.md) walks through packaging step by step, including `.deb` packages, building for macOS and Linux, signing, icons and troubleshooting.
+To package it, run `npm run dist` in **apps/desktop/**. It uses electron-builder to build for the platform you run it on. On Windows that is an installer, **release/OpenRelay-0.1.0-setup.exe** (per user, no administrator rights needed), and a single-file **release/OpenRelay-0.1.0-portable.exe**. On macOS it is a `.dmg`, and on Linux an AppImage. The builds aren't code-signed, so Windows SmartScreen warns on first run (**More info → Run anyway**), and macOS needs right-click → **Open**. The app uses OpenRelay's blue Rounded Tail icon. Packaged builds turn on Electron's security fuses. They can't be run as Node or debugged through Node's inspector, they load the app only from its integrity-checked `app.asar`, and they encrypt the cookie store with the operating system's key store. [docs/packaging-desktop.md](docs/packaging-desktop.md) walks through packaging step by step, including `.deb` packages, building for macOS and Linux, signing, icons and troubleshooting.
 
 Sign in to Reddit inside the app, with your Reddit username and password. Google and Apple sign-in refuse to run in embedded browsers such as Electron. **View → Toggle OpenRelay / Original Reddit** (Ctrl+Shift+R, or Cmd+Shift+R on macOS) replaces the extension's toolbar button. Reddit links, including the login page, open in another app window with the same session; other links open in your default browser.
 
@@ -182,6 +182,6 @@ Validated: injection, loaded-page feeds, settings persistence, the subscriptions
 - `tools/*-smoke.mjs` — browser integration checks (browser, vote, account, media and video), with fixtures in `tools/fixtures/`.
 - `apps/desktop/` — the Electron desktop app (`src/main.js`, `src/preload.cjs`) and its smoke tests.
 - `apps/android/` — the Android app (`MainActivity.kt`, and the `page-host.js` and `reader-host.js` shims in its assets).
-- `assets/branding/` — the Open Thread icon; `tools/build-icons.py` generates every platform's icons from it.
+- `assets/branding/` — the Rounded Tail speech-bubble/R icon; `tools/build-icons.py` generates every platform's icons from it.
 - `releases/` — the official packages, one folder per platform.
 - `docs/` — guides to packaging the desktop app and to the wrapper apps' design.

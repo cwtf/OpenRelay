@@ -5,9 +5,12 @@
     <!-- Keep the entire mark inside the adaptive icon's circular safe zone. -->
     <group android:scaleX="0.72" android:scaleY="0.72" android:pivotX="256" android:pivotY="256">
         <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="40" android:strokeLineCap="round" android:strokeLineJoin="round"
-            android:pathData="M104 132 V304 Q104 336 136 336 H200 M104 176 H168" />
-        <path android:fillColor="#FFFFFFFF" android:pathData="M176 132 H348 Q380 132 380 164 V188 Q380 220 348 220 H176 Q144 220 144 188 V164 Q144 132 176 132 Z" />
-        <path android:fillColor="#FFFFFFFF" android:pathData="M216 292 H384 Q416 292 416 324 V348 Q416 380 384 380 H216 Q184 380 184 348 V324 Q184 292 216 292 Z" />
+            android:strokeWidth="26" android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M256 96 C340 96 408 164 408 248 C408 332 340 400 256 400 C223 400 194 390 174 377 L119 407 Q108 414 111 400 L128 337 C112 310 104 281 104 248 C104 164 172 96 256 96 Z" />
+        <group android:scaleX="0.88" android:scaleY="0.88"
+            android:translateX="30.72" android:translateY="29.76">
+            <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+                android:pathData="M192 162 L256 162 C302 162 326 184 326 220 C326 245 314 263 292 271 L334 334 L286 334 L248 278 L234 278 L234 334 L192 334 Z M234 196 L234 244 L255 244 C275 244 284 236 284 220 C284 204 275 196 255 196 Z" />
+        </group>
     </group>
 </vector>

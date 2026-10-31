@@ -171,7 +171,7 @@ Never commit certificates or `.pfx`/`.p12` files. Keep them outside the reposito
 
 ## App icon
 
-The desktop app, Android launcher and browser extension use OpenRelay's **Open Thread** icon: two white comment blocks connected by a thread rail on blue (`#1d63c4`). The vector originals are in `assets/branding/`.
+The desktop app, Android launcher and browser extension use OpenRelay's **Rounded Tail** icon: a white round speech-bubble outline with a softened tail and a bold R inside, on blue (`#315bdd`). The vector originals are `assets/branding/rounded-tail.svg` and `assets/branding/rounded-tail-mark.svg`.
 
 The desktop resources in `apps/desktop/resources/` are checked in:
 
