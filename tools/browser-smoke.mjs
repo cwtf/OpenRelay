@@ -450,6 +450,26 @@ try {
   await app.locator(".swipe.is-open .swipe-btn", { hasText: "Parent" }).click();
   await app.locator('.comment.is-focus[data-cid="t1_c1"]').waitFor();
 
+  // The divider's tab widens the post over the feed; back narrows it again
+  // before it closes the post.
+  const detailLeft = (left) =>
+    app.waitForFunction(
+      (x) => Math.abs(document.querySelector(".screen.is-detail").getBoundingClientRect().left - x) < 1,
+      left,
+    );
+  await app.getByRole("button", { name: "Full screen", exact: true }).click();
+  await app.locator(".app.is-expanded").waitFor();
+  await detailLeft(0);
+  assert.equal(await app.locator('.screen.is-feed.is-covered[aria-hidden="true"]').count(), 1);
+  await page.screenshot({ path: resolve(out, "full-screen.png") });
+  await app.evaluate(() => history.back());
+  await app.locator(".app.is-dual:not(.is-expanded) .screen.is-detail").waitFor();
+  assert.equal(await app.locator(".screen.is-feed.is-covered").count(), 0);
+  await app.getByRole("button", { name: "Full screen", exact: true }).click();
+  await app.getByRole("button", { name: "Exit full screen", exact: true }).click();
+  await app.locator(".app.is-expanded").waitFor({ state: "detached" });
+  await detailLeft(1280 * 0.42 + 4);
+
   await app.getByRole("button", { name: "Close post", exact: true }).click();
   await app.locator(".pane-empty").waitFor();
   assert.equal(await app.locator(".post.is-selected").count(), 0);
@@ -744,7 +764,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

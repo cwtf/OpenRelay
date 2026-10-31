@@ -230,6 +230,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
   } | null>(null);
   const [viewer, setViewer] = useState<ViewerSpec | null>(null);
   const [drawer, setDrawer] = useState(false);
+  /** Dual pane: the right-hand pane widened over the listing. */
+  const [expanded, setExpanded] = useState(false);
   const [localToast, setLocalToast] = useState<{
     id: number;
     text: string;
@@ -238,12 +240,12 @@ const Reader = ({ init }: { init: InitResponse }) => {
   const stackRef = useRef(stack);
   const detailRef = useRef(detail);
   const dualRef = useRef(panes.dual);
-  const overlayRef = useRef({ sheet, viewer, drawer });
+  const overlayRef = useRef({ sheet, viewer, drawer, expanded });
   useLayoutEffect(() => {
     stackRef.current = stack;
     detailRef.current = detail;
     dualRef.current = panes.dual;
-    overlayRef.current = { sheet, viewer, drawer };
+    overlayRef.current = { sheet, viewer, drawer, expanded };
   });
   const pushedStates = useRef(0);
   const pendingBack = useRef<number | null>(null);
@@ -286,6 +288,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
   };
 
   const push = useCallback((route: Route) => {
+    // A left-hand page needs the listing side back.
+    if (isListRoute(route)) setExpanded(false);
     setStack((current) => [
       ...current,
       { key: nextKey(), route, phase: "entering" },
@@ -317,7 +321,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
     });
   }, []);
 
-  /** Close the top-most thing: viewer, sheet, drawer, then screens. */
+  /** Close the top-most thing: viewer, sheet, drawer, full screen, then screens. */
   const dismissTop = useCallback((): boolean => {
     const overlays = overlayRef.current;
     if (overlays.viewer) {
@@ -330,6 +334,10 @@ const Reader = ({ init }: { init: InitResponse }) => {
     }
     if (overlays.drawer) {
       setDrawer(false);
+      return true;
+    }
+    if (overlays.expanded) {
+      setExpanded(false);
       return true;
     }
     if (
@@ -355,9 +363,15 @@ const Reader = ({ init }: { init: InitResponse }) => {
         popScreen();
         return;
       }
-      // Hardware / browser back: close overlays first, keeping history in sync.
+      // Hardware / browser back: close overlays (and leave full screen) first,
+      // keeping history in sync.
       const overlays = overlayRef.current;
-      if (overlays.viewer || overlays.sheet || overlays.drawer) {
+      if (
+        overlays.viewer ||
+        overlays.sheet ||
+        overlays.drawer ||
+        overlays.expanded
+      ) {
         dismissTop();
         pushState();
         return;
@@ -377,6 +391,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
         overlays.viewer ||
         overlays.sheet ||
         overlays.drawer ||
+        overlays.expanded ||
         detailRef.current ||
         stackRef.current.some((entry) => entry.phase !== "exiting");
       if (!open) return false;
@@ -464,6 +479,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
   const openCommunity = useCallback(
     (name: string) => {
       setCurrent(name);
+      setExpanded(false);
       if (name.toLowerCase() !== init.subreddit.toLowerCase())
         recentCommunities.add(name);
       setStack((entries) => {
@@ -535,6 +551,13 @@ const Reader = ({ init }: { init: InitResponse }) => {
     );
   }, [panes.dual, detail]);
 
+  // Full screen lasts until the right-hand pane closes: posts opened from
+  // links in it stay full screen, and the next post starts split again.
+  const hasDetail = detail !== null;
+  useEffect(() => {
+    if (!hasDetail || !panes.dual) setExpanded(false);
+  }, [hasDetail, panes.dual]);
+
   const openLink = useCallback(
     (href: string) => {
       const target = resolveLink(href);
@@ -600,6 +623,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
   const live = stack.filter((entry) => entry.phase !== "exiting");
   const feedCovered = live.length > 0;
   const bothCovered = live.some((entry) => paneOf(entry) === "screen");
+  /** The listing side, under the post while it is full screen. */
+  const listHidden = panes.dual && detail !== null && expanded;
   // The right-hand pane renders in the same keyed list as the full-screen
   // pages, in the order they were opened, so moving a post between them keeps
   // it mounted and in place.
@@ -612,13 +637,14 @@ const Reader = ({ init }: { init: InitResponse }) => {
           "app",
           panes.dual ? "is-dual" : "",
           panes.dual && panes.wide ? "is-wide" : "",
+          panes.dual && detail && expanded ? "is-expanded" : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         <div
-          className={`screen is-feed${feedCovered ? " is-covered" : ""}`}
-          aria-hidden={feedCovered || undefined}
+          className={`screen is-feed${feedCovered || listHidden ? " is-covered" : ""}`}
+          aria-hidden={feedCovered || listHidden || undefined}
         >
           {offlineMode ? (
             <OfflineScreen base />
@@ -646,11 +672,13 @@ const Reader = ({ init }: { init: InitResponse }) => {
         {frames.map((entry, index) => {
           const pane = paneOf(entry);
           // Full-screen pages cover both panes; a pane covers only its side.
-          const covered = frames.slice(index + 1).some((other) => {
-            if (other.phase === "exiting") return false;
-            const over = paneOf(other);
-            return over === "screen" || over === pane;
-          });
+          const covered =
+            (listHidden && pane === "list") ||
+            frames.slice(index + 1).some((other) => {
+              if (other.phase === "exiting") return false;
+              const over = paneOf(other);
+              return over === "screen" || over === pane;
+            });
           const isTop = !covered && entry.phase !== "exiting";
           return (
             <ScreenFrame
@@ -690,6 +718,19 @@ const Reader = ({ init }: { init: InitResponse }) => {
             </ScreenFrame>
           );
         })}
+        {panes.dual && detail && !bothCovered ? (
+          // A tab on the divider widens the post over the listing and back.
+          <button
+            type="button"
+            className="pane-handle"
+            aria-label={expanded ? "Exit full screen" : "Full screen"}
+            aria-pressed={expanded}
+            title={expanded ? "Show the listing" : "Full screen"}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <Icon name={expanded ? "chevronRight" : "chevronLeft"} size={18} />
+          </button>
+        ) : null}
         {drawer ? <Drawer onClosed={() => setDrawer(false)} /> : null}
         {sheet ? (
           <Fragment key={sheet.key}>

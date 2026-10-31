@@ -91,10 +91,69 @@
 
 .screen.is-detail {
   animation: fade-in var(--dur-item-fade) var(--ease-in-out) both;
+  transition: left var(--dur-drawer-in) var(--ease-drawer);
 }
 
 :root[data-motion='reduced'] .screen.is-detail {
   animation: none;
+  transition: none;
+}
+
+/* Full screen: the post slides over the listing, which stays mounted (and
+   scrolled) underneath. Pages opened over both panes stay on top. Each pane
+   keeps its own layers (app bars, sticky bars) to itself. */
+.app.is-dual > .screen {
+  isolation: isolate;
+}
+
+.app.is-dual > .screen.is-detail {
+  z-index: 1;
+}
+
+.app.is-dual > .screen-shadow {
+  z-index: 2;
+}
+
+.app.is-dual.is-expanded > .screen.is-detail {
+  left: 0;
+}
+
+/* The divider's tab: on the pane edge when split, on the left edge when
+   full screen. */
+.pane-handle {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--list-w) + var(--pane-gap) / 2);
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 48px;
+  margin: -24px 0 0 -11px;
+  border: 1px solid var(--outline);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition:
+    left var(--dur-drawer-in) var(--ease-drawer),
+    border-radius var(--dur-drawer-in) var(--ease-drawer),
+    background-color 150ms;
+}
+
+.pane-handle:hover {
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+.app.is-expanded > .pane-handle {
+  left: 11px;
+  border-left: 0;
+  border-radius: 0 11px 11px 0;
+}
+
+:root[data-motion='reduced'] .pane-handle {
+  transition: none;
 }
 
 .pane-empty {
