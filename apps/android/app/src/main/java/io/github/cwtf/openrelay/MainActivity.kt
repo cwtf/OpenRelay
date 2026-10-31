@@ -29,6 +29,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.ScriptHandler
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
@@ -63,6 +64,10 @@ private const val MEDIA_MAX_BYTES = 10 * 1024 * 1024
 private fun isReddit(url: Uri) =
     url.scheme == "https" && url.host.let { it == "reddit.com" || it?.endsWith(".reddit.com") == true }
 
+/** The reader's list of Lemmy instances in its storage (`lemmy-instances`). */
+private const val INSTANCES_KEY = "openrelay:lemmy-instances"
+private val INSTANCE_HOST = Regex("^(?!-)[a-z0-9-]{1,63}(?:\\.(?!-)[a-z0-9-]{1,63})+$")
+
 /**
  * Reddit in one WebView, with OpenRelay's content script, and the reader in a
  * second WebView over it. Reddit's CSP blocks the reader's origin as an iframe,
@@ -84,6 +89,9 @@ class MainActivity : ComponentActivity() {
     private var redditFailed = false
     private var readerInset = 0
     private var pendingBack: Runnable? = null
+    /** The content script and page channel, registered for [pageOrigins]. */
+    private var pageScript: ScriptHandler? = null
+    private var pageOrigins: Set<String> = REDDIT_ORIGINS
     private val network = Executors.newFixedThreadPool(4)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -157,7 +165,7 @@ class MainActivity : ComponentActivity() {
                 reader.postMessage(JSONObject().put("kind", "back").toString())
             }
         })
-        redditView.loadUrl(intent.dataString?.takeIf { isReddit(Uri.parse(it)) } ?: "https://www.reddit.com/")
+        redditView.loadUrl(intent.dataString?.takeIf { isSite(Uri.parse(it)) } ?: "https://www.reddit.com/")
     }
 
     private fun newWebView(debuggable: Boolean) = WebView(this).apply {
@@ -251,8 +259,8 @@ class MainActivity : ComponentActivity() {
 
     private fun handleStorage(method: String, args: Any?): Any = when (method) {
         "storage.getAll" -> storage.getAll()
-        "storage.set" -> storage.set(args as JSONObject).let { JSONObject.NULL }
-        "storage.remove" -> storage.remove(args as JSONArray).let { JSONObject.NULL }
+        "storage.set" -> storage.set(args as JSONObject).also { instancesChanged() }.let { JSONObject.NULL }
+        "storage.remove" -> storage.remove(args as JSONArray).also { instancesChanged() }.let { JSONObject.NULL }
         "offline.get" -> offline.get((args as JSONObject).getString("key"))
         "offline.set" -> (args as JSONObject).let { offline.set(it.getString("key"), it.get("value")) }
             .let { JSONObject.NULL }
@@ -335,7 +343,7 @@ class MainActivity : ComponentActivity() {
     private fun setUpReddit() {
         redditView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (isReddit(request.url)) return false
+                if (isSite(request.url)) return false
                 openUrl(request.url)
                 return true
             }
@@ -356,12 +364,47 @@ class MainActivity : ComponentActivity() {
                 if (redditFailed) openOffline()
             }
         }
+        registerPage()
+    }
+
+    // --- Lemmy instances ------------------------------------------------------
+
+    /**
+     * The Lemmy instances added in the reader. The app treats them as it treats
+     * Reddit; adding one in the app is the consent.
+     */
+    private fun instanceHosts(): Set<String> {
+        val list = storage.getAll().optJSONArray(INSTANCES_KEY) ?: return emptySet()
+        return (0 until list.length())
+            .mapNotNull { list.optString(it).takeIf { host -> INSTANCE_HOST.matches(host) } }
+            .filter { !it.substringAfterLast('.').all(Char::isDigit) && !isReddit(Uri.parse("https://$it")) }
+            .toSet()
+    }
+
+    /** A site OpenRelay reads: Reddit, or an added Lemmy instance. */
+    private fun isSite(url: Uri) =
+        isReddit(url) || (url.scheme == "https" && url.port == -1 && url.host in instanceHosts())
+
+    /** Registers the content script and page channel again when the instances change. */
+    private fun instancesChanged() {
+        val origins = REDDIT_ORIGINS + instanceHosts().map { "https://$it" }
+        if (origins != pageOrigins) {
+            pageOrigins = origins
+            registerPage()
+        }
+    }
+
+    /** The content script and the page's channel, on Reddit and the added instances. */
+    private fun registerPage() {
+        pageScript?.remove()
+        WebViewCompat.removeWebMessageListener(redditView, "openRelayPage")
+        pageOrigins = REDDIT_ORIGINS + instanceHosts().map { "https://$it" }
         WebViewCompat.addWebMessageListener(
             redditView,
             "openRelayPage",
-            REDDIT_ORIGINS,
+            pageOrigins,
         ) { _: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, reply: JavaScriptReplyProxy ->
-            if (sourceOrigin.toString() !in REDDIT_ORIGINS || !isMainFrame) return@addWebMessageListener
+            if (sourceOrigin.toString() !in pageOrigins || !isMainFrame) return@addWebMessageListener
             val data = message.data ?: return@addWebMessageListener
             pageProxy = reply
             if (data.startsWith(POST_PREFIX)) {
@@ -388,7 +431,7 @@ class MainActivity : ComponentActivity() {
             .replace("/*CONTENT_JS*/", asset("openrelay/content.js"))
         // TODO: run in an isolated world (WebViewCompat.addJavaScriptOnEvent with
         // getExecutionWorld) where JS_INJECTION_IN_FRAME_AND_WORLD is supported.
-        WebViewCompat.addDocumentStartJavaScript(redditView, content, REDDIT_ORIGINS)
+        pageScript = WebViewCompat.addDocumentStartJavaScript(redditView, content, pageOrigins)
     }
 
     private fun sendToPage(message: JSONObject) {
@@ -397,9 +440,9 @@ class MainActivity : ComponentActivity() {
 
     // --- New windows and links ----------------------------------------------
 
-    /** Reddit links open in the app's Reddit view (same session); others in the browser. */
+    /** Reddit and instance links open in the app's page view (same session); others in the browser. */
     private fun openUrl(url: Uri) {
-        if (isReddit(url)) {
+        if (isSite(url)) {
             redditView.loadUrl(url.toString())
         } else if (url.scheme == "https" || url.scheme == "http") {
             try {

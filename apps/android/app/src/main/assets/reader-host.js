@@ -59,6 +59,13 @@
     media: async () =>
       Object.freeze({ fetch: (url) => call("media.fetch", url) }),
     downloads: async () => "unavailable",
+    // Lemmy instances: the app reads the reader's list of them, and adding
+    // one in the app is the consent.
+    instances: Object.freeze({
+      allow: async () => "granted",
+      forget: async () => {},
+      sync: async () => {},
+    }),
     onBack: (listener) => {
       backListener = listener;
     },
