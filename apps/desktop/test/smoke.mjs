@@ -295,6 +295,29 @@ const fixtures = async (route) => {
     },
   });
 };
+/** A Lemmy instance: lemmy-ui's page and just enough of its API, signed out. */
+const lemmyFixtures = (route) => {
+  const url = new URL(route.request().url());
+  const json = (body, status = 200) =>
+    route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+  if (url.pathname === "/api/v3/site") return json({});
+  if (url.pathname === "/api/v3/post/list")
+    return json({
+      posts: [
+        {
+          post: { id: 101, name: "A Lemmy post on the desktop", body: "Hello", published: "2026-11-01T00:00:00Z", creator_id: 1 },
+          creator: { id: 1, name: "poster", local: true },
+          community: { name: "linux", actor_id: "https://lemmy.world/c/linux", local: true },
+          counts: { score: 5, comments: 0 },
+        },
+      ],
+    });
+  if (url.pathname.startsWith("/api/")) return json({ error: "not_found" }, 404);
+  return route.fulfill({
+    contentType: "text/html",
+    body: '<!doctype html><title>Lemmy fixture</title><div id="root">Lemmy fixture</div><script>window.isoData = {};</script>',
+  });
+};
 /** Starts the app on the test profile, answering Reddit only from fixtures. */
 async function launch() {
   const electronApp = await _electron.launch({
@@ -302,6 +325,7 @@ async function launch() {
     env: { ...process.env, OPENRELAY_TEST_PROFILE: profile },
   });
   await electronApp.context().route(/^https:\/\/(www|old)\.reddit\.com\//, fixtures);
+  await electronApp.context().route(/^https:\/\/lemmy\.world\//, lemmyFixtures);
   await electronApp.evaluate(async ({ session }) => {
     // A signed-in session, to check which requests carry it.
     await session.fromPartition("persist:openrelay").cookies.set({
@@ -866,9 +890,24 @@ try {
   app = await reader();
   assert.equal(await app.locator("html").getAttribute("data-theme"), "dark");
   assert.ok(await app.locator('.feed[data-layout="compact"]').count());
+
+  // A Lemmy instance added in the app: OpenRelay opens there too.
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.locator(".drawer-item.source-current").click();
+  await app.getByRole("button", { name: "Add Lemmy instance" }).click();
+  await app.getByLabel("Instance address").fill("lemmy.world");
+  await app.getByLabel("Instance address").press("Enter");
+  await app.locator(".toast", { hasText: "Added lemmy.world" }).waitFor();
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
+  await page.waitForTimeout(500); // The list reaches the storage file.
+  await app.locator(".source-row .drawer-item", { hasText: "lemmy.world" }).click();
+  await page.waitForURL("https://lemmy.world/");
+  app = await reader();
+  await app.getByText("A Lemmy post on the desktop").first().waitFor();
+  assert.ok(await app.getByText("c/linux").count());
   assert.deepEqual(errors, []);
   console.log(
-    "PASS (desktop): content.js injection in an isolated world, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence across reload and restart, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, menu toggle, excluded routes, blocked-JSON fallback, same-origin requests with the session, reader origin on bridge messages, hosts kept to their frames, no Reddit reads from the reader, window-open rules; no page errors.",
+    "PASS (desktop): content.js injection in an isolated world, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence across reload and restart, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, menu toggle, excluded routes, blocked-JSON fallback, same-origin requests with the session, reader origin on bridge messages, hosts kept to their frames, no Reddit reads from the reader, window-open rules, Lemmy instance added in the app opens in OpenRelay; no page errors.",
   );
 } finally {
   await electronApp.close();

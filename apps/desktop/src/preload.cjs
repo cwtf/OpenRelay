@@ -1,15 +1,10 @@
-// Runs in every frame of a Reddit window (sandboxed, context-isolated).
-// Reddit's top frame gets the content script in its own isolated world, as an
-// extension's content script does; the reader frame gets its host. No other
-// frame gets anything.
+// Runs in every frame of an app window (sandboxed, context-isolated). The top
+// frame of Reddit or an added Lemmy instance gets the content script in its
+// own isolated world, as an extension's content script does; the reader
+// frame gets its host. No other frame gets anything.
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
 
 const READER_ORIGIN = "openrelay://reader";
-const REDDIT_ORIGINS = [
-  "https://www.reddit.com",
-  "https://old.reddit.com",
-  "https://reddit.com",
-];
 // Electron's preload world is 999; this one holds only content.js.
 const CONTENT_WORLD = 1001;
 
@@ -34,6 +29,13 @@ if (location.origin === READER_ORIGIN) {
     media: async () => ({
       fetch: (url) => ipcRenderer.invoke("openrelay:media-fetch", url),
     }),
+    // Lemmy instances: the main process reads the reader's list of them,
+    // and adding one in the app is the consent.
+    instances: {
+      allow: async () => "granted",
+      forget: async () => {},
+      sync: async () => {},
+    },
     downloads: async () => ({
       save: (file) =>
         "url" in file
@@ -48,7 +50,7 @@ if (location.origin === READER_ORIGIN) {
             }),
     }),
   });
-} else if (REDDIT_ORIGINS.includes(location.origin) && window === window.top) {
+} else if (location.protocol === "https:" && window === window.top) {
   const pageHost = `globalThis.openRelayPageHost = {
     readerUrl: (hash) => ${JSON.stringify(READER_ORIGIN + "/reader.html#")} + hash,
     onToggle: (listener) => { globalThis.openRelayToggle = listener; },
@@ -61,8 +63,10 @@ if (location.origin === READER_ORIGIN) {
     securityOrigin: location.origin,
     csp: "script-src 'self'; object-src 'none'",
   });
+  // The main process hands the script only to Reddit and added instances.
   const run = async () => {
     const script = await ipcRenderer.invoke("openrelay:page-script");
+    if (!script) return;
     await webFrame.executeJavaScriptInIsolatedWorld(CONTENT_WORLD, [
       { code: pageHost + "\n" + script },
     ]);

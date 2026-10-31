@@ -132,7 +132,7 @@ const AddInstanceSheet = ({ onClosed }: { onClosed: () => void }) => {
           <p className="sub-hint source-hint" role={error ? "alert" : undefined}>
             {error ||
               (readerHost().instances
-                ? "OpenRelay asks for access to the instance so it can show it."
+                ? "OpenRelay opens on the instance as it does on Reddit."
                 : "Here the instance opens in its own web app.")}
           </p>
         </>

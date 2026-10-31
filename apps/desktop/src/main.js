@@ -64,6 +64,37 @@ const isReddit = (value) => {
   }
 };
 
+/**
+ * The Lemmy instances added in the reader (its `lemmy-instances` setting),
+ * which the app treats as it treats Reddit: OpenRelay runs there, and their
+ * links stay in the app. Adding one in the app is the consent; there's no
+ * browser permission to ask for.
+ */
+const INSTANCES_KEY = "openrelay:lemmy-instances";
+const HOST = /^(?!-)[a-z0-9-]{1,63}(?:\.(?!-)[a-z0-9-]{1,63})+$/;
+let instances = new Set();
+const setInstances = (list) => {
+  instances = new Set(
+    (Array.isArray(list) ? list : []).filter(
+      (host) =>
+        typeof host === "string" &&
+        HOST.test(host) &&
+        !/^\d+$/.test(host.split(".").at(-1)) &&
+        !isReddit("https://" + host),
+    ),
+  );
+};
+const isInstance = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.port && instances.has(url.hostname);
+  } catch {
+    return false;
+  }
+};
+/** A site OpenRelay reads: Reddit, or an added Lemmy instance. */
+const isSite = (value) => isReddit(value) || isInstance(value);
+
 const openExternal = (value) => {
   try {
     if (["https:", "http:"].includes(new URL(value).protocol))
@@ -87,7 +118,11 @@ let saving = Promise.resolve();
 const loadStore = () =>
   (store ??= readFile(storePath(), "utf8")
     .then((text) => JSON.parse(text))
-    .catch(() => ({})));
+    .catch(() => ({}))
+    .then((data) => {
+      setInstances(data[INSTANCES_KEY]);
+      return data;
+    }));
 const saveStore = (data) =>
   (saving = saving.then(async () => {
     const temp = storePath() + ".tmp";
@@ -122,6 +157,7 @@ ipcMain.handle("openrelay:storage-set", async (event, items) => {
     data[key] = value;
     changes[key] = { newValue: value };
   }
+  setInstances(data[INSTANCES_KEY]);
   await saveStore(data);
   broadcast(frame, changes);
 });
@@ -134,6 +170,7 @@ ipcMain.handle("openrelay:storage-remove", async (event, keys) => {
     delete data[key];
     changes[key] = {};
   }
+  setInstances(data[INSTANCES_KEY]);
   await saveStore(data);
   broadcast(frame, changes);
 });
@@ -220,12 +257,14 @@ ipcMain.handle("openrelay:save-data", async (event, file) => {
   if (!canceled && filePath) await writeFile(filePath, file.data);
 });
 
-// The content script, for the preload to run in Reddit's top frame.
+// The content script, for the preload to run in the top frame of Reddit or
+// an added Lemmy instance; `null` for any other page.
 let pageScript = null;
-ipcMain.handle("openrelay:page-script", (event) => {
+ipcMain.handle("openrelay:page-script", async (event) => {
   const frame = event.senderFrame;
-  if (!frame || frame.parent || !REDDIT_ORIGINS.has(frame.origin))
-    throw new Error("Not allowed");
+  if (!frame || frame.parent) throw new Error("Not allowed");
+  await loadStore();
+  if (!REDDIT_ORIGINS.has(frame.origin) && !isInstance(frame.origin + "/")) return null;
   return (pageScript ??= readFile(join(files, "content.js"), "utf8"));
 });
 
@@ -276,22 +315,22 @@ function createWindow(url = "https://www.reddit.com/") {
   // Reddit didn't load (offline): show the posts saved for offline reading.
   // ERR_ABORTED is a navigation another one replaced.
   window.webContents.on("did-fail-load", (_event, code, _text, failed, isMainFrame) => {
-    if (isMainFrame && code !== -3 && isReddit(failed)) void window.loadURL(OFFLINE_URL);
+    if (isMainFrame && code !== -3 && isSite(failed)) void window.loadURL(OFFLINE_URL);
   });
   void window.loadURL(url);
   return window;
 }
 
 app.on("web-contents-created", (_event, contents) => {
-  // Reddit links (login included) open in another Reddit window, which shares
-  // the session; anything else opens in the system browser.
+  // Reddit and instance links (sign-in included) open in another app window,
+  // which shares the session; anything else opens in the system browser.
   contents.setWindowOpenHandler(({ url }) => {
-    if (isReddit(url)) createWindow(url);
+    if (isSite(url)) createWindow(url);
     else openExternal(url);
     return { action: "deny" };
   });
   contents.on("will-navigate", (event) => {
-    if (isReddit(event.url)) return;
+    if (isSite(event.url)) return;
     event.preventDefault();
     openExternal(event.url);
   });
@@ -350,7 +389,9 @@ else {
     if (window?.isMinimized()) window.restore();
     window?.focus();
   });
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // Know the added instances before the first page loads.
+    await loadStore();
     setUpSession();
     setUpMenu();
     createWindow();
