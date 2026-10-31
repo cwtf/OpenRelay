@@ -1,9 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { PostResponse, PostSummary } from "../../shared/api";
+import type { FeedSort, PostResponse, PostSummary, Timeframe } from "../../shared/api";
 import { readerHost } from "../../hosts/reader";
 import type { MediaFetcher } from "../../hosts/types";
+import { offlineMode } from "../../extension/bridge";
 import { loadCachedPrefs } from "../app/prefs";
-import { fetchPostToSave } from "./api";
+import { fetchFeed, fetchPostToSave } from "./api";
 import { plural } from "./format";
 import {
   clearOffline,
@@ -20,9 +21,9 @@ import {
   type OfflineEntry,
   type OfflineFile,
 } from "./offlineStore";
+import { pickUnsaved, type FeedPage } from "./offlinePick";
 import { redditVideo, toast } from "./platform";
-
-import { offlineMode } from "../../extension/bridge";
+import { hiddenPosts } from "./storage";
 
 export { offlineMode };
 
@@ -30,8 +31,8 @@ export { offlineMode };
 const COMMENT_LIMIT = 200;
 /** Pause between posts, to stay clear of Reddit's rate limit. */
 const PAUSE_MS = 1100;
-/** Posts saved from a feed at a time. */
-export const FEED_SAVE_LIMIT = 25;
+/** How many posts "Save feed for offline" can save at a time. */
+export const FEED_SAVE_COUNTS = [10, 25, 50, 100] as const;
 /** Images saved with one post (a gallery's first ones, comment images last). */
 const FILE_LIMIT = 40;
 const POST_BYTES_LIMIT = 40 * 1024 * 1024;
@@ -146,12 +147,17 @@ export const useSavedOffline = (id: string): boolean => {
   return isSavedOffline(id);
 };
 
-// The feed shown now, for the drawer's "Save feed for offline".
-let feed: { sub: string; posts: PostSummary[] } = { sub: "", posts: [] };
-export const setOfflineFeed = (sub: string, posts: PostSummary[]): void => {
-  feed = { sub, posts };
+/** The feed shown now, for the drawer's "Save feed for offline". */
+export type OfflineFeed = FeedPage & {
+  sub: string;
+  sort: FeedSort;
+  timeframe: Timeframe;
 };
-export const offlineFeed = () => feed;
+let feed: OfflineFeed | null = null;
+export const setOfflineFeed = (shown: OfflineFeed): void => {
+  feed = shown;
+};
+export const offlineFeed = (): OfflineFeed | null => feed;
 
 let saving = false;
 
@@ -164,16 +170,17 @@ export const savedMedia = (): SaveMedia => {
 };
 export const TEXT_ONLY: SaveMedia = { images: false, videos: false };
 
+const pause = () => new Promise<void>((resolve) => setTimeout(resolve, PAUSE_MS));
+
 /**
- * Save posts one after another, reporting progress in toasts, with the
- * images and videos `media` asks for (by default, as set in Settings).
+ * Save the posts `pick` chooses one after another, reporting progress in
+ * toasts, with the images and videos `media` asks for.
  */
-export async function saveOffline(
-  posts: PostSummary[] | string[],
-  media: SaveMedia = savedMedia(),
+async function save(
+  pick: () => Promise<string[]>,
+  media: SaveMedia,
+  fromFeed: boolean,
 ): Promise<void> {
-  const ids = posts.map((post) => (typeof post === "string" ? post : post.id));
-  if (!ids.length) return;
   if (saving) {
     toast("Already saving posts for offline reading");
     return;
@@ -182,20 +189,22 @@ export async function saveOffline(
   // Before anything is awaited: the extension asks for permission in the click.
   const access = media.images ? mediaAccess() : Promise.resolve(null);
   const sort = loadCachedPrefs().commentSort;
+  let ids: string[] = [];
   let saved = 0;
   let stopped = "";
   let textOnly = false;
-  if (ids.length > 1) toast(`Saving ${plural(ids.length, "post")} for offline reading…`);
   try {
+    ids = await pick();
+    if (ids.length > 1) toast(`Saving ${plural(ids.length, "post")} for offline reading…`);
     const fetcher = await access;
     textOnly = media.images && !fetcher && Boolean(readerHost().media);
     for (const [index, id] of ids.entries()) {
-      if (index) await new Promise((resolve) => setTimeout(resolve, PAUSE_MS));
+      if (index) await pause();
       try {
         const page = await fetchPostToSave(id, sort, COMMENT_LIMIT);
         const files = fetcher ? await fetchFiles(fetcher, page) : [];
         const video = media.videos
-          ? await fetchVideo(page, ids.length === 1 ? VIDEO_LIMIT : FEED_VIDEO_LIMIT)
+          ? await fetchVideo(page, fromFeed ? FEED_VIDEO_LIMIT : VIDEO_LIMIT)
           : null;
         if (video) files.push(video);
         await writeOfflineCopy(page, Date.now(), files);
@@ -212,6 +221,10 @@ export async function saveOffline(
   } finally {
     saving = false;
   }
+  if (!ids.length) {
+    toast("Nothing new to save in this feed");
+    return;
+  }
   const without = textOnly && saved ? " without images (not allowed)" : "";
   if (ids.length === 1)
     toast(saved ? `Saved for offline reading${without}` : `Couldn't save: ${stopped}`);
@@ -222,6 +235,50 @@ export async function saveOffline(
       `Saved ${saved} of ${ids.length} posts.${stopped ? ` ${stopped}` : " Some posts couldn't be loaded."}`,
     );
 }
+
+/**
+ * Save these posts (again, if saved already), with the images and videos
+ * `media` asks for (by default, as set in Settings).
+ */
+export const saveOffline = (
+  posts: PostSummary[] | string[],
+  media: SaveMedia = savedMedia(),
+): Promise<void> =>
+  posts.length
+    ? save(
+        async () => posts.map((post) => (typeof post === "string" ? post : post.id)),
+        media,
+        false,
+      )
+    : Promise.resolve();
+
+/**
+ * Save the next `count` posts of `shown` that aren't saved yet (or hidden),
+ * reading further pages from Reddit when the loaded ones run out.
+ * `textPosts` keeps only text posts.
+ */
+export const saveFeedOffline = (
+  shown: OfflineFeed,
+  count: number,
+  media: SaveMedia,
+  textPosts = false,
+): Promise<void> =>
+  save(
+    async () => {
+      await loadOfflineIndex().catch(() => undefined);
+      return pickUnsaved(shown, count, {
+        skip: (id) => isSavedOffline(id) || hiddenPosts.has(id),
+        ...(textPosts ? { only: (post: PostSummary) => post.media.kind === "self" } : {}),
+        more: (after) => fetchFeed(shown.sub, shown.sort, shown.timeframe, after),
+        beforePage: (page) => {
+          if (!page) toast("Looking further down the feed…");
+          return pause();
+        },
+      });
+    },
+    media,
+    true,
+  );
 
 /** Remove these saved posts, or every one (`"all"`). */
 export async function removeFromOffline(ids: string[] | "all"): Promise<void> {

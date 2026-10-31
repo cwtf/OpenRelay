@@ -400,7 +400,10 @@ export const FeedScreen = ({
     () => state.posts.filter((post) => !hidden.has(post.id)),
     [state.posts, hidden],
   );
-  useEffect(() => setOfflineFeed(sub, visible), [sub, visible]);
+  useEffect(
+    () => setOfflineFeed({ sub, sort, timeframe, posts: visible, after: state.after }),
+    [sub, sort, timeframe, visible, state.after],
+  );
   // Hiding a post: fade the card out, then let the rest of the list close
   // the gap, as a RecyclerView removal does.
   const feedRef = useRef<HTMLDivElement>(null);

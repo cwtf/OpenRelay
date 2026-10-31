@@ -286,6 +286,8 @@ export type Prefs = {
   offlineImages: boolean;
   /** Save Reddit videos (with their sound) with posts saved for offline reading. */
   offlineVideos: boolean;
+  /** How many posts "Save feed for offline" saves at a time. */
+  offlineFeedCount: number;
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -305,6 +307,7 @@ export const DEFAULT_PREFS: Prefs = {
   paneModeLandscape: "auto",
   offlineImages: true,
   offlineVideos: true,
+  offlineFeedCount: 25,
 };
 
 export type InitResponse = {

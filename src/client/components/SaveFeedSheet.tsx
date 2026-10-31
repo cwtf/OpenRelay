@@ -1,30 +1,33 @@
-import type { PostSummary } from "../../shared/api";
+import { usePrefs } from "../app/prefs";
 import { plural } from "../lib/format";
 import {
-  FEED_SAVE_LIMIT,
+  FEED_SAVE_COUNTS,
   TEXT_ONLY,
-  saveOffline,
+  saveFeedOffline,
   savedMedia,
+  type OfflineFeed,
 } from "../lib/offline";
+import { Segmented } from "./SettingsSheet";
 import { Sheet, SheetItem } from "./Sheet";
 
 /**
- * "Save feed for offline": the feed's first posts with the images and
- * videos Settings asks for, as text only, or only its text posts.
+ * "Save feed for offline": the feed's next posts that aren't saved yet, as
+ * many as chosen, with the images and videos Settings asks for, as text
+ * only, or only its text posts.
  */
 export const SaveFeedSheet = ({
   title,
-  posts,
+  feed,
   onClosed,
 }: {
   title: string;
-  posts: PostSummary[];
+  feed: OfflineFeed;
   onClosed: () => void;
 }) => {
-  const first = posts.slice(0, FEED_SAVE_LIMIT);
-  const textPosts = posts
-    .filter((post) => post.media.kind === "self")
-    .slice(0, FEED_SAVE_LIMIT);
+  const { prefs, update } = usePrefs();
+  const count = FEED_SAVE_COUNTS.includes(prefs.offlineFeedCount as never)
+    ? prefs.offlineFeedCount
+    : 25;
   const media = savedMedia();
   const withMedia =
     media.images && media.videos
@@ -34,6 +37,7 @@ export const SaveFeedSheet = ({
         : media.videos
           ? "With videos"
           : null;
+  const next = `The next ${plural(count, "post")} you haven't saved`;
   return (
     <Sheet title={`Save ${title} for offline`} onClosed={onClosed}>
       {(close) => {
@@ -44,28 +48,34 @@ export const SaveFeedSheet = ({
         };
         return (
           <>
+            <div className="sheet-section">How many</div>
+            <Segmented
+              label="Posts to save"
+              value={String(count)}
+              onChange={(value) => update({ offlineFeedCount: Number(value) })}
+              options={FEED_SAVE_COUNTS.map((n) => ({ value: String(n), label: String(n) }))}
+            />
+            <div className="sheet-section">Save</div>
             {withMedia ? (
               <SheetItem
                 icon="image"
                 label={withMedia}
-                hint={`The first ${plural(first.length, "post")}, as set in Settings`}
-                onClick={run(() => void saveOffline(first))}
+                hint={`${next}, as set in Settings`}
+                onClick={run(() => void saveFeedOffline(feed, count, media))}
               />
             ) : null}
             <SheetItem
               icon="text"
               label="Text only"
-              hint={`The first ${plural(first.length, "post")}, without images or videos`}
-              onClick={run(() => void saveOffline(first, TEXT_ONLY))}
+              hint={`${next}, without images or videos`}
+              onClick={run(() => void saveFeedOffline(feed, count, TEXT_ONLY))}
             />
-            {textPosts.length ? (
-              <SheetItem
-                icon="comment"
-                label="Text posts only"
-                hint={`${plural(textPosts.length, "text post")}, skipping links, images and videos`}
-                onClick={run(() => void saveOffline(textPosts, TEXT_ONLY))}
-              />
-            ) : null}
+            <SheetItem
+              icon="comment"
+              label="Text posts only"
+              hint={`The next ${plural(count, "text post")} you haven't saved, skipping links, images and videos`}
+              onClick={run(() => void saveFeedOffline(feed, count, TEXT_ONLY, true))}
+            />
           </>
         );
       }}

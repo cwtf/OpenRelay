@@ -7,7 +7,7 @@ import { Sheet } from "./Sheet";
 
 type Option<T extends string> = { value: T; label: string; icon?: IconName };
 
-const Segmented = <T extends string>({
+export const Segmented = <T extends string>({
   value,
   options,
   onChange,

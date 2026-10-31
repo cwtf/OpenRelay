@@ -105,7 +105,18 @@ const vid = {
   num_comments: 0,
   created_utc: 1700000000,
 };
-const posts = { [post.id]: post, [pic.id]: pic, [vid.id]: vid };
+// On the feed's second page only.
+const more = {
+  ...post,
+  id: "more1",
+  name: "t3_more1",
+  title: "A text post further down",
+  permalink: "/r/test/comments/more1/further/",
+  url: "https://www.reddit.com/r/test/comments/more1/further/",
+  num_comments: 0,
+};
+const posts = { [post.id]: post, [pic.id]: pic, [vid.id]: vid, [more.id]: more };
+const feedPages = [];
 // The generated test video (tools/fixtures/video): fragmented video and audio
 // files, as v.redd.it serves them, and the DASH playlist naming the audio.
 const fragments = (track, parts) =>
@@ -177,7 +188,10 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
           { data: { children: shown === post ? [comment] : [] } },
         ]
       : url.pathname.endsWith("/hot.json")
-        ? { data: { children: [post, pic, vid].map((data) => ({ kind: "t3", data })), after: null } }
+        ? (feedPages.push(url.searchParams.get("after")),
+          url.searchParams.get("after")
+            ? { data: { children: [{ kind: "t3", data: more }], after: null } }
+            : { data: { children: [post, pic, vid].map((data) => ({ kind: "t3", data })), after: "t3_vid789" } })
         : {};
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   }
@@ -205,17 +219,24 @@ const save = async (app, nth) => {
   await app.getByRole("button", { name: /Save for offline|Update offline copy/ }).click();
   await toast(app, "Saved for offline reading");
 };
-/** Choose `option` in the drawer's "Save feed for offline" sheet. */
-const saveFeed = async (app, option, done) => {
+/**
+ * Choose `option` in the drawer's "Save feed for offline" sheet, after
+ * `count` if given. Returns the count the sheet opened with.
+ */
+const saveFeed = async (app, option, done, count) => {
   await app.locator(".toast").waitFor({ state: "detached" });
+  await app.locator(".has-sheet").waitFor({ state: "detached" });
   await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
   await app.getByRole("button", { name: "Open menu" }).click();
   await app.getByRole("button", { name: "Save feed for offline" }).click();
   await app.getByRole("button", { name: /^Text only/ }).waitFor();
   await page.waitForTimeout(400); // Let the sheet finish sliding in.
   await page.screenshot({ path: resolve(out, "offline-save-feed.png") });
+  const opened = await app.getByRole("radio", { checked: true }).textContent();
+  if (count) await app.getByRole("radio", { name: count, exact: true }).click();
   await app.getByRole("button", { name: option }).click();
   await toast(app, done);
+  return opened;
 };
 /** Set Settings' offline images and videos switches. */
 const offlineSettings = async (app, on) => {
@@ -263,17 +284,23 @@ try {
   await app.getByRole("button", { name: "Remove offline copy" }).waitFor();
   await page.keyboard.press("Escape");
 
-  // From the feed, text posts only: just the text post, nothing else fetched.
+  // From the feed, text posts only: the loaded one is saved already, so the
+  // next one comes from further down the feed, and nothing else is fetched.
   forget();
-  await saveFeed(app, /^Text posts only/, "Saved for offline reading");
-  assert.deepEqual(commentLoads.length, 1);
+  assert.equal(await saveFeed(app, /^Text posts only/, "Saved for offline reading", "10"), "25");
+  assert.deepEqual(commentLoads.map((search) => search.length > 0), [true]);
+  assert.ok(feedPages.includes("t3_vid789"));
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
-  // Text only: every post, without their images or videos.
+  // Text only: the posts not saved yet, without their images or videos. The
+  // count chosen last time is kept.
   forget();
-  await app.locator(".has-sheet").waitFor({ state: "detached" });
-  await saveFeed(app, /^Text only/, "Saved 3 posts for offline reading");
-  assert.equal(commentLoads.length, 3);
+  assert.equal(await saveFeed(app, /^Text only/, "Saved 2 posts for offline reading"), "10");
+  assert.equal(commentLoads.length, 2);
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
+  // Again: everything in the feed is saved.
+  forget();
+  await saveFeed(app, /^Text only/, "Nothing new to save in this feed");
+  assert.equal(commentLoads.length, 0);
   // With images and videos off in Settings, a post's own save fetches neither,
   // and the feed sheet has no "with media" choice.
   await offlineSettings(app, false);
@@ -330,7 +357,7 @@ try {
   offline.on("pageerror", (err) => errors.push(err.message));
   await offline.goto(`chrome-extension://${extensionId}/reader.html#offline`);
   await offline.getByText("Saved for offline", { exact: true }).waitFor();
-  await offline.getByText("3 posts", { exact: true }).waitFor();
+  await offline.getByText("4 posts", { exact: true }).waitFor();
   // The picture's card and page show its saved image, from this device.
   const loaded = (img) =>
     img.evaluate((el) => el.decode().then(() => [el.src.slice(0, 5), el.naturalWidth]));
@@ -374,7 +401,7 @@ try {
   // Removing the copies empties the list, files and all.
   await offline.getByRole("button", { name: "Post actions" }).click();
   await offline.getByRole("button", { name: "Remove offline copy" }).click();
-  await offline.getByText("2 posts", { exact: true }).waitFor();
+  await offline.getByText("3 posts", { exact: true }).waitFor();
   await offline.getByRole("button", { name: "Remove all offline posts" }).click();
   await offline.getByRole("button", { name: "Remove all", exact: true }).click();
   await offline.getByText("Nothing saved yet", { exact: true }).waitFor();

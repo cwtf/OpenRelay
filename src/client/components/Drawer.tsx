@@ -850,8 +850,8 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
             <>
               <div className="drawer-sep" />
               {item("download", "Save feed for offline", () => {
-                const { sub, posts } = offlineFeed();
-                if (sub.toLowerCase() === current.toLowerCase() && posts.length)
+                const feed = offlineFeed();
+                if (feed?.sub.toLowerCase() === current.toLowerCase() && feed.posts.length)
                   nav.openSheet((onSheetClosed) => (
                     <SaveFeedSheet
                       title={
@@ -859,7 +859,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
                           ? feedLabel(current)
                           : `r/${current}`
                       }
-                      posts={posts}
+                      feed={feed}
                       onClosed={onSheetClosed}
                     />
                   ));
