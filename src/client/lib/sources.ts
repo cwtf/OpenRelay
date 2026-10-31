@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { offlineMode, pageUrl } from "../../extension/bridge";
 import {
+  DEFAULT_INSTANCES,
   instanceHome,
   instanceHost,
   REDDIT_HOME,
@@ -45,10 +46,10 @@ const emit = () => {
   for (const listener of listeners) listener();
 };
 
-/** Reddit, then the Lemmy instances the viewer added, in the order added. */
+/** Reddit, then the Lemmy instances: lemmy.world until the viewer changes the list. */
 const sourceList = (): Source[] => {
   if (!sources) {
-    const saved = readJson<unknown>(KEY, []);
+    const saved = readJson<unknown>(KEY, DEFAULT_INSTANCES);
     const hosts = Array.isArray(saved)
       ? saved.filter(
           (host): host is string =>

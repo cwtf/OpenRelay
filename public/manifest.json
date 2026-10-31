@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "OpenRelay for Reddit",
+  "name": "OpenRelay for Reddit/Lemmy",
   "version": "0.2.0",
   "icons": {
     "16": "icons/icon-16.png",
@@ -8,7 +8,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "description": "Read Reddit pages with OpenRelay’s cards, themes, comment threads and media viewer.",
+  "description": "Read Reddit and Lemmy with OpenRelay’s cards, themes, comment threads and media viewer.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -31,7 +31,7 @@
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png"
     },
-    "default_title": "Toggle OpenRelay / original Reddit"
+    "default_title": "Toggle OpenRelay / the original site"
   },
   "background": {
     "service_worker": "background.js"

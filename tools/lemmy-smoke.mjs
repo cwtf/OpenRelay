@@ -215,9 +215,13 @@ try {
   );
   await extensions.close();
 
-  // Add the instance from the switcher.
+  // lemmy.world is listed from the start, but OpenRelay doesn't run there
+  // until it's opened (and Chrome's access is granted).
   await app.getByRole("button", { name: "Open menu" }).click();
   await app.locator(".drawer-item.source-current").click();
+  await app.locator(".source-row .drawer-item", { hasText: "lemmy.world" }).waitFor();
+  assert.deepEqual(await registered(), []);
+  // The add sheet checks what's typed; adding a listed instance keeps one row.
   await app.getByRole("button", { name: "Add Lemmy instance" }).click();
   const address = app.getByLabel("Instance address");
   await address.fill("http://lemmy.world");
@@ -227,12 +231,14 @@ try {
   await address.press("Enter");
   await app.locator(".toast", { hasText: "Added lemmy.world" }).waitFor();
   await app.locator(".has-sheet").waitFor({ state: "detached" });
-  assert.deepEqual(await registered(), [["https://lemmy.world/*"]]);
+  assert.equal(await app.locator(".source-row").count(), 1);
   await page.screenshot({ path: resolve(out, "lemmy-switcher.png") });
 
-  // Switching loads the instance in this tab, and OpenRelay opens there.
+  // Opening it asks for access, registers the content script there, and
+  // loads the instance in this tab, where OpenRelay opens.
   await app.locator(".source-row .drawer-item", { hasText: "lemmy.world" }).click();
   await page.waitForURL("https://lemmy.world/");
+  assert.deepEqual(await registered(), [["https://lemmy.world/*"]]);
   app = await reader();
   await app.getByText("Which distro for an old laptop?").first().waitFor();
   assert.ok(await app.getByText("c/linux@lemmy.ml").count());
@@ -348,11 +354,18 @@ try {
   await page.goto("https://lemmy.world/");
   await page.waitForTimeout(1000);
   assert.equal(await page.locator("#openrelay-extension").count(), 0);
+  // The default stays removed.
+  await page.goto("https://www.reddit.com/r/test/");
+  app = await reader();
+  await app.getByRole("button", { name: "Open menu" }).click();
+  await app.locator(".drawer-item.source-current").click();
+  await app.getByRole("button", { name: "Add Lemmy instance" }).waitFor();
+  assert.equal(await app.locator(".source-row").count(), 0);
 
   assert.deepEqual(lemmyWrites, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, switch back to Reddit, reader refused on a site not added, removal unregisters; no other writes, no page errors.",
+    "PASS: lemmy.world listed by default and opened from the switcher (access, content script registered), add sheet checks, feed, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, switch back to Reddit, reader refused on a site not added, removal unregisters and stays removed; no other writes, no page errors.",
   );
 } finally {
   await context.close();

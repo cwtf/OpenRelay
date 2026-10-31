@@ -66,6 +66,8 @@ private fun isReddit(url: Uri) =
 
 /** The reader's list of Lemmy instances in its storage (`lemmy-instances`). */
 private const val INSTANCES_KEY = "openrelay:lemmy-instances"
+/** Listed until the list is changed, as DEFAULT_INSTANCES in src/extension/sources.ts. */
+private val DEFAULT_INSTANCES = setOf("lemmy.world")
 private val INSTANCE_HOST = Regex("^(?!-)[a-z0-9-]{1,63}(?:\\.(?!-)[a-z0-9-]{1,63})+$")
 
 /**
@@ -374,7 +376,9 @@ class MainActivity : ComponentActivity() {
      * Reddit; adding one in the app is the consent.
      */
     private fun instanceHosts(): Set<String> {
-        val list = storage.getAll().optJSONArray(INSTANCES_KEY) ?: return emptySet()
+        val saved = storage.getAll()
+        if (!saved.has(INSTANCES_KEY)) return DEFAULT_INSTANCES
+        val list = saved.optJSONArray(INSTANCES_KEY) ?: return emptySet()
         return (0 until list.length())
             .mapNotNull { list.optString(it).takeIf { host -> INSTANCE_HOST.matches(host) } }
             .filter { !it.substringAfterLast('.').all(Char::isDigit) && !isReddit(Uri.parse("https://$it")) }

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-OpenRelay for Reddit replaces Reddit's UI with a React reader modelled on the Android app Relay for Reddit. It ships as a Manifest V3 browser extension (Chrome and Firefox), an Electron desktop app (`apps/desktop/`) and an Android WebView app (`apps/android/`), all built from the same `dist/`. Many behaviours (pane rules, swipe actions, comment collapsing) intentionally copy Relay, and code comments often cite Relay's own logic.
+OpenRelay for Reddit/Lemmy replaces Reddit's (and Lemmy's) UI with a React reader modelled on the Android app Relay for Reddit. It ships as a Manifest V3 browser extension (Chrome and Firefox), an Electron desktop app (`apps/desktop/`) and an Android WebView app (`apps/android/`), all built from the same `dist/`. Many behaviours (pane rules, swipe actions, comment collapsing) intentionally copy Relay, and code comments often cite Relay's own logic.
 
 ## Commands
 
@@ -67,6 +67,7 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 ### Lemmy
 
 - IDs: Lemmy's numbers are only unique per instance, so posts and comments get `t3_<id>_<tag>` / `t1_<id>_<tag>` (`hostTag()` of the host). They pass the UI's `t3_`/`t1_` checks and are valid offline keys, and can't collide with Reddit's. Comments arrive flat with a `path`; `normalizeComments` builds the tree and sets `moreReplies` from `child_count`.
+- Default: `DEFAULT_INSTANCES` (`["lemmy.world"]`, in `src/extension/sources.ts`, mirrored in `main.js` and `MainActivity.kt`) is the list until the `lemmy-instances` key is written; removing writes the list, so a removed default stays removed. In the extension it gets no access until first opened (`switchSource` asks).
 - Running there: the manifest's content script is Reddit-only. Adding an instance (`addInstance` in `client/lib/sources.ts`) asks for that origin through `ReaderHost.instances` (optional host permission), then `sync()` registers `content.js` with `chrome.scripting` on the granted instances (id `openrelay-lemmy`). `web_accessible_resources` therefore matches `https://*/*`, and `reader.tsx` renders nothing unless `trustedSource()` (Reddit, offline, or a host in the list).
 - Auth: lemmy-ui and the API share an origin, so the page provider's same-origin requests carry lemmy-ui's `jwt` cookie; `writes.ts` also reads it (`sessionToken`) and sends it as a bearer token, in the content script only. New read endpoints go in `READ_ROUTES` in `lemmy/lemmy.ts`; new writes in `lemmyAction` in `lemmy/writes.ts`, validating that IDs carry this instance's tag. The inbox's read state changes only through `read_message`/`unread_message`/`read_all_messages`.
 - Per-site storage: the account, subscriptions, favourites, recent communities and search history use `siteKey()` (`client/lib/site.ts`): Reddit's keys are unchanged, an instance's get `@host`.

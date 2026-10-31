@@ -71,9 +71,11 @@ const isReddit = (value) => {
  * browser permission to ask for.
  */
 const INSTANCES_KEY = "openrelay:lemmy-instances";
+/** Listed until the list is changed, as DEFAULT_INSTANCES in src/extension/sources.ts. */
+const DEFAULT_INSTANCES = ["lemmy.world"];
 const HOST = /^(?!-)[a-z0-9-]{1,63}(?:\.(?!-)[a-z0-9-]{1,63})+$/;
 let instances = new Set();
-const setInstances = (list) => {
+const setInstances = (list = DEFAULT_INSTANCES) => {
   instances = new Set(
     (Array.isArray(list) ? list : []).filter(
       (host) =>

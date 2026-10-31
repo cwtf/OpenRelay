@@ -6,6 +6,12 @@
 
 export const REDDIT_HOME = "https://www.reddit.com/";
 
+/**
+ * The Lemmy instances listed until the viewer changes the list. Removing one
+ * keeps it removed. (The desktop and Android apps keep the same default.)
+ */
+export const DEFAULT_INSTANCES: readonly string[] = ["lemmy.world"];
+
 const LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 
 const isReddit = (host: string): boolean =>
