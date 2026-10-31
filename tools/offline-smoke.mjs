@@ -1,9 +1,9 @@
 // Offline reading: save posts from the reader on a Reddit page, then read them
 // in reader.html#offline with Reddit unreachable, and as the fallback when
-// Reddit refuses the post. Images are saved with them and shown from the
-// device.
+// Reddit refuses the post. Images, and videos joined with their sound, are
+// saved with them and shown from the device.
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const { chromium } = await import(
@@ -78,8 +78,51 @@ const pic = {
   num_comments: 0,
   created_utc: 1700000000,
 };
-const posts = { [post.id]: post, [pic.id]: pic };
-const fixture = `<!doctype html><title>Reddit fixture</title><shreddit-post id="${post.name}" post-title="${post.title}" author="${post.author}" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="12" comment-count="1" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post><shreddit-post id="${pic.name}" post-title="${pic.title}" author="${pic.author}" subreddit-prefixed-name="r/test" permalink="${pic.permalink}" content-href="${pic.url}" post-type="image" score="5" comment-count="0" created-timestamp="2023-11-14T22:13:20Z"></shreddit-post>`;
+const vid = {
+  id: "vid789",
+  name: "t3_vid789",
+  title: "A video saved for later",
+  author: "example_user",
+  subreddit: "test",
+  permalink: "/r/test/comments/vid789/video/",
+  url: "https://v.redd.it/vid789",
+  post_hint: "hosted:video",
+  is_self: false,
+  domain: "v.redd.it",
+  secure_media: {
+    reddit_video: {
+      fallback_url: "https://v.redd.it/vid789/DASH_360.mp4?source=fallback",
+      hls_url: "https://v.redd.it/vid789/HLSPlaylist.m3u8",
+      width: 160,
+      height: 90,
+      is_gif: false,
+    },
+  },
+  preview: {
+    images: [{ source: { url: "https://preview.redd.it/vid.png?s=def", width: 160, height: 90 } }],
+  },
+  score: 3,
+  num_comments: 0,
+  created_utc: 1700000000,
+};
+const posts = { [post.id]: post, [pic.id]: pic, [vid.id]: vid };
+// The generated test video (tools/fixtures/video): fragmented video and audio
+// files, as v.redd.it serves them, and the DASH playlist naming the audio.
+const fragments = (track, parts) =>
+  Promise.all(
+    [`init_${track}.mp4`, ...Array.from({ length: parts }, (_, i) => `part_${track}_${i}.m4s`)].map(
+      (name) => readFile(resolve("tools/fixtures/video", name)),
+    ),
+  ).then(Buffer.concat);
+const vreddit = {
+  "/vid789/DASH_360.mp4": { type: "video/mp4", body: await fragments(0, 3) },
+  "/vid789/DASH_AUDIO_128.mp4": { type: "audio/mp4", body: await fragments(1, 4) },
+  "/vid789/DASHPlaylist.mpd": {
+    type: "application/dash+xml",
+    body: `<MPD><Period><AdaptationSet contentType="video"><Representation bandwidth="1"><BaseURL>DASH_360.mp4</BaseURL></Representation></AdaptationSet><AdaptationSet contentType="audio"><Representation bandwidth="128000"><BaseURL>DASH_AUDIO_128.mp4</BaseURL></Representation></AdaptationSet></Period></MPD>`,
+  },
+};
+const fixture = `<!doctype html><title>Reddit fixture</title><shreddit-post id="${post.name}" post-title="${post.title}" author="${post.author}" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="12" comment-count="1" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post><shreddit-post id="${pic.name}" post-title="${pic.title}" author="${pic.author}" subreddit-prefixed-name="r/test" permalink="${pic.permalink}" content-href="${pic.url}" post-type="image" score="5" comment-count="0" created-timestamp="2023-11-14T22:13:20Z"></shreddit-post><shreddit-post id="${vid.name}" post-title="${vid.title}" author="${vid.author}" subreddit-prefixed-name="r/test" permalink="${vid.permalink}" content-href="${vid.url}" post-type="video" score="3" comment-count="0" created-timestamp="2023-11-14T22:13:20Z"></shreddit-post>`;
 // 1x1 PNG served for every image.
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -90,6 +133,23 @@ let network = "online";
 const offlineRequests = [];
 const commentLoads = [];
 const mediaLoads = [];
+const videoLoads = [];
+await context.route(/^https:\/\/v\.redd\.it\//, async (route) => {
+  const url = new URL(route.request().url());
+  if (network === "offline") {
+    offlineRequests.push(url.href);
+    return route.abort("internetdisconnected");
+  }
+  videoLoads.push(url.pathname);
+  const file = vreddit[url.pathname];
+  return file
+    ? route.fulfill({
+        contentType: file.type,
+        body: file.body,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      })
+    : route.fulfill({ status: 404, body: "" });
+});
 await context.route(/^https:\/\/(i|preview|b\.thumbs)\.(redd\.it|redditmedia\.com)\//, async (route) => {
   const url = route.request().url();
   if (network === "offline") {
@@ -117,7 +177,7 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
           { data: { children: shown === post ? [comment] : [] } },
         ]
       : url.pathname.endsWith("/hot.json")
-        ? { data: { children: [post, pic].map((data) => ({ kind: "t3", data })), after: null } }
+        ? { data: { children: [post, pic, vid].map((data) => ({ kind: "t3", data })), after: null } }
         : {};
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   }
@@ -138,6 +198,13 @@ async function reader() {
   throw new Error("Reader iframe did not load");
 }
 const toast = (app, text) => app.locator(".toast", { hasText: text }).waitFor();
+/** Save the feed's nth post from its menu, once the last toast is gone. */
+const save = async (app, nth) => {
+  await app.locator(".toast").waitFor({ state: "detached" });
+  await app.getByRole("button", { name: "More actions" }).nth(nth).click();
+  await app.getByRole("button", { name: /Save for offline/ }).click();
+  await toast(app, "Saved for offline reading");
+};
 
 try {
   await page.goto("https://www.reddit.com/r/test/");
@@ -161,9 +228,7 @@ try {
   await extensions.close();
 
   // Save from the card's menu; the request asks for one page of comments.
-  await app.getByRole("button", { name: "More actions" }).first().click();
-  await app.getByRole("button", { name: /Save for offline/ }).click();
-  await toast(app, "Saved for offline reading");
+  await save(app, 0);
   assert.match(commentLoads.at(-1), /limit=200/);
   // The menu now offers to update or remove the copy.
   await app.getByRole("button", { name: "More actions" }).first().click();
@@ -171,12 +236,19 @@ try {
   await app.getByRole("button", { name: "Remove offline copy" }).waitFor();
   await page.keyboard.press("Escape");
   // The picture is saved with its images.
-  await app.getByRole("button", { name: "More actions" }).nth(1).click();
-  await app.getByRole("button", { name: /Save for offline/ }).click();
-  await toast(app, "Saved for offline reading");
+  await save(app, 1);
   assert.deepEqual(mediaLoads.sort(), [
     "https://i.redd.it/pic.png",
     "https://preview.redd.it/pic.png?width=640&s=abc",
+  ]);
+
+  // The video is saved joined with its sound, as the download button does it.
+  await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
+  await save(app, 2);
+  assert.deepEqual(videoLoads.sort(), [
+    "/vid789/DASHPlaylist.mpd",
+    "/vid789/DASH_360.mp4",
+    "/vid789/DASH_AUDIO_128.mp4",
   ]);
 
   // The drawer lists them. (Back at the top, where the app bar shows again.)
@@ -201,7 +273,7 @@ try {
   offline.on("pageerror", (err) => errors.push(err.message));
   await offline.goto(`chrome-extension://${extensionId}/reader.html#offline`);
   await offline.getByText("Saved for offline", { exact: true }).waitFor();
-  await offline.getByText("2 posts", { exact: true }).waitFor();
+  await offline.getByText("3 posts", { exact: true }).waitFor();
   // The picture's card and page show its saved image, from this device.
   const loaded = (img) =>
     img.evaluate((el) => el.decode().then(() => [el.src.slice(0, 5), el.naturalWidth]));
@@ -211,6 +283,26 @@ try {
     .getByRole("button", { name: pic.title, exact: true })
     .click({ position: { x: 100, y: 45 } });
   assert.deepEqual(await loaded(offline.locator(".screen.is-detail img").first()), ["blob:", 1]);
+  // The video plays from the device, with both tracks, and no stream is asked for.
+  await offline
+    .getByRole("button", { name: vid.title, exact: true })
+    .click({ position: { x: 100, y: 45 } });
+  await offline.locator(".screen.is-detail").getByRole("button", { name: "Play video" }).click();
+  const player = offline.locator("video").last();
+  await player.evaluate((el) =>
+    el.readyState >= 1 ? null : new Promise((r) => el.addEventListener("loadedmetadata", r, { once: true })),
+  );
+  const played = await player.evaluate((el) => ({ src: el.src.slice(0, 5), duration: Math.round(el.duration) }));
+  assert.deepEqual(played, { src: "blob:", duration: 6 });
+  const tracks = await offline.evaluate(async () => {
+    const stored = await chrome.storage.local.get(null);
+    const file = Object.entries(stored).find(
+      ([key, value]) => key.startsWith("openrelay-offline:media:vid789_") && value.type === "video/mp4",
+    )?.[1];
+    return file ? atob(file.data).split("trak").length - 1 : 0;
+  });
+  assert.equal(tracks, 2);
+  await offline.keyboard.press("Escape");
   await offline.getByRole("button", { name: post.title, exact: true }).click();
   await offline.getByText(comment.data.body, { exact: true }).waitFor();
   await offline.getByText("Body text kept offline.", { exact: true }).waitFor();
@@ -225,7 +317,7 @@ try {
   // Removing the copies empties the list, files and all.
   await offline.getByRole("button", { name: "Post actions" }).click();
   await offline.getByRole("button", { name: "Remove offline copy" }).click();
-  await offline.getByText("1 post", { exact: true }).waitFor();
+  await offline.getByText("2 posts", { exact: true }).waitFor();
   await offline.getByRole("button", { name: "Remove all offline posts" }).click();
   await offline.getByRole("button", { name: "Remove all", exact: true }).click();
   await offline.getByText("Nothing saved yet", { exact: true }).waitFor();

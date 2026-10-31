@@ -148,3 +148,24 @@ test("files saved with a post are shown from the device and removed with it", as
   await removeOffline(["img"]);
   assert.deepEqual([...data.keys()].filter((key) => key !== "index"), ["post:t3_x", "post:t3_y"]);
 });
+
+test("a saved video plays from the device without its stream", async () => {
+  const mp4 = "https://v.redd.it/v1/DASH_360.mp4";
+  const video = {
+    ...page("vid"),
+    post: {
+      id: "t3_vid",
+      title: "vid",
+      media: { kind: "video", video: { mp4, hls: "https://v.redd.it/v1/HLSPlaylist.m3u8" } },
+    },
+  } as unknown as PostResponse;
+  await writeOfflineCopy(video, 1, [{ url: mp4, file: { type: "video/mp4", data: btoa("mp4") } }]);
+  const copy = (await readOfflineCopy("vid"))!;
+  const shown = (await withOfflineMedia(copy, copy.media)).post.media as any;
+  assert.match(shown.video.mp4, /^blob:/);
+  assert.equal("hls" in shown.video, false);
+  // Without a saved file, the stream stays.
+  const unsaved = (await withOfflineMedia(copy, {})).post.media as any;
+  assert.equal(unsaved.video.hls, "https://v.redd.it/v1/HLSPlaylist.m3u8");
+  await removeOffline(["vid"]);
+});

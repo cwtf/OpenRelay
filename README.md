@@ -101,7 +101,7 @@ The debug APK is **apps/android/app/build/outputs/apk/debug/app-debug.apk**. `np
 
 ## Offline reading
 
-Posts can be saved to read later without a connection. Choose **Save for offline** in a post's menu (⋮, or a long press on its card), or **Save feed for offline** in the main menu to save the first 25 posts of the feed you're looking at. Each post is saved with its first 200 comments, one post a second to stay within Reddit's rate limit, and with the images it shows from Reddit's image hosts (i.redd.it, preview.redd.it, external-preview.redd.it and Reddit's thumbnail hosts): the post's own pictures and gallery, link previews, and images in comments, up to 40 images, 10 MB each and 40 MB a post. The extension asks for access to those hosts the first time you save; without it, posts are saved without images. **Saved for offline** in the main menu lists them. A saved post's menu can update or remove its copy, and the list's trash button removes them all.
+Posts can be saved to read later without a connection. Choose **Save for offline** in a post's menu (⋮, or a long press on its card), or **Save feed for offline** in the main menu to save the first 25 posts of the feed you're looking at. Each post is saved with its first 200 comments, one post a second to stay within Reddit's rate limit, and with the images it shows from Reddit's image hosts (i.redd.it, preview.redd.it, external-preview.redd.it and Reddit's thumbnail hosts): the post's own pictures and gallery, link previews, and images in comments, up to 40 images, 10 MB each and 40 MB a post. The extension asks for access to those hosts the first time you save; without it, posts are saved without images. A Reddit-hosted video is saved too, joined with its sound as the download button does it, up to 40 MB when you save a single post or 15 MB per video when you save a feed; larger videos are left out. Offline, the saved video plays without streaming. **Saved for offline** in the main menu lists them. A saved post's menu can update or remove its copy, and the list's trash button removes them all.
 
 Without a connection, OpenRelay opens the saved list on its own:
 
@@ -109,7 +109,7 @@ Without a connection, OpenRelay opens the saved list on its own:
 - **Desktop app:** when Reddit doesn't load, the window shows the list. **View → Saved for Offline** opens it at any time.
 - **Android app:** when Reddit doesn't load, the app shows the list. **Try Reddit** reloads Reddit.
 
-The list's globe button opens Reddit again. When Reddit is reachable but refuses a post you saved, the post screen shows the saved copy. Videos, images hosted elsewhere (Imgur, Giphy), "more comments" and voting or replying still need Reddit.
+The list's globe button opens Reddit again. When Reddit is reachable but refuses a post you saved, the post screen shows the saved copy. Videos and images hosted elsewhere (YouTube, Imgur, Giphy), "more comments" and voting or replying still need Reddit.
 
 ## Data and permissions
 
@@ -151,7 +151,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 77 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 78 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

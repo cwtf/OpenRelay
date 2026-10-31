@@ -20,7 +20,7 @@ import {
   type OfflineEntry,
   type OfflineFile,
 } from "./offlineStore";
-import { toast } from "./platform";
+import { redditVideo, toast } from "./platform";
 
 import { offlineMode } from "../../extension/bridge";
 
@@ -37,6 +37,35 @@ const FILE_LIMIT = 40;
 const POST_BYTES_LIMIT = 40 * 1024 * 1024;
 /** Images fetched at once. */
 const FETCHES = 4;
+/** A post's video, with its sound: smaller when saving a whole feed. */
+const VIDEO_LIMIT = 40 * 1024 * 1024;
+const FEED_VIDEO_LIMIT = 15 * 1024 * 1024;
+
+const toBase64 = (bytes: Uint8Array): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result);
+      resolve(url.slice(url.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(new Blob([bytes as Uint8Array<ArrayBuffer>]));
+  });
+
+/**
+ * A post's v.redd.it video joined with its sound (as the download button
+ * does), or null when it has none or it's larger than `max` bytes.
+ */
+async function fetchVideo(page: PostResponse, max: number): Promise<OfflineFile | null> {
+  const media = page.post.media;
+  if (media.kind !== "video" || !media.video.mp4) return null;
+  const video = await redditVideo(media.video.mp4, max).catch(() => null);
+  if (!video) return null;
+  return {
+    url: media.video.mp4,
+    file: { type: "video/mp4", data: await toBase64(video.data) },
+  };
+}
 
 /** The host's image fetcher, asked for now (in the click), or null. */
 const mediaAccess = (): Promise<MediaFetcher | null> => {
@@ -64,7 +93,8 @@ async function fetchFiles(fetcher: MediaFetcher, page: PostResponse): Promise<Of
       const url = urls[index]!;
       try {
         const file = await fetcher.fetch(url);
-        if (!file.type.startsWith("image/")) continue;
+        // Images, and the silent MP4s Reddit serves for GIFs.
+        if (!/^(image|video)\//.test(file.type)) continue;
         bytes += (file.data.length * 3) / 4;
         if (bytes <= POST_BYTES_LIMIT) files[index] = { url, file };
       } catch {
@@ -149,6 +179,8 @@ export async function saveOffline(posts: PostSummary[] | string[]): Promise<void
       try {
         const page = await fetchPostToSave(id, sort, COMMENT_LIMIT);
         const files = fetcher ? await fetchFiles(fetcher, page) : [];
+        const video = await fetchVideo(page, ids.length === 1 ? VIDEO_LIMIT : FEED_VIDEO_LIMIT);
+        if (video) files.push(video);
         await writeOfflineCopy(page, Date.now(), files);
         saved++;
       } catch (error) {

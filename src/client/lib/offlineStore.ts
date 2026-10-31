@@ -219,16 +219,30 @@ export const clearOffline = (): Promise<void> =>
     publish([]);
   });
 
-const toBlob = ({ type, data }: MediaFile): Blob => {
-  const bytes = atob(data);
-  const array = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) array[i] = bytes.charCodeAt(i);
-  return new Blob([array], { type });
+const toBlob = async ({ type, data }: MediaFile): Promise<Blob> =>
+  (await fetch(`data:${type};base64,${data}`)).blob();
+
+/**
+ * A saved video has its sound in the file: without the stream (`hls`),
+ * players use it.
+ */
+const withoutStreams = <T>(value: T): T => {
+  const walk = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(walk);
+    if (!node || typeof node !== "object") return node;
+    const entries = Object.entries(node);
+    const saved = entries.some(([key, v]) => key === "mp4" && String(v).startsWith("blob:"));
+    return Object.fromEntries(
+      entries.filter(([key]) => !(saved && key === "hls")).map(([k, v]) => [k, walk(v)]),
+    );
+  };
+  return walk(value) as T;
 };
 
 /**
  * `value` with the files in `media` shown from this device: their URLs
- * become `blob:` URLs. Files that can't be read keep their URLs.
+ * become `blob:` URLs, and saved videos lose their streams. Files that
+ * can't be read keep their URLs.
  */
 export const withOfflineMedia = async <T>(
   value: T,
@@ -242,12 +256,12 @@ export const withOfflineMedia = async <T>(
     if (!local) {
       const file = (await store.get(key).catch(() => undefined)) as MediaFile | undefined;
       if (typeof file?.data !== "string" || typeof file.type !== "string") continue;
-      local = URL.createObjectURL(toBlob(file));
+      local = URL.createObjectURL(await toBlob(file));
       shown.set(key, local);
     }
     map.set(url, local);
   }
-  return replaceStrings(value, map);
+  return withoutStreams(replaceStrings(value, map));
 };
 
 /** The loaded index (empty until `loadOfflineIndex` resolves). */

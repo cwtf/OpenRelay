@@ -67,25 +67,30 @@ export async function downloadImage(value: string): Promise<void> {
 
 const VREDDIT = /^https:\/\/v\.redd\.it\/([\w-]+)\//;
 
-const fetchBytes = async (url: string): Promise<Uint8Array> => {
+const fetchBytes = async (url: string, max = Infinity): Promise<Uint8Array> => {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  if (Number(response.headers.get("content-length")) > max) throw new Error("Too large");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length > max) throw new Error("Too large");
+  return bytes;
 };
 
 /**
  * A v.redd.it video with its sound. Reddit keeps the audio in a separate file
  * named in the DASH playlist; v.redd.it allows CORS, so both are fetched here
- * and joined. Returns null when the video can't be fetched.
+ * and joined. Returns null when the video can't be fetched, or when the video
+ * file is larger than `max` bytes.
  */
-const redditVideo = async (
+export const redditVideo = async (
   url: string,
+  max = Infinity,
 ): Promise<{ data: Uint8Array; name: string; silent: boolean } | null> => {
   const id = VREDDIT.exec(url)?.[1];
   if (!id) return null;
   const base = `https://v.redd.it/${id}/`;
   const [video, audioName] = await Promise.all([
-    fetchBytes(url).catch(() => null),
+    fetchBytes(url, max).catch(() => null),
     fetch(`${base}DASHPlaylist.mpd`)
       .then((response) => (response.ok ? response.text() : ""))
       .then(audioFromPlaylist)
