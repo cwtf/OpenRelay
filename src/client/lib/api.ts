@@ -35,7 +35,7 @@ import {
 } from "../../extension/reddit";
 import { searchPagePath, type SearchPage } from "../../extension/search";
 import type { Snapshot } from "../../extension/snapshot";
-import { readOfflineCopy } from "./offlineStore";
+import { readOfflineCopy, withOfflineMedia } from "./offlineStore";
 import { fullDate } from "./format";
 
 export class ApiFailure extends Error {
@@ -194,7 +194,8 @@ async function postsById(ids: string[]): Promise<PostSummary[]> {
 async function offlineCopy(id: string): Promise<PostResponse | null> {
   const copy = await readOfflineCopy(id).catch(() => null);
   if (!copy) return null;
-  const { savedAt, ...page } = copy;
+  const { savedAt, media, ...saved } = copy;
+  const page = await withOfflineMedia(saved, media);
   return {
     ...page,
     notice: `Saved for offline reading ${fullDate(savedAt)}. Votes, replies and more comments need Reddit.`,

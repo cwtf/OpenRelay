@@ -7,9 +7,12 @@ import {
   clearOffline,
   isSavedOffline,
   loadOfflineIndex,
+  mediaUrls,
   offlineEntries,
   readOfflineCopy,
   removeOffline,
+  replaceStrings,
+  withOfflineMedia,
   writeOfflineCopy,
 } from "./offlineStore.ts";
 
@@ -85,4 +88,63 @@ test("concurrent saves both reach the index", async () => {
     (data.get("index") as { post: { id: string } }[]).map((entry) => entry.post.id).sort(),
     ["t3_x", "t3_y"],
   );
+});
+
+test("media URLs are Reddit's image hosts only, once each, in order", () => {
+  const page = {
+    post: {
+      url: "https://i.redd.it/a.png",
+      thumb: { url: "https://preview.redd.it/a.png?width=140" },
+      permalink: "https://www.reddit.com/r/x/comments/1/",
+      media: { kind: "image", image: { url: "https://i.redd.it/a.png" } },
+    },
+    comments: [
+      { body: "see https://i.redd.it/b.png", media: { m1: { url: "https://preview.redd.it/c.gif" } } },
+      { media: { m2: { url: "https://i.giphy.com/media/x/giphy.gif" } } },
+    ],
+  };
+  assert.deepEqual(mediaUrls(page), [
+    "https://i.redd.it/a.png",
+    "https://preview.redd.it/a.png?width=140",
+    "https://preview.redd.it/c.gif",
+  ]);
+  const replaced = replaceStrings(page, new Map([["https://i.redd.it/a.png", "blob:a"]]));
+  assert.equal(replaced.post.url, "blob:a");
+  assert.equal(replaced.post.media.image.url, "blob:a");
+  assert.equal(page.post.url, "https://i.redd.it/a.png");
+});
+
+test("files saved with a post are shown from the device and removed with it", async () => {
+  const file = (text: string) => ({ type: "image/png", data: btoa(text) });
+  const withImages = {
+    ...page("img"),
+    post: {
+      id: "t3_img",
+      title: "img",
+      thumb: { url: "https://preview.redd.it/t.png" },
+    },
+    comments: [{ id: "t1_1", media: { m: { url: "https://i.redd.it/c.png" } } }],
+  } as unknown as PostResponse;
+  await writeOfflineCopy(withImages, 1, [
+    { url: "https://preview.redd.it/t.png", file: file("thumb") },
+    { url: "https://i.redd.it/c.png", file: file("comment") },
+  ]);
+  assert.deepEqual(data.get("media:img_0"), file("thumb"));
+  // The list entry knows only its card's files.
+  assert.deepEqual(offlineEntries()[0]!.media, { "https://preview.redd.it/t.png": "media:img_0" });
+  const copy = (await readOfflineCopy("img"))!;
+  const shown = await withOfflineMedia(copy, copy.media);
+  const local = (shown.post as any).thumb.url as string;
+  assert.match(local, /^blob:/);
+  assert.equal(await (await fetch(local)).text(), "thumb");
+  assert.match((shown.comments[0] as any).media.m.url, /^blob:/);
+
+  // Saved again with one file: the other one goes.
+  await writeOfflineCopy(withImages, 2, [
+    { url: "https://i.redd.it/c.png", file: file("comment") },
+  ]);
+  assert.equal(data.has("media:img_1"), false);
+  assert.deepEqual(data.get("media:img_0"), file("comment"));
+  await removeOffline(["img"]);
+  assert.deepEqual([...data.keys()].filter((key) => key !== "index"), ["post:t3_x", "post:t3_y"]);
 });

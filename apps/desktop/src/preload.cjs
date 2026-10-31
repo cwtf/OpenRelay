@@ -31,6 +31,9 @@ if (location.origin === READER_ORIGIN) {
       set: (key, value) => ipcRenderer.invoke("openrelay:offline-set", key, value),
       remove: (keys) => ipcRenderer.invoke("openrelay:offline-remove", keys),
     },
+    media: async () => ({
+      fetch: (url) => ipcRenderer.invoke("openrelay:media-fetch", url),
+    }),
     downloads: async () => ({
       save: (file) =>
         "url" in file

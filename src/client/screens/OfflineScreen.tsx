@@ -4,7 +4,11 @@ import { Icon } from "../components/Icon";
 import { PostCard } from "../components/PostCard";
 import { ConfirmSheet, ScreenHeader } from "../components/Relay";
 import { plural } from "../lib/format";
-import { removeFromOffline, useOfflineEntries } from "../lib/offline";
+import {
+  removeFromOffline,
+  useOfflineCards,
+  useOfflineEntries,
+} from "../lib/offline";
 
 /**
  * Posts saved for offline reading, newest first. Opened without Reddit
@@ -14,6 +18,7 @@ export const OfflineScreen = ({ base = false }: { base?: boolean }) => {
   const nav = useNav();
   const { prefs } = usePrefs();
   const entries = useOfflineEntries();
+  const cards = useOfflineCards(entries);
   const title = "Saved for offline";
   const subtitle = plural(entries.length, "post");
   const clear = entries.length ? (
@@ -29,9 +34,7 @@ export const OfflineScreen = ({ base = false }: { base?: boolean }) => {
             title="Remove all offline posts?"
             message={`${subtitle} saved on this device will be removed.`}
             confirm="Remove all"
-            onConfirm={() =>
-              void removeFromOffline(entries.map((entry) => entry.post.id))
-            }
+            onConfirm={() => void removeFromOffline("all")}
             onClosed={onClosed}
           />
         ))
@@ -77,10 +80,10 @@ export const OfflineScreen = ({ base = false }: { base?: boolean }) => {
       <div className="scroller">
         <div className="feed" data-layout={prefs.layout}>
           {entries.length ? (
-            entries.map((entry) => (
+            cards?.map((post) => (
               <PostCard
-                key={entry.post.id}
-                post={entry.post}
+                key={post.id}
+                post={post}
                 layout={prefs.layout}
                 showThumbnails={prefs.showThumbnails}
                 showSub

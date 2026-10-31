@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Message
+import android.util.Base64
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -35,7 +36,11 @@ import androidx.webkit.WebViewFeature
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
 private const val TAG = "OpenRelay"
 private const val READER_HOST = "appassets.androidplatform.net"
@@ -45,6 +50,15 @@ private const val READER_URL = "$READER_ORIGIN/assets/openrelay/reader.html"
 private const val OFFLINE_URL = "$READER_URL#offline"
 private val REDDIT_ORIGINS =
     setOf("https://www.reddit.com", "https://old.reddit.com", "https://reddit.com")
+/** Reddit's image hosts, as MEDIA_HOSTS in src/hosts/types.ts. */
+private val MEDIA_HOSTS = setOf(
+    "i.redd.it",
+    "preview.redd.it",
+    "external-preview.redd.it",
+    "a.thumbs.redditmedia.com",
+    "b.thumbs.redditmedia.com",
+)
+private const val MEDIA_MAX_BYTES = 10 * 1024 * 1024
 
 private fun isReddit(url: Uri) =
     url.scheme == "https" && url.host.let { it == "reddit.com" || it?.endsWith(".reddit.com") == true }
@@ -70,6 +84,7 @@ class MainActivity : ComponentActivity() {
     private var redditFailed = false
     private var readerInset = 0
     private var pendingBack: Runnable? = null
+    private val network = Executors.newFixedThreadPool(4)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -211,6 +226,19 @@ class MainActivity : ComponentActivity() {
             }
             if (request.optString("kind") != "rpc") return@addWebMessageListener
             val response = JSONObject().put("kind", "rpc").put("id", request.opt("id"))
+            if (request.optString("method") == "media.fetch") {
+                // Off the main thread; the answer goes back on it.
+                val url = request.optString("args")
+                network.execute {
+                    try {
+                        response.put("value", fetchMedia(url))
+                    } catch (error: Exception) {
+                        response.put("error", error.message ?: "Request failed")
+                    }
+                    runOnUiThread { reply.postMessage(response.toString()) }
+                }
+                return@addWebMessageListener
+            }
             try {
                 response.put("value", handleStorage(request.getString("method"), request.opt("args")))
             } catch (error: Exception) {
@@ -230,6 +258,36 @@ class MainActivity : ComponentActivity() {
             .let { JSONObject.NULL }
         "offline.remove" -> offline.remove(args as JSONArray).let { JSONObject.NULL }
         else -> throw IllegalArgumentException("Unsupported method")
+    }
+
+    /** An image from [MEDIA_HOSTS] for an offline post: `{type, data}` with the bytes as base64. */
+    private fun fetchMedia(value: String): JSONObject {
+        val uri = Uri.parse(value)
+        require(uri.scheme == "https" && uri.host in MEDIA_HOSTS) { "Not a Reddit image" }
+        val connection = URL(value).openConnection() as HttpURLConnection
+        try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            val status = connection.responseCode
+            if (status != 200) throw IllegalStateException("HTTP $status")
+            if (connection.contentLengthLong > MEDIA_MAX_BYTES) throw IllegalStateException("Too large")
+            val bytes = ByteArrayOutputStream()
+            connection.inputStream.use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    bytes.write(buffer, 0, read)
+                    if (bytes.size() > MEDIA_MAX_BYTES) throw IllegalStateException("Too large")
+                }
+            }
+            return JSONObject()
+                .put("type", connection.contentType?.substringBefore(';')?.trim() ?: "")
+                .put("data", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP))
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun showReader(shown: Boolean) {
@@ -379,6 +437,7 @@ class MainActivity : ComponentActivity() {
     ).toInt()
 
     override fun onDestroy() {
+        network.shutdownNow()
         redditView.destroy()
         readerView.destroy()
         super.onDestroy()

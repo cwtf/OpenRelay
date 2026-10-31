@@ -168,6 +168,33 @@ ipcMain.handle("openrelay:offline-remove", async (event, keys) => {
   await Promise.all(keys.map((key) => rm(offlinePath(key), { force: true })));
 });
 
+// Images for offline posts, from Reddit's image hosts only (MEDIA_HOSTS in
+// src/hosts/types.ts), without cookies, as base64.
+const MEDIA_HOSTS = new Set([
+  "i.redd.it",
+  "preview.redd.it",
+  "external-preview.redd.it",
+  "a.thumbs.redditmedia.com",
+  "b.thumbs.redditmedia.com",
+]);
+const MEDIA_MAX_BYTES = 10 * 1024 * 1024;
+ipcMain.handle("openrelay:media-fetch", async (event, value) => {
+  readerFrame(event);
+  const url = new URL(String(value));
+  if (url.protocol !== "https:" || !MEDIA_HOSTS.has(url.hostname))
+    throw new Error("Not a Reddit image");
+  const response = await session
+    .fromPartition(PARTITION)
+    .fetch(url.href, { credentials: "omit", redirect: "error" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (Number(response.headers.get("content-length")) > MEDIA_MAX_BYTES)
+    throw new Error("Too large");
+  const data = Buffer.from(await response.arrayBuffer());
+  if (data.length > MEDIA_MAX_BYTES) throw new Error("Too large");
+  const type = response.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
+  return { type, data: data.toString("base64") };
+});
+
 // Downloads: remote files through Chromium's download manager, bytes the
 // reader built (a video with sound) through a save dialog.
 const downloadNames = new Map();

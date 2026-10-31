@@ -16,6 +16,13 @@
   "optional_permissions": [
     "downloads"
   ],
+  "optional_host_permissions": [
+    "https://i.redd.it/*",
+    "https://preview.redd.it/*",
+    "https://external-preview.redd.it/*",
+    "https://a.thumbs.redditmedia.com/*",
+    "https://b.thumbs.redditmedia.com/*"
+  ],
   "action": {
     "default_icon": {
       "16": "icons/icon-16.png",

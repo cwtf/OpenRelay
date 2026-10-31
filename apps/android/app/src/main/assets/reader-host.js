@@ -56,6 +56,8 @@
       set: (key, value) => call("offline.set", { key, value }).then(() => undefined),
       remove: (keys) => call("offline.remove", keys).then(() => undefined),
     }),
+    media: async () =>
+      Object.freeze({ fetch: (url) => call("media.fetch", url) }),
     downloads: async () => "unavailable",
     onBack: (listener) => {
       backListener = listener;

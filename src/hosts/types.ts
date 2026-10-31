@@ -37,6 +37,29 @@ export type OfflineStore = {
 /** Offline keys are safe as file names: `index`, `post:t3_abc123`. */
 export const OFFLINE_KEY = /^[a-z]+(?::[A-Za-z0-9_]{1,40})?$/;
 
+/**
+ * Reddit's image hosts. Images on them are saved with offline posts, fetched
+ * by the host because they don't allow the reader to fetch them (no CORS).
+ */
+export const MEDIA_HOSTS: readonly string[] = [
+  "i.redd.it",
+  "preview.redd.it",
+  "external-preview.redd.it",
+  "a.thumbs.redditmedia.com",
+  "b.thumbs.redditmedia.com",
+];
+/** Larger files aren't saved. */
+export const MEDIA_MAX_BYTES = 10 * 1024 * 1024;
+
+/** A fetched file: its media type and its bytes as base64. */
+export type MediaFile = { type: string; data: string };
+
+/**
+ * Fetches an image from `MEDIA_HOSTS` (https only, at most `MEDIA_MAX_BYTES`,
+ * without cookies), rejecting anything else.
+ */
+export type MediaFetcher = { fetch(url: string): Promise<MediaFile> };
+
 /** A file to save: a remote URL, or bytes the reader built (a video with sound). */
 export type SaveFile =
   | { url: string; filename?: string }
@@ -85,6 +108,12 @@ export type ReaderHost = {
   storage: HostStorage | null;
   /** Absent or `null` when the host can't keep posts for offline reading. */
   offline?: OfflineStore | null;
+  /**
+   * Access to fetching images for offline posts. As with `downloads`, call
+   * it straight from the click handler: the extension asks for permission.
+   * Absent when the host can't fetch them.
+   */
+  media?(): Promise<MediaFetcher | "declined" | "unavailable">;
   /**
    * Access to saving files. Call it straight from the click handler, before
    * awaiting anything: Chrome's permission prompt needs the user gesture.

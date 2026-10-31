@@ -1,4 +1,11 @@
-import type { Downloads, HostStorage, OfflineStore, ReaderHost } from "./types.ts";
+import { MEDIA_HOSTS, MEDIA_MAX_BYTES } from "./types.ts";
+import type {
+  Downloads,
+  HostStorage,
+  MediaFetcher,
+  OfflineStore,
+  ReaderHost,
+} from "./types.ts";
 
 /** The reader frame's host: a wrapper app's, or the browser extension's. */
 export function readerHost(): ReaderHost {
@@ -26,7 +33,7 @@ type ChromeApi = {
     };
   };
   permissions?: {
-    request(permissions: { permissions: string[] }): Promise<boolean>;
+    request(permissions: { permissions?: string[]; origins?: string[] }): Promise<boolean>;
   };
   downloads?: {
     download(options: { url: string; filename?: string }): Promise<number>;
@@ -77,6 +84,43 @@ function extensionOffline(api: ChromeApi | null): OfflineStore | null {
   };
 }
 
+/** `url` if it's https on one of `MEDIA_HOSTS`, else an error. */
+export function mediaUrl(url: string): URL {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || !MEDIA_HOSTS.includes(parsed.hostname))
+    throw new Error("Not a Reddit image");
+  return parsed;
+}
+
+/** Fetches images behind the optional host permission for `MEDIA_HOSTS`. */
+async function extensionMedia(
+  api: ChromeApi | null,
+): Promise<MediaFetcher | "declined" | "unavailable"> {
+  if (!api?.permissions) return "unavailable";
+  const granted = await api.permissions.request({
+    origins: MEDIA_HOSTS.map((host) => `https://${host}/*`),
+  });
+  if (!granted) return "declined";
+  return {
+    async fetch(url) {
+      const response = await fetch(mediaUrl(url), {
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (blob.size > MEDIA_MAX_BYTES) throw new Error("Too large");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      return { type: blob.type, data: dataUrl.slice(dataUrl.indexOf(",") + 1) };
+    },
+  };
+}
+
 /** Saves with `chrome.downloads`, behind the optional `downloads` permission. */
 async function extensionDownloads(
   api: ChromeApi | null,
@@ -109,6 +153,7 @@ function extensionHost(): ReaderHost {
     name: "extension",
     storage: extensionStorage(api),
     offline: extensionOffline(api),
+    media: () => extensionMedia(api),
     downloads: () => extensionDownloads(api),
   };
 }
