@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "type-check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/extension/*.test.ts src/client/lib/*.test.ts src/hosts/*.test.ts",
+    "test": "node --experimental-strip-types --test src/extension/*.test.ts src/providers/*/*.test.ts src/client/lib/*.test.ts src/hosts/*.test.ts",
     "check": "npm run type-check && npm test && npm run build",
     "test:browser": "node tools/browser-smoke.mjs && node tools/vote-smoke.mjs && node tools/account-smoke.mjs && node tools/media-smoke.mjs && node tools/video-smoke.mjs && node tools/offline-smoke.mjs && node tools/archive-smoke.mjs",
     "build:apps": "node tools/build-apps.mjs"

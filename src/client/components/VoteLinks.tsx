@@ -2,7 +2,7 @@ import { pageUrl } from "../../extension/bridge";
 import { compact } from "../lib/format";
 import { redditUrl } from "../lib/platform";
 import { castVote, useVote } from "../lib/votes";
-import type { Vote } from "../../extension/votes";
+import type { Vote } from "../../providers/reddit/votes";
 import { Icon } from "./Icon";
 
 /** Current vote and a caster, shared by the arrows and swipe actions. */

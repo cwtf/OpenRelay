@@ -196,7 +196,8 @@ Validated: injection, loaded-page feeds, settings persistence, the subscriptions
 
 - `src/client/` — the reader UI.
 - `src/shared/api.ts` — the reader's presentation models.
-- `src/extension/` — Reddit normalization, DOM extraction, message bridge, content script and toolbar worker.
+- `src/providers/` — what's specific to each site OpenRelay reads: for Reddit (`reddit/`), its normalization, DOM extraction, search fallback, votes and writes, and its halves of the page bridge.
+- `src/extension/` — message bridge, content script, source switcher checks and toolbar worker.
 - `src/hosts/` — what the reader and content script need from the app running them (storage, downloads, reader URL, toggle), with the browser-extension implementation.
 - `public/manifest.json` — extension manifest.
 - `tools/build.mjs` — extension build, for Chrome and Firefox.

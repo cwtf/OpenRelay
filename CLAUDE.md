@@ -22,7 +22,7 @@ Run one unit test file, or one test by name:
 
 ```sh
 node --experimental-strip-types --test src/client/lib/panes.test.ts
-node --experimental-strip-types --test --test-name-pattern="modhash" src/extension/writes.test.ts
+node --experimental-strip-types --test --test-name-pattern="modhash" src/providers/reddit/writes.test.ts
 ```
 
 Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`, `archive-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
@@ -51,9 +51,18 @@ Unit tests run the TypeScript sources directly through Node's type stripping, wi
 
 The code runs in three contexts. `tools/build.mjs` builds them separately: the reader as a Vite app from `src/client/reader.html`, and `content.ts` and `background.ts` as standalone IIFE bundles. It then copies `public/manifest.json` into `dist/`, and copies `dist/` to `dist-firefox/` with a Firefox manifest (`background.scripts` in place of the service worker, plus `browser_specific_settings` with the add-on ID). Only the manifest differs between the two. The browser tests cover Chrome only.
 
-1. **Content script** (`src/extension/content.ts`, Reddit page origin): mounts a full-screen closed-shadow-DOM host holding an iframe of `reader.html`, passing the page URL in the hash (`#source=…`). It marks the page `inert`, shows the "Original Reddit" exit button, and skips humanity/captcha gate pages. It polls `location.href` to remount on SPA navigation. It is also the **only** code that talks to Reddit: requests run same-origin with the user's session.
+1. **Content script** (`src/extension/content.ts`, Reddit page origin): mounts a full-screen closed-shadow-DOM host holding an iframe of `reader.html`, passing the page URL in the hash (`#source=…`). It marks the page `inert`, shows the "Original Reddit" exit button, and skips humanity/captcha gate pages. It polls `location.href` to remount on SPA navigation. It is also the **only** code that talks to Reddit: requests run same-origin with the user's session. Everything site-specific (routes, gate pages, the bridge actions) is the page provider's (see Providers).
 2. **Reader** (`src/client/`, extension origin, inside the iframe): the React app. It can't reach Reddit directly. Every request goes through `bridge()` in `src/extension/bridge.ts`, a postMessage RPC to the parent page. Despite its folder, `bridge.ts` is imported by the reader.
 3. **Service worker** (`src/extension/background.ts`): only forwards toolbar-icon clicks as `openrelay:toggle`.
+
+### Providers
+
+`src/providers/` holds everything specific to a site OpenRelay reads, so another site (Lemmy is the plan) can sit beside Reddit. `hosts.ts` says which provider a page URL belongs to (`providerOf`); the bridge, the content script and the reader all choose by it. `types.ts` defines the two halves, one on each side of the bridge:
+
+- `PageProvider` (content script): `parseRoute`, `isGatePage`, and `handle()`, which answers every bridge action except `navigate`. Reddit's is `reddit/page.ts`, picked by `providers/page.ts`.
+- `ReaderProvider` (reader): the fetch functions (`fetchFeed`, `fetchPost`, `runAction`, …), which build bridge requests and normalize the answers into `shared/api.ts` models. Reddit's is `reddit/reader.ts`, picked by `providers/reader.ts`.
+
+`src/client/lib/api.ts` re-exports the reader provider's functions to the screens, and adds what doesn't depend on the site: the offline fallback in `fetchPost` and `openSource`. Some UI still assumes Reddit directly (`platform.ts`, `archive.ts`, the "open on Reddit" links, `client/lib/votes.ts`'s thing IDs).
 
 ### Host adapter
 
@@ -69,13 +78,13 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 
 ### The bridge is a security boundary
 
-`content.ts` accepts messages only from its own iframe with the extension origin, and handles a fixed set of actions:
+`content.ts` accepts messages only from its own iframe with the extension origin, and handles a fixed set of actions (Reddit's provider, `src/providers/reddit/page.ts`, handles all but `navigate`):
 
-- `json`: GET, only if `allowedJsonPath()` matches `READ_ROUTES` in `src/extension/reddit.ts`. **A new read endpoint must be added to that allowlist.**
+- `json`: GET, only if `allowedJsonPath()` matches `READ_ROUTES` in `src/providers/reddit/reddit.ts`. **A new read endpoint must be added to that allowlist.**
 - `snapshot`: scrapes the already-loaded page DOM (`snapshot.ts`, handling both `shreddit-*` new Reddit and `.thing` old Reddit). It is the fallback when JSON is blocked or rate-limited.
-- `search-page`: GETs Reddit's HTML search (`allowedSearchPagePath()` in `src/extension/search.ts`) and returns only the post IDs and next-page path. The reader then loads the posts from `/api/info.json`, or from each post's `/comments/<id>.json` when that is refused too. This is the fallback when `/search.json` is refused (403).
+- `search-page`: GETs Reddit's HTML search (`allowedSearchPagePath()` in `src/providers/reddit/search.ts`) and returns only the post IDs and next-page path. The reader then loads the posts from `/api/info.json`, or from each post's `/comments/<id>.json` when that is refused too. This is the fallback when `/search.json` is refused (403).
 - `vote` / `vote-status`: `votes.ts` first clicks the native Reddit vote control for that thing ID. If none is on the page, `apiVote` posts to `/api/vote`.
-- `action`: a write, which must be an entry in the `ACTIONS` table in `src/extension/writes.ts`, with validated params. **New writes go there.**
+- `action`: a write, which must be an entry in the `ACTIONS` table in `src/providers/reddit/writes.ts`, with validated params. **New writes go there.**
 - `me`: account name and avatar only.
 - `navigate`: the drawer's source switcher. Loads Reddit's front page or a Lemmy instance's front page in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
 
@@ -83,9 +92,9 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 
 ### Data flow
 
-- `src/extension/reddit.ts` holds the shared normalizers (raw Reddit JSON → presentation models), plus `parseRoute` and `safeUrl`. Both the reader (`src/client/lib/api.ts`) and the DOM snapshot use them, so live and fallback data have the same shape.
-- `src/shared/api.ts` defines those presentation models (`PostSummary`, `PostDetail`, `CommentNode`, `Community`, …).
-- `src/client/lib/api.ts` is the reader's whole data layer (`fetchFeed`, `fetchPost`, `runAction`, …). It seeds the first feed/search from the page snapshot and falls back to it when a fetch fails.
+- `src/providers/reddit/reddit.ts` holds the shared normalizers (raw Reddit JSON → presentation models), plus `parseRoute` and `safeUrl`. Both the reader provider (`reddit/reader.ts`) and the DOM snapshot use them, so live and fallback data have the same shape.
+- `src/shared/api.ts` defines those presentation models (`PostSummary`, `PostDetail`, `CommentNode`, `Community`, …), plus `PageRoute`, the listing section types and `ApiFailure`.
+- `src/client/lib/api.ts` is the reader's data layer as the screens see it (`fetchFeed`, `fetchPost`, `runAction`, …), backed by the page's reader provider. Reddit's seeds the first feed/search from the page snapshot and falls back to it when a fetch fails.
 
 ### Reader app
 

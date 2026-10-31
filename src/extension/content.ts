@@ -1,10 +1,12 @@
-import { apiAction, apiVote } from "./writes";
-import { forwardVote, readNativeVote, isThingId } from "./votes";
-import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
-import { allowedSearchPagePath, parseSearchPage } from "./search";
-import { readSnapshot } from "./snapshot";
 import { sourceUrl } from "./sources";
 import { pageHost } from "../hosts/page";
+import { pageProvider } from "../providers/page";
+import type { PageProvider } from "../providers/types";
+
+// The manifest runs this script only on sites a provider reads.
+const found = pageProvider(location.href);
+if (!found) throw new Error("OpenRelay doesn't read this site");
+const provider: PageProvider = found;
 
 let host: HTMLDivElement | null = null;
 let frame: HTMLIFrameElement | null = null;
@@ -53,12 +55,12 @@ function unmount() {
   mounted = false;
   generation++;
 }
-function exitToReddit() {
+function exitToSite() {
   dismissed = true;
   show(false);
 }
 function mount() {
-  if (!parseRoute(location.href)) return;
+  if (!provider.parseRoute(location.href)) return;
   if (mounted && mountedUrl === location.href) {
     show(true);
     return;
@@ -81,33 +83,17 @@ function mount() {
   style.textContent =
     "iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#eef0f3}button{position:absolute;bottom:12px;left:12px;border:1px solid #8494a8;border-radius:20px;background:#fff;color:#17283b;padding:8px 13px;font:12px system-ui;box-shadow:0 2px 8px #0002;cursor:pointer}button:focus-visible{outline:3px solid #1d63c4}";
   frame = document.createElement("iframe");
-  frame.title = "OpenRelay Reddit reader";
+  frame.title = `OpenRelay ${provider.name} reader`;
   frame.allow = "clipboard-write; fullscreen";
   frame.src = appHost.readerUrl(hash);
   const exit = (exitButton = document.createElement("button"));
-  exit.textContent = "Original Reddit";
+  exit.textContent = `Original ${provider.name}`;
   exit.title =
     "Return to the original page. Click the extension icon to reopen OpenRelay.";
-  exit.addEventListener("click", exitToReddit);
+  exit.addEventListener("click", exitToSite);
   shadow.append(style, frame, exit);
   document.documentElement.append(host);
   show(true);
-}
-async function read(path: string, accept: string) {
-  const response = await fetch(new URL(path, location.origin), {
-    credentials: "same-origin",
-    signal: AbortSignal.timeout(18000),
-    headers: { Accept: accept },
-  });
-  if (!response.ok)
-    throw new Error(
-      response.status === 429
-        ? "Reddit is rate limiting requests. Please wait and try again."
-        : "Reddit could not load this content (" +
-            response.status +
-            "). Try Original Reddit.",
-    );
-  return response;
 }
 /** Replies to the reader that's loaded now, and to no reader loaded later. */
 function replier(): (message: unknown) => void {
@@ -131,9 +117,9 @@ window.addEventListener("message", (event) => {
 });
 // The host relays only the reader's messages, and checks their origin itself.
 view?.onMessage((message) => void receive(message));
-view?.onExit(exitToReddit);
+view?.onExit(exitToSite);
 async function receive(data: any) {
-  // Keep "Original Reddit" clear of the reader's bottom app bar.
+  // Keep the "Original …" control clear of the reader's bottom app bar.
   if (data?.type === "openrelay:inset") {
     const bottom = Number(data.bottom);
     if (!Number.isFinite(bottom) || bottom < 0 || bottom > 200) return;
@@ -147,80 +133,14 @@ async function receive(data: any) {
   if (!Number.isSafeInteger(id)) return;
   try {
     let value: unknown;
-    if (action === "vote") {
-      if (!active) throw new Error("OpenRelay is not active");
-      const current = payload?.current;
-      if (current !== 1 && current !== 0 && current !== -1)
-        throw new Error("Invalid vote request");
-      const clicked = await forwardVote(
-        document,
-        payload?.thingId,
-        payload?.direction,
-      );
-      // Reader-fetched content has no buttons on the page; vote via the API.
-      value =
-        clicked.status === "missing"
-          ? await apiVote(
-              fetch,
-              location.origin,
-              payload.thingId,
-              current === payload.direction ? 0 : payload.direction,
-            )
-          : clicked;
-    } else if (action === "vote-status") {
-      if (
-        !Array.isArray(payload?.ids) ||
-        payload.ids.length > 100 ||
-        !payload.ids.every(isThingId)
-      )
-        throw new Error("Invalid vote status request");
-      value = Object.fromEntries(
-        payload.ids.map((thingId: string) => [
-          thingId,
-          readNativeVote(document, thingId),
-        ]),
-      );
-    } else if (action === "action") {
-      if (!active) throw new Error("OpenRelay is not active");
-      value = await apiAction(fetch, location.origin, payload?.op, payload?.args);
-    } else if (action === "me") {
-      // Only the name and picture reach the reader, never the session modhash.
-      const response = await fetch(new URL("/api/me.json", location.origin), {
-        credentials: "same-origin",
-        signal: AbortSignal.timeout(15000),
-        headers: { Accept: "application/json" },
-      });
-      value = response.ok
-        ? normalizeAccount(await response.json().catch(() => null))
-        : null;
-    } else if (action === "navigate") {
+    if (action === "navigate") {
       // The source switcher: only Reddit's or a Lemmy instance's front page.
       if (!active) throw new Error("OpenRelay is not active");
       const url = sourceUrl(path);
       if (!url) throw new Error("Invalid source");
       setTimeout(() => location.assign(url));
       value = null;
-    } else if (action === "snapshot") {
-      let loaded = readSnapshot(document);
-      for (let i = 0; !loaded.posts.length && i < 10; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        loaded = readSnapshot(document);
-      }
-      value = loaded;
-    } else if (action === "json" && allowedJsonPath(path)) {
-      const response = await read(path, "application/json");
-      if (!response.headers.get("content-type")?.includes("json"))
-        throw new Error(
-          "Reddit returned a sign-in or access page. Use Original Reddit to continue.",
-        );
-      value = await response.json();
-    } else if (action === "search-page" && allowedSearchPagePath(path)) {
-      // Only the post IDs and next page reach the reader, never the page.
-      const response = await read(path, "text/html");
-      if (!response.headers.get("content-type")?.includes("html"))
-        throw new Error("Reddit did not return a search page.");
-      value = parseSearchPage(await response.text());
-    } else throw new Error("Unsupported request");
+    } else value = await provider.handle({ action, path, payload }, active);
     reply({ type: "openrelay:response", id, value });
   } catch (error) {
     reply({
@@ -235,26 +155,13 @@ appHost.onToggle(() => {
   if (active) show(false);
   else mount();
 });
-// Wait briefly for client-rendered listings, without touching login, settings or mod pages.
-function isGatePage() {
-  return (
-    !document.querySelector("shreddit-post, .thing.link") &&
-    (/prove your humanity|security check|you.ve been blocked|access denied/i.test(
-      document.title,
-    ) ||
-      Boolean(
-        document.querySelector(
-          'iframe[src*="recaptcha"], iframe[src*="hcaptcha"]',
-        ),
-      ))
-  );
-}
+const isGatePage = () => provider.isGatePage(document);
 function autoMount() {
   if (isGatePage()) return;
   if (
     !dismissed &&
     new URL(location.href).searchParams.get("openrelay") !== "off" &&
-    parseRoute(location.href)
+    provider.parseRoute(location.href)
   )
     mount();
 }

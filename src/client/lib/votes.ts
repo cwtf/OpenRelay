@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "../../extension/bridge";
 import { toast } from "./platform";
-import type { NativeVote, Vote, VoteResult } from "../../extension/votes";
+import type { NativeVote, Vote, VoteResult } from "../../providers/reddit/votes";
 
 type State = NativeVote & {
   pending: boolean;

@@ -15,8 +15,10 @@ import type {
   Removal,
   FeedSort,
   InlineMedia,
+  PageRoute,
   Timeframe,
-} from "../shared/api.ts";
+} from "../../shared/api.ts";
+import { providerOf } from "../hosts.ts";
 
 type Raw = Record<string, any>;
 /** Reddit's `likes`: true up, false down, null none; absent when signed out. */
@@ -440,21 +442,9 @@ export function normalizeAccount(me: Raw): Account | null {
     ...(unread > 0 ? { inboxCount: Math.floor(unread) } : {}),
   };
 }
-export type PageRoute = {
-  sub: string;
-  sort: FeedSort;
-  timeframe: Timeframe;
-  postId?: string;
-  commentSort?: string;
-  query?: string;
-  searchSort?: string;
-};
 export function parseRoute(href: string): PageRoute | null {
+  if (providerOf(href) !== "reddit") return null;
   const url = new URL(href);
-  if (
-    !["www.reddit.com", "old.reddit.com", "reddit.com"].includes(url.hostname)
-  )
-    return null;
   const parts = url.pathname.split("/").filter(Boolean);
   let sub = "Home";
   if (parts[0] === "r" && /^[\w+]+$/.test(parts[1] ?? "")) {

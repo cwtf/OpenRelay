@@ -5,6 +5,7 @@ import {
   instanceHost,
   REDDIT_HOME,
 } from "../../extension/sources";
+import { providerOf } from "../../providers/hosts";
 import { openSource } from "./api";
 import { toast } from "./platform";
 import { readJson, watchKey, writeJson } from "./storage";
@@ -98,8 +99,8 @@ export function removeInstance(host: string): void {
 /** The source this reader was opened from; `null` when reading offline. */
 export const currentSource = (): Source | null => {
   if (offlineMode) return null;
+  if (providerOf(pageUrl) === "reddit") return REDDIT;
   const host = pageUrl.hostname;
-  if (host === "reddit.com" || host.endsWith(".reddit.com")) return REDDIT;
   return sourceList().find((source) => source.id === host) ?? lemmy(host);
 };
 

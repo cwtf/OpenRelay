@@ -5,7 +5,7 @@ import type {
   PostResponse,
   RepliesResponse,
 } from "../../shared/api.ts";
-import { normalizeComments, normalizePost } from "../../extension/reddit.ts";
+import { normalizeComments, normalizePost } from "../../providers/reddit/reddit.ts";
 
 /**
  * Copies of removed threads from Arctic Shift, a community archive that saves

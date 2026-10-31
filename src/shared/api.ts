@@ -354,3 +354,45 @@ export type ReplyRequest = { parentId: string; text: string };
 export type ReplyResponse = { comment: CommentNode };
 
 export type ApiError = { status: "error"; message: string };
+
+/** Where the reader starts for a page: its feed, post or search. */
+export type PageRoute = {
+  sub: string;
+  sort: FeedSort;
+  timeframe: Timeframe;
+  postId?: string;
+  commentSort?: string;
+  query?: string;
+  searchSort?: string;
+};
+
+export type ProfileSection =
+  | "overview"
+  | "comments"
+  | "submitted"
+  | "upvoted"
+  | "downvoted"
+  | "hidden"
+  | "saved";
+export type ProfileSort = "new" | "hot" | "top" | "controversial";
+export type InboxSection =
+  | "inbox"
+  | "unread"
+  | "messages"
+  | "comments"
+  | "selfreply"
+  | "sent"
+  | "mentions"
+  | "moderator"
+  | "moderator/unread";
+export type ModSection = "modqueue" | "reports" | "spam" | "edited" | "unmoderated";
+export type ModFilter = "all" | "links" | "comments";
+
+/** A request the site refused or answered with something unusable. */
+export class ApiFailure extends Error {
+  status: number;
+  constructor(message: string, status = 0) {
+    super(message);
+    this.status = status;
+  }
+}

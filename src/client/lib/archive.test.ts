@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { CommentNode } from "../../shared/api";
-import { normalizeComments } from "../../extension/reddit.ts";
+import { normalizeComments } from "../../providers/reddit/reddit.ts";
 import {
   ArchiveError,
   archivedComments,

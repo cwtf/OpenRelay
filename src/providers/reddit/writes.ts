@@ -1,5 +1,5 @@
 import { isThingId, type Vote, type VoteResult } from "./votes.ts";
-import type { CommentNode } from "../shared/api.ts";
+import type { CommentNode } from "../../shared/api.ts";
 import { normalizeComments, safeUrl } from "./reddit.ts";
 
 /**

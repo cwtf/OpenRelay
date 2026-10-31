@@ -1,5 +1,5 @@
 import { normalizePost, normalizeComments, safeUrl } from "./reddit";
-import type { PostDetail, CommentNode } from "../shared/api";
+import type { PostDetail, CommentNode } from "../../shared/api";
 
 export type Snapshot = { posts: PostDetail[]; comments: CommentNode[] };
 export function readSnapshot(doc: Document): Snapshot {

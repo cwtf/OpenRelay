@@ -1,4 +1,4 @@
-import { safeUrl } from "../../extension/reddit";
+import { safeUrl } from "../../providers/reddit/reddit";
 import { audioFromPlaylist, muxAudioVideo } from "./mp4";
 import { readerHost } from "../../hosts/reader";
 import type { Downloads } from "../../hosts/types";

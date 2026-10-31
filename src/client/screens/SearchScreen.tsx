@@ -9,7 +9,7 @@ import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { sortLabel } from "../lib/format";
 import { openUrl } from "../lib/platform";
 import { pageUrl } from "../../extension/bridge";
-import { searchPagePath } from "../../extension/search";
+import { searchPagePath } from "../../providers/reddit/search";
 import { readJson, writeJson } from "../lib/storage";
 
 const SORTS: SearchSort[] = ["relevance", "new", "top", "comments"];

@@ -1,4 +1,5 @@
 import { readerHost } from "../hosts/reader";
+import { providerOf } from "../providers/hosts";
 
 const params = new URLSearchParams(location.hash.slice(1));
 const source = params.get("source");
@@ -8,11 +9,7 @@ const source = params.get("source");
  */
 export const offlineMode = params.has("offline");
 export const pageUrl = new URL(source || "https://www.reddit.com/");
-if (
-  !["https:"].includes(pageUrl.protocol) ||
-  !["www.reddit.com", "old.reddit.com", "reddit.com"].includes(pageUrl.hostname)
-)
-  throw new Error("Invalid Reddit page");
+if (!providerOf(pageUrl)) throw new Error("Invalid source page");
 let nextId = 0;
 const pending = new Map<
   number,
