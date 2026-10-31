@@ -141,7 +141,7 @@ export const ReplySheet = ({
           <div className="composer">
             {quote && !editing ? (
               <>
-                <div className="reply-parent">Replying to u/{author}</div>
+                <div className="reply-parent">Replying to {site.userLabel(author)}</div>
                 <div className="quote">{quote}</div>
               </>
             ) : null}

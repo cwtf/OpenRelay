@@ -12,6 +12,7 @@ import {
   normalizeInbox,
   normalizePost,
   parseRoute,
+  resolveLink,
 } from "./lemmy.ts";
 
 const ORIGIN = "https://lemmy.world";
@@ -85,6 +86,11 @@ test("normalizes text and link posts, with the viewer's vote", () => {
   assert.equal(text.subreddit, "linux@lemmy.ml");
   assert.equal(text.url, text.permalink);
   assert.equal(text.vote, -1);
+  const folded = normalizePost(
+    { ...imagePost, post: { ...imagePost.post, url: undefined, body: "Specs:\n\n::: spoiler Full specs\nIntel Atom\n:::\n\nThanks" } },
+    ORIGIN,
+  );
+  assert.equal(folded.excerpt, "Specs:\n\n[Full specs]\n\nThanks");
   // No time zone: Lemmy's times are UTC.
   assert.equal(text.createdAt, Date.parse("2023-06-01T10:00:00Z"));
   const link = normalizePost(
@@ -230,4 +236,12 @@ test("merges replies, mentions and messages into one inbox", () => {
   assert.equal(items[1]!.subreddit, "linux@lemmy.ml");
   assert.ok(allowedApiPath("/api/v3/user/replies?unread_only=false"));
   assert.equal(allowedApiPath("/api/v3/user/mark_all_as_read"), false);
+});
+
+test("opens this instance's posts and communities in the reader", () => {
+  assert.deepEqual(resolveLink("https://lemmy.world/post/42", ORIGIN), { kind: "post", id: `t3_42_${TAG}` });
+  assert.deepEqual(resolveLink("/c/linux@lemmy.ml", ORIGIN), { kind: "sub", name: "linux@lemmy.ml" });
+  for (const href of ["https://lemmy.ml/post/42", "https://www.reddit.com/r/linux/", "https://lemmy.world/u/someone"])
+    assert.equal(resolveLink(href, ORIGIN)?.kind, "external", href);
+  assert.equal(resolveLink("javascript:alert(1)", ORIGIN), null);
 });

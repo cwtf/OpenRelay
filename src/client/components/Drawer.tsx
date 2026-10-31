@@ -1019,7 +1019,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
         </div>
         <div className="drawer-foot">
           {account
-            ? `Signed in as ${site.name === "Reddit" ? "u/" : "@"}${account.name}`
+            ? `Signed in as ${site.userLabel(account.name)}`
             : `Reading from your ${site.name} tab`}
           <br />
           OpenRelay · an independent reader for {site.name}

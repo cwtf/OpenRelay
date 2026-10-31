@@ -3,6 +3,7 @@ import type {
   AboutResponse,
   CommentNode,
   InboxItem,
+  LinkTarget,
   CommentSort,
   Community,
   FeedSort,
@@ -144,7 +145,13 @@ export function normalizePost(view: Raw, origin: string): PostDetail {
     edited: Boolean(p.updated),
     crosspost: false,
     body,
-    excerpt: body.slice(0, 280),
+    // Spoilers stay folded in the excerpt: just their title.
+    excerpt: body
+      .replace(
+        /^[ \t]*:::[ \t]*spoiler\b[ \t]*(.*)$[\s\S]*?^[ \t]*:::[ \t]*$/gim,
+        (_, title: string) => `[${title.trim() || "Spoiler"}]`,
+      )
+      .slice(0, 280),
     ...(thumb ? { thumb } : {}),
     ...vote(view?.my_vote),
     ...(typeof view?.saved === "boolean" ? { saved: view.saved } : {}),
@@ -457,6 +464,29 @@ export function parseRoute(href: string): PageRoute | null {
       searchSort: "relevance",
     };
   return null;
+}
+
+/**
+ * Where a link leads from this instance: its own posts and communities open
+ * in the reader; anything else, other sites and instances included, opens
+ * as a link.
+ */
+export function resolveLink(href: string, origin: string): LinkTarget | null {
+  let url: URL;
+  try {
+    url = new URL(href.trim(), origin);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (url.origin === new URL(origin).origin) {
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] === "post" && parts.length === 2 && /^\d{1,12}$/.test(parts[1]!))
+      return { kind: "post", id: postId(parts[1], hostTag(url.hostname)) };
+    if (parts[0] === "c" && parts.length === 2 && isCommunityName(parts[1]!))
+      return { kind: "sub", name: parts[1]! };
+  }
+  return { kind: "external", url: url.href };
 }
 
 /** Read-only API routes the page may fetch for the reader. */

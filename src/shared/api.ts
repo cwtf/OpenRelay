@@ -388,6 +388,12 @@ export type InboxSection =
 export type ModSection = "modqueue" | "reports" | "spam" | "edited" | "unmoderated";
 export type ModFilter = "all" | "links" | "comments";
 
+/** Where a link leads: a post or community in the reader, or elsewhere. */
+export type LinkTarget =
+  | { kind: "post"; id: string }
+  | { kind: "sub"; name: string }
+  | { kind: "external"; url: string };
+
 /** A request the site refused or answered with something unusable. */
 export class ApiFailure extends Error {
   status: number;

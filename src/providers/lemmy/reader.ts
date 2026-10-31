@@ -28,6 +28,7 @@ import {
   normalizeUser,
   normalizeUserListing,
   parseRoute,
+  resolveLink,
   searchSort,
 } from "./lemmy";
 
@@ -328,6 +329,9 @@ export const lemmyReader: ReaderProvider = {
   communityLabel: (name) => (name === "Home" || LEMMY_FEEDS.includes(name) ? name : `c/${name}`),
   isCommunity: (name) => name !== "Home" && !LEMMY_FEEDS.includes(name),
   validCommunityName: isCommunityName,
+  userLabel: (name) => `@${name}`,
+  baseUrl: origin,
+  resolveLink: (href) => resolveLink(href, origin),
   communityUrl: (name) => new URL(`/c/${name}`, origin).href,
   loginUrl: new URL("/login", origin).href,
   parseRoute,

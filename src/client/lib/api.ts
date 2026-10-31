@@ -32,6 +32,9 @@ export const site = {
   communityLabel: provider.communityLabel,
   isCommunity: provider.isCommunity,
   validCommunityName: provider.validCommunityName,
+  userLabel: provider.userLabel,
+  baseUrl: provider.baseUrl,
+  resolveLink: provider.resolveLink,
   communityUrl: provider.communityUrl,
   loginUrl: provider.loginUrl,
 };

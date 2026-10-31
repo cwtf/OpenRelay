@@ -64,7 +64,7 @@ export const PostMeta = ({
           <span className="dot" />
         </>
       ) : null}
-      <span className={authorClass}>u/{post.author}</span>
+      <span className={authorClass}>{site.userLabel(post.author)}</span>
       <span className="dot" />
       <time
         dateTime={new Date(post.createdAt).toISOString()}

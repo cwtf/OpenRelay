@@ -79,7 +79,7 @@ export const CommentRow = memo(
           ]
         : []),
       ...(/^[\w-]{3,20}$/.test(node.author)
-        ? [{ icon: 'user', label: 'User', title: `Go to u/${node.author}`, onClick: () => nav.openProfile(node.author) } satisfies SwipeAction]
+        ? [{ icon: 'user', label: 'User', title: `Go to ${site.userLabel(node.author)}`, onClick: () => nav.openProfile(node.author) } satisfies SwipeAction]
         : []),
       ...(live && own && swipe ? [{ icon: 'edit', label: 'Edit', title: 'Edit comment', onClick: () => swipe.edit(node) } satisfies SwipeAction] : []),
       ...(live && swipe?.reply ? [{ icon: 'reply', label: 'Reply', onClick: () => swipe.reply!(node) } satisfies SwipeAction] : []),

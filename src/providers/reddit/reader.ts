@@ -485,6 +485,8 @@ export const redditReader: ReaderProvider = {
   communityLabel: (name) => `r/${name}`,
   isCommunity: (name) => !FEEDS.includes(name.toLowerCase()) && !name.includes("+"),
   validCommunityName: (name) => /^[A-Za-z0-9][A-Za-z0-9_]{1,20}$/.test(name),
+  userLabel: (name) => `u/${name}`,
+  baseUrl: "https://www.reddit.com",
   communityUrl: (name) => `https://www.reddit.com/r/${name}/`,
   loginUrl: "https://www.reddit.com/login",
   parseRoute,

@@ -64,7 +64,9 @@ const postView = (id, name, extra = {}) => ({
   saved: false,
   my_vote: 0,
 });
-const textPost = postView(101, "Which distro for an old laptop?", { body: "It has **4 GB** of RAM." });
+const textPost = postView(101, "Which distro for an old laptop?", {
+  body: "It has **4 GB** of RAM. Also asked in !linux@lemmy.ml\n\n::: spoiler Full specs\nIntel Atom N270\n:::",
+});
 const imagePost = postView(102, "My desktop", {
   url: "https://lemmy.world/pictrs/image/desk.png",
   url_content_type: "image/png",
@@ -255,6 +257,15 @@ try {
   await app.getByRole("button", { name: "Which distro for an old laptop?", exact: true }).first().click();
   await app.getByText("4 GB", { exact: true }).waitFor();
   await app.getByText("Nested reply").waitFor();
+  // Lemmy's Markdown: a folded spoiler, and a community link on this instance.
+  await app.locator("details.md-details summary", { hasText: "Full specs" }).waitFor();
+  assert.equal(await app.locator("details.md-details p").isVisible(), false);
+  await app.locator("details.md-details summary").click();
+  await app.locator("details.md-details p", { hasText: "Intel Atom N270" }).waitFor();
+  assert.equal(
+    await app.locator("a.md-link:visible", { hasText: "!linux@lemmy.ml" }).getAttribute("href"),
+    "https://lemmy.world/c/linux@lemmy.ml",
+  );
   assert.equal(await app.getByText("The hidden reply").count(), 0);
   await app.getByRole("button", { name: "Load more replies" }).click();
   await app.getByText("The hidden reply").waitFor();
@@ -341,7 +352,7 @@ try {
   assert.deepEqual(lemmyWrites, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, switch back to Reddit, reader refused on a site not added, removal unregisters; no other writes, no page errors.",
+    "PASS: Lemmy instance added from the switcher (access, content script registered), feed, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, switch back to Reddit, reader refused on a site not added, removal unregisters; no other writes, no page errors.",
   );
 } finally {
   await context.close();

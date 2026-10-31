@@ -77,3 +77,21 @@ void test('survives pathological nesting', () => {
   const deep = '>'.repeat(200) + ' deep';
   assert.doesNotThrow(() => parseBlocks(deep));
 });
+
+void test("parses Lemmy's spoiler containers", () => {
+  assert.deepEqual(parseBlocks('Rules:\n\n::: spoiler 1. Be nice\nNo **insults**.\n\n::: spoiler nested\ninner\n:::\n:::\n\nAfter'), [
+    { t: 'p', text: 'Rules:' },
+    {
+      t: 'spoiler',
+      title: '1. Be nice',
+      children: [
+        { t: 'p', text: 'No **insults**.' },
+        { t: 'spoiler', title: 'nested', children: [{ t: 'p', text: 'inner' }] },
+      ],
+    },
+    { t: 'p', text: 'After' },
+  ]);
+  assert.deepEqual(parseBlocks(':::spoiler\nhidden'), [
+    { t: 'spoiler', title: 'Spoiler', children: [{ t: 'p', text: 'hidden' }] },
+  ]);
+});

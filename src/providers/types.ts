@@ -23,6 +23,7 @@ import type {
   InboxResponse,
   InboxSection,
   InitResponse,
+  LinkTarget,
   ListingResponse,
   ModFilter,
   ModSection,
@@ -81,6 +82,15 @@ export type ReaderProvider = {
   isCommunity(name: string): boolean;
   /** Whether a typed name could be a community's (`linux`, `linux@lemmy.ml`). */
   validCommunityName(name: string): boolean;
+  /** How the site writes a username: `u/name`, `@name`. */
+  userLabel(name: string): string;
+  /** Where links relative to the site lead (`/c/linux`). */
+  baseUrl: string;
+  /**
+   * Where a link leads, for a site that resolves its own; Reddit's links are
+   * resolved by `client/lib/links.ts`.
+   */
+  resolveLink?(href: string): LinkTarget | null;
   /** A community's page on the site. */
   communityUrl(name: string): string;
   /** The site's sign-in page. */

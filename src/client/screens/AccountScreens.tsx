@@ -222,7 +222,7 @@ export const ProfileScreen = ({ user }: { user: string }) => {
             onClick: () =>
               void attempt(
                 () => runAction(friend ? "unfriend" : "friend", { name: user }),
-                friend ? `Removed u/${user} from friends` : `Added u/${user} as a friend`,
+                friend ? `Removed ${site.userLabel(user)} from friends` : `Added ${site.userLabel(user)} as a friend`,
               ).then((ok) => {
                 if (ok) setAbout((current) => current && { ...current, isFriend: !friend });
               }),
@@ -233,7 +233,7 @@ export const ProfileScreen = ({ user }: { user: string }) => {
   return (
     <>
       <ScreenHeader
-        title={`u/${user}`}
+        title={`${site.userLabel(user)}`}
         subtitle={`${labelOf(PROFILE_SECTIONS, section)} · ${sortText}`}
         onTitle={pickSection}
       />
@@ -385,11 +385,11 @@ export const InboxScreen = () => {
             onClick: () =>
               nav.openSheet((onClosed) => (
                 <ConfirmSheet
-                  title={`Block u/${item.author}?`}
+                  title={`Block ${site.userLabel(item.author)}?`}
                   message="You will no longer see their posts, comments or messages."
                   confirm="Block"
                   onConfirm={() =>
-                    void attempt(() => runAction("block", { id: item.id }), `Blocked u/${item.author}`)
+                    void attempt(() => runAction("block", { id: item.id }), `Blocked ${site.userLabel(item.author)}`)
                   }
                   onClosed={onClosed}
                 />
@@ -686,17 +686,17 @@ export const FriendsScreen = () => {
               <button
                 type="button"
                 className="icon-btn friend-remove"
-                aria-label={`Remove u/${friend.name} from friends`}
+                aria-label={`Remove ${site.userLabel(friend.name)} from friends`}
                 onClick={() =>
                   nav.openSheet((onClosed) => (
                     <ConfirmSheet
-                      title={`Remove u/${friend.name}?`}
+                      title={`Remove ${site.userLabel(friend.name)}?`}
                       message="They will be removed from your Reddit friends."
                       confirm="Remove"
                       onConfirm={() =>
                         void attempt(
                           () => runAction("unfriend", { name: friend.name }),
-                          `Removed u/${friend.name}`,
+                          `Removed ${site.userLabel(friend.name)}`,
                         ).then((ok) => {
                           if (ok)
                             list.update((items) => items.filter((f) => f.name !== friend.name));

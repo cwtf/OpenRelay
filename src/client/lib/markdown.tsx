@@ -12,6 +12,7 @@ import {
 } from 'react';
 import type { InlineMedia } from '../../shared/api';
 import { isInlineImage, normaliseHref } from './links';
+import { site } from './api';
 import { decodeEntities, parseBlocks, type Block } from './markdownParser';
 
 export { decodeEntities };
@@ -99,7 +100,10 @@ const Spoiler = ({ children }: { children: ReactNode }) => {
 
 const Link = ({ href, children }: { href: string; children: ReactNode }) => {
   const { onLink } = useContext(MarkdownContext);
-  const safe = normaliseHref(href);
+  // Links relative to the site (`/c/linux` on Lemmy) lead there.
+  const safe = normaliseHref(
+    /^\/(?!\/)/.test(href) ? new URL(href, site.baseUrl).href : href,
+  );
   if (!safe) return <>{children}</>;
   return (
     <a
@@ -342,10 +346,26 @@ const RULES: InlineRule[] = [
       );
     },
   },
+  // Lemmy's `!community@instance` and `@user@instance`.
+  ...(site.name === "Lemmy"
+    ? [
+        {
+          re: /(?<![\w/@!])([!@])([\w]{1,50})@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/i,
+          render: (m: RegExpExecArray, key: string) => (
+            <Link
+              key={key}
+              href={`/${m[1] === "!" ? "c" : "u"}/${m[2]}@${m[3]}`}
+            >
+              {m[0]}
+            </Link>
+          ),
+        },
+      ]
+    : []),
   {
     re: /(?<![\w/])\/?(r|u)\/([A-Za-z0-9_-]{2,21})/,
     render: (m, key) => (
-      <Link key={key} href={`/${m[1]}/${m[2]}`}>
+      <Link key={key} href={`https://www.reddit.com/${m[1]}/${m[2]}`}>
         {m[0]}
       </Link>
     ),
@@ -440,6 +460,13 @@ const renderBlocks = (blocks: Block[], prefix: string): ReactNode[] =>
           <pre key={key} className="md-pre">
             <code>{block.text}</code>
           </pre>
+        );
+      case 'spoiler':
+        return (
+          <details key={key} className="md-details">
+            <summary>{inline(block.title, key)}</summary>
+            {renderBlocks(block.children, key)}
+          </details>
         );
       case 'quote':
         return (

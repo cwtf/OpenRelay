@@ -1,7 +1,6 @@
-export type LinkTarget =
-  | { kind: 'post'; id: string }
-  | { kind: 'sub'; name: string }
-  | { kind: 'external'; url: string };
+import type { LinkTarget } from '../../shared/api.ts';
+
+export type { LinkTarget };
 
 const REDDIT_HOST = /^((www|old|new|np|m|amp|i)\.)?reddit\.com$/i;
 

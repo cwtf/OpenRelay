@@ -42,7 +42,9 @@ export type Block =
   | { t: 'quote'; children: Block[] }
   | { t: 'list'; ordered: boolean; start: number; items: Block[][] }
   | { t: 'hr' }
-  | { t: 'table'; align: Align[]; head: string[]; rows: string[][] };
+  | { t: 'table'; align: Align[]; head: string[]; rows: string[][] }
+  /** Lemmy's `::: spoiler Title` … `:::`, shown folded. */
+  | { t: 'spoiler'; title: string; children: Block[] };
 
 const BLANK = /^\s*$/;
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
@@ -52,10 +54,14 @@ const QUOTE = /^\s{0,3}>(?!!)/;
 const LIST_ITEM = /^(\s*)([*+-]|\d{1,9}[.)])\s+(.*)$/;
 const TABLE_SEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const INDENTED = /^( {4}|\t)/;
+const SPOILER = /^\s{0,3}:::\s*spoiler\b\s*(.*)$/i;
+const CONTAINER = /^\s{0,3}:::\s*\S/;
+const CONTAINER_END = /^\s{0,3}:::\s*$/;
 
 const indentOf = (line: string) => line.match(/^\s*/)?.[0].length ?? 0;
 
 const startsBlock = (line: string): boolean =>
+  SPOILER.test(line) ||
   FENCE.test(line) ||
   HEADING.test(line) ||
   RULE.test(line) ||
@@ -92,6 +98,31 @@ export const parseBlocks = (source: string, depth = 0): Block[] => {
       }
       i++;
       out.push({ t: 'code', text: buffer.join('\n') });
+      continue;
+    }
+
+    const spoiler = line.match(SPOILER);
+    if (spoiler) {
+      // Up to the matching `:::`, counting containers opened inside.
+      const buffer: string[] = [];
+      let open = 1;
+      i++;
+      while (i < lines.length) {
+        const current = lines[i] ?? '';
+        if (CONTAINER.test(current)) open++;
+        else if (CONTAINER_END.test(current) && --open === 0) break;
+        buffer.push(current);
+        i++;
+      }
+      i++;
+      out.push({
+        t: 'spoiler',
+        title: (spoiler[1] ?? '').trim() || 'Spoiler',
+        children:
+          depth > 12
+            ? [{ t: 'p', text: buffer.join('\n') }]
+            : parseBlocks(buffer.join('\n'), depth + 1),
+      });
       continue;
     }
 

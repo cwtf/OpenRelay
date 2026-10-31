@@ -20,7 +20,7 @@ import { Drawer } from "../components/Drawer";
 import { Icon } from "../components/Icon";
 import { MediaViewer } from "../components/MediaViewer";
 import { SettingsSheet } from "../components/SettingsSheet";
-import { fetchInit, entryRoute } from "../lib/api";
+import { fetchInit, entryRoute, site } from "../lib/api";
 import { useSwipeBack } from "../lib/gestures";
 import { resolveLink } from "../lib/links";
 import { openUrl } from "../lib/platform";
@@ -560,7 +560,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
 
   const openLink = useCallback(
     (href: string) => {
-      const target = resolveLink(href);
+      const target = site.resolveLink ? site.resolveLink(href) : resolveLink(href);
       if (!target) return;
       if (target.kind === "post") openPost(target.id);
       else if (target.kind === "sub") openCommunity(target.name);
