@@ -44,6 +44,22 @@ export const safeUrl = (
 };
 const num = (v: unknown) =>
   typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0;
+/**
+ * `read` for each item of a list from Reddit, skipping any item it fails on,
+ * so one item in a shape Reddit hasn't sent before can't fail the whole
+ * listing. `read` returns `[]` to leave an item out; a non-array is no items.
+ */
+export function eachItem<T>(items: unknown, read: (item: Raw) => T[]): T[] {
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    try {
+      return read(item);
+    } catch (error) {
+      console.warn("OpenRelay skipped an item it could not read", error);
+      return [];
+    }
+  });
+}
 const image = (v: Raw | undefined) => {
   const url = safeUrl(v?.url ?? v?.u);
   return url
@@ -82,9 +98,10 @@ export function normalizePost(p: Raw): PostDetail {
     p.secure_media?.reddit_video ??
     p.media?.reddit_video ??
     p.preview?.reddit_video_preview;
-  const gallery = (p.gallery_data?.items ?? [])
-    .map((item: Raw) => image(p.media_metadata?.[item.media_id]?.s))
-    .filter(Boolean);
+  const gallery = eachItem(p.gallery_data?.items, (item) => {
+    const found = image(p.media_metadata?.[item.media_id]?.s);
+    return found ? [found] : [];
+  });
   const mp4 = safeUrl(video?.fallback_url);
   const hls = safeUrl(video?.hls_url);
   if (video && (mp4 || hls)) {
@@ -112,22 +129,20 @@ export function normalizePost(p: Raw): PostDetail {
         image: source,
         animated: /\.gif(\?|$)/i.test(url),
       };
-  } else if (p.poll_data?.options)
+  } else if (Array.isArray(p.poll_data?.options))
     media = {
       kind: "poll",
-      choices: p.poll_data.options.map((o: Raw) => ({
-        text: String(o.text ?? ""),
-        votes: num(o.vote_count),
-      })),
+      choices: eachItem(p.poll_data.options, (o) => [
+        { text: String(o.text ?? ""), votes: num(o.vote_count) },
+      ]),
       totalVotes: num(p.poll_data.total_vote_count),
     };
-  const parentRaw = Array.isArray(p.crosspost_parent_list)
-    ? p.crosspost_parent_list[0]
+  // A crosspost whose original can't be read shows as an ordinary post.
+  const parent = Array.isArray(p.crosspost_parent_list)
+    ? eachItem(p.crosspost_parent_list.slice(0, 1), (raw) =>
+        raw && typeof raw === "object" ? [normalizePost(raw)] : [],
+      )[0]
     : undefined;
-  const parent =
-    parentRaw && typeof parentRaw === "object"
-      ? normalizePost(parentRaw)
-      : undefined;
   let ownUrl = url;
   // Relay's crosspost rules: a crosspost of a self post opens as a self post
   // at its own permalink, and it takes the original's gallery. Relay plays a
@@ -227,9 +242,11 @@ function inlineMedia(c: Raw): { media?: Record<string, InlineMedia> } {
 /** Reports and approval state, present only for moderators. */
 function modInfo(t: Raw): { mod?: ModInfo } {
   const reports: string[] = [];
-  for (const [reason, mod] of Array.isArray(t.mod_reports) ? t.mod_reports : [])
+  const pairs = (list: unknown): unknown[][] =>
+    Array.isArray(list) ? list.filter(Array.isArray) : [];
+  for (const [reason, mod] of pairs(t.mod_reports))
     reports.push(`u/${String(mod ?? "mod")}: ${String(reason ?? "")}`);
-  for (const [reason, count] of Array.isArray(t.user_reports) ? t.user_reports : [])
+  for (const [reason, count] of pairs(t.user_reports))
     reports.push(`${num(count) || 1}: ${String(reason ?? "")}`);
   const state = t.spam
     ? "spam"
@@ -265,8 +282,7 @@ export function normalizeListingComment(c: Raw): ListingComment {
 }
 /** Posts and comments from profile and moderator listings. */
 export function normalizeListing(children: unknown): ListingItem[] {
-  if (!Array.isArray(children)) return [];
-  return children.flatMap((child: Raw): ListingItem[] =>
+  return eachItem(children, (child): ListingItem[] =>
     child?.kind === "t3"
       ? [{ type: "post", post: normalizePost(child.data) }]
       : child?.kind === "t1"
@@ -275,8 +291,7 @@ export function normalizeListing(children: unknown): ListingItem[] {
   );
 }
 export function normalizeInbox(children: unknown): InboxItem[] {
-  if (!Array.isArray(children)) return [];
-  return children.flatMap((child: Raw): InboxItem[] => {
+  return eachItem(children, (child): InboxItem[] => {
     const d = child?.data;
     if (!d || (child.kind !== "t4" && child.kind !== "t1")) return [];
     const kind =
@@ -363,24 +378,26 @@ export function normalizeModerators(raw: Raw): Moderator[] {
     : [];
 }
 export function normalizeRules(raw: Raw): SubredditRule[] {
-  return Array.isArray(raw?.rules)
-    ? raw.rules.map((r: Raw) => ({
-        title: String(r.short_name ?? ""),
-        description: String(r.description ?? ""),
-      }))
-    : [];
+  return eachItem(raw?.rules, (r) => [
+    {
+      title: String(r.short_name ?? ""),
+      description: String(r.description ?? ""),
+    },
+  ]);
 }
-export function normalizeComments(children: Raw[] = []): {
+/** A comment tree; a comment that can't be read is left out with its replies. */
+export function normalizeComments(children: unknown = []): {
   comments: CommentNode[];
   more: boolean;
 } {
   return {
-    more: children.some((c) => c.kind === "more"),
-    comments: children
-      .filter((c) => c.kind === "t1")
-      .map(({ data: c }) => {
-        const nested = normalizeComments(c.replies?.data?.children ?? []);
-        return {
+    more: Array.isArray(children) && children.some((c) => c?.kind === "more"),
+    comments: eachItem(children, (child): CommentNode[] => {
+      if (child?.kind !== "t1") return [];
+      const c = child.data;
+      const nested = normalizeComments(c.replies?.data?.children);
+      return [
+        {
           id: String(c.name ?? "t1_" + c.id),
           parentId: String(c.parent_id ?? ""),
           author: String(c.author ?? "[deleted]"),
@@ -400,8 +417,9 @@ export function normalizeComments(children: Raw[] = []): {
             ? { distinguished: c.distinguished }
             : {}),
           ...removal(undefined, c.body),
-        };
-      }),
+        },
+      ];
+    }),
   };
 }
 /** Normalize a `t5` subreddit from a subscription listing; skips user profiles. */

@@ -96,7 +96,7 @@ export function readSnapshot(doc: Document): Snapshot {
       ) ||
       posts[0]?.permalink ||
       "";
-    const node = normalizeComments([
+    const [node] = normalizeComments([
       {
         kind: "t1",
         data: {
@@ -115,8 +115,8 @@ export function readSnapshot(doc: Document): Snapshot {
           is_submitter: el.hasAttribute("is-op"),
         },
       },
-    ]).comments[0]!;
-    byId.set(id, node);
+    ]).comments;
+    if (node) byId.set(id, node);
   }
   for (const node of byId.values()) {
     const parent = byId.get(node.parentId);

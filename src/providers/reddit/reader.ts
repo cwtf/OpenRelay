@@ -29,6 +29,7 @@ import { bridge, pageUrl } from "../../extension/bridge";
 import type { ReaderProvider } from "../types";
 import { encodeImage, UPLOAD_TIMEOUT } from "../upload";
 import {
+  eachItem,
   safeUrl,
   normalizeCommunity,
   normalizeFriends,
@@ -77,12 +78,15 @@ const listing = (data: any): FeedResponse => {
     throw new ApiFailure(
       "Reddit did not return a post listing. Use Original Reddit to continue.",
     );
-  return {
-    posts: data.data.children
-      .filter((c: any) => c.kind === "t3")
-      .map((c: any) => normalizePost(c.data)),
-    after: data.data.after ?? null,
-  };
+  const sent = data.data.children.filter((c: any) => c?.kind === "t3");
+  const posts = eachItem(sent, (c) => [normalizePost(c.data)]);
+  // Skipping a post Reddit sent in a new shape is fine; skipping all of them
+  // would look like an empty feed.
+  if (sent.length && !posts.length)
+    throw new ApiFailure(
+      "Reddit sent posts OpenRelay could not read. Use Original Reddit to continue.",
+    );
+  return { posts, after: data.data.after ?? null };
 };
 async function fetchFeed(
   sub: string,

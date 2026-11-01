@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   allowedJsonPath,
+  eachItem,
   normalizeAccount,
   normalizeFriends,
   normalizeInbox,
@@ -11,6 +12,7 @@ import {
   normalizeCommunity,
   normalizePost,
   normalizeComments,
+  normalizeRules,
   parseRoute,
   safeUrl,
 } from "./reddit.ts";
@@ -452,4 +454,66 @@ test("tells who removed a post or comment", () => {
     { kind: "t1", data: { id: "c", body: "Still here" } },
   ]);
   assert.deepEqual(comments.map((c) => c.removed), ["mods", "author", undefined]);
+});
+
+test("skips a post Reddit sends in an unexpected shape instead of the whole listing", (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const base = { title: "T", created_utc: 1, permalink: "/r/t/comments/a/" };
+  assert.deepEqual(eachItem({ not: "a list" }, () => [1]), []);
+  assert.deepEqual(
+    eachItem([1, 2, 3], (n) => {
+      if (n === 2) throw new Error("new shape");
+      return [n];
+    }),
+    [1, 3],
+  );
+  // Fields that stop being lists no longer throw.
+  const odd = normalizePost({
+    ...base,
+    id: "odd",
+    gallery_data: { items: { first: { media_id: "x" } } },
+    poll_data: { options: "yes/no" },
+    mod_reports: [null, ["spam", "modone"]],
+    crosspost_parent_list: [{ ...base, id: "parent", gallery_data: { items: [null] } }],
+  });
+  assert.equal(odd.id, "t3_odd");
+  assert.equal(odd.mod?.reports[0], "u/modone: spam");
+  // A post that can't be read at all is left out of the listing.
+  const items = normalizeListing([
+    { kind: "t3", data: { ...base, id: "a" } },
+    { kind: "t3", data: null },
+    null,
+    { kind: "t3", data: { ...base, id: "b" } },
+  ]);
+  assert.deepEqual(
+    items.map((item) => item.type === "post" && item.post.id),
+    ["t3_a", "t3_b"],
+  );
+  assert.equal(warn.mock.callCount(), 2);
+});
+
+test("skips comments, messages and rules Reddit sends in an unexpected shape", (t) => {
+  t.mock.method(console, "warn", () => {});
+  const { comments, more } = normalizeComments([
+    { kind: "t1", data: { id: "a", body: "Kept", replies: { data: { children: "none" } } } },
+    { kind: "t1", data: null },
+    null,
+    { kind: "more" },
+    {
+      kind: "t1",
+      data: {
+        id: "b",
+        body: "Also kept",
+        replies: { data: { children: [{ kind: "t1" }, { kind: "t1", data: { id: "c" } }] } },
+      },
+    },
+  ]);
+  assert.equal(more, true);
+  assert.deepEqual(comments.map((c) => c.id), ["t1_a", "t1_b"]);
+  assert.deepEqual(comments[1]!.replies.map((c) => c.id), ["t1_c"]);
+  assert.deepEqual(normalizeComments({ children: [] } as never), { comments: [], more: false });
+  assert.equal(normalizeInbox([null, { kind: "t4", data: { id: "m", subject: "Hi" } }]).length, 1);
+  assert.deepEqual(normalizeRules({ rules: [null, { short_name: "Be kind" }] }), [
+    { title: "Be kind", description: "" },
+  ]);
 });
