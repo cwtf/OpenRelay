@@ -33,6 +33,8 @@
   --upvote: #de714e;
   --downvote: #7b5cb1;
   --vote-neutral: #74777f;
+  /* The post page's score ring before a vote; dragging it turns it orange or purple. */
+  --vote-none: #d9a425;
   /* The post page's circles, after Relay: blue comments, green reply. */
   --action-comments: #3b74d1;
   --action-reply: #23866a;
@@ -121,6 +123,7 @@
   --upvote: #ce6543;
   --downvote: #6e50a4;
   --vote-neutral: #8e9099;
+  --vote-none: #cf9f32;
   --action-comments: #5b8fe0;
   --action-reply: #1f7a60;
   --action-share: #a24068;
@@ -148,6 +151,7 @@
   --bg: #000000;
   --upvote: #b45231;
   --downvote: #5a3c8f;
+  --vote-none: #b3882a;
   --action-reply: #186a53;
   --action-share: #8d3a5c;
   --collapsed-badge: #0d724b;
