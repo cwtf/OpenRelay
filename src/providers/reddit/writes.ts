@@ -36,12 +36,16 @@ const readSession = async (fetchFn: Fetch, origin: string): Promise<Session> => 
   };
 };
 
-/** POST to a Reddit API path, refreshing a stale modhash once. */
+/**
+ * POST to a Reddit API path, refreshing a stale modhash once. `refused` is
+ * the error when Reddit still answers 401 or 403.
+ */
 async function post(
   fetchFn: Fetch,
   origin: string,
   path: string,
   params: (me: Session) => Params,
+  refused = "Reddit refused the request. Check that you are signed in.",
 ): Promise<any> {
   for (let attempt = 0; ; attempt++) {
     session ??= readSession(fetchFn, origin);
@@ -71,7 +75,7 @@ async function post(
     if (response.status === 429)
       throw new Error("Reddit is rate limiting requests. Try again shortly.");
     if (response.status === 401 || response.status === 403)
-      throw new Error("Reddit refused the request. Check that you are signed in.");
+      throw new Error(refused);
     if (!response.ok)
       throw new Error(`Reddit could not complete the request (${response.status}).`);
     const body = await response.json().catch(() => ({}));
@@ -343,10 +347,16 @@ export async function apiUpload(
   origin: string,
   image: ImageFile,
 ): Promise<{ id: string }> {
-  const lease = await post(fetchFn, origin, "/api/media/asset.json", () => ({
-    filepath: image.name,
-    mimetype: image.type,
-  }));
+  // Reddit has answered a signed-in browser session with 403 here (in the
+  // extension and the desktop app) while its other writes work, so a
+  // refusal isn't about signing in.
+  const lease = await post(
+    fetchFn,
+    origin,
+    "/api/media/asset.json",
+    () => ({ filepath: image.name, mimetype: image.type }),
+    "Reddit refused the image upload. Giphy GIFs saved from comments can still be added.",
+  );
   const id = lease?.asset?.asset_id;
   const fields: unknown = lease?.args?.fields;
   let target: URL | null = null;

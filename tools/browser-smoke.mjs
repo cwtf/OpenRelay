@@ -104,8 +104,8 @@ await context.route(/^https:\/\/reddit-uploaded-media\.s3-accelerate\.amazonaws\
     body: "",
   });
 });
-/** Reddit's image host, fetched by the extension for a saved image. */
-await context.route(/^https:\/\/i\.redd\.it\//, (route) =>
+/** Reddit's image hosts, fetched by the extension for a saved image. */
+await context.route(/^https:\/\/(i|preview)\.redd\.it\//, (route) =>
   route.fulfill({ contentType: "image/png", body: png }),
 );
 await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
@@ -141,7 +141,7 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         permalink: post.permalink + `${id}/`,
         ...(sent.richtext_json
           ? {
-              body: "Look\n\n![img](fixtureasset1) ![gif](giphy|fixturegif)",
+              body: "Look\n\n![img](fixtureasset1) ![gif](giphy|fixturegif)\n\nhttps://i.redd.it/not-an-upload.png\n\nhttps://preview.redd.it/linkedasset1.png?width=216&format=png",
               media_metadata: {
                 fixtureasset1: { status: "valid", e: "Image", m: "image/png", s: { u: "https://i.redd.it/upload.png", x: 1, y: 1 } },
                 "giphy|fixturegif": { status: "valid", e: "AnimatedImage", s: { gif: "https://www.reddit.com/img/gif.png", x: 1, y: 1 } },
@@ -475,8 +475,10 @@ try {
   const posted = app.locator('[data-cid="t1_mine2"]');
   await posted.locator('img[src="https://i.redd.it/upload.png"]').waitFor();
   await app.locator(".sheet").waitFor({ state: "detached" });
-  // Its image and GIF can be saved from the viewer, to reuse in replies.
-  for (const src of ["https://i.redd.it/upload.png", "https://www.reddit.com/img/gif.png"]) {
+  // Its images and GIF can be saved from the viewer, to reuse in replies.
+  const linkedUpload = "https://preview.redd.it/linkedasset1.png?width=216&format=png";
+  const linkedOther = "https://i.redd.it/not-an-upload.png";
+  for (const src of [linkedOther, linkedUpload, "https://i.redd.it/upload.png", "https://www.reddit.com/img/gif.png"]) {
     await posted.locator(`img[src="${src}"]`).click();
     await app.getByRole("button", { name: "Save for replies" }).click();
     await app.locator(".toast", { hasText: "Saved for replies" }).last().waitFor();
@@ -498,15 +500,38 @@ try {
       await chrome.developerPrivate.addHostPermission(id, `https://${host}/*`);
   }, new URL(app.url()).host);
   await extensions.close();
-  // r/test takes images but not Giphy GIFs, so only the image is offered;
-  // picking it fetches it again and uploads it as a new attachment.
+  // r/test takes images but not Giphy GIFs, so only the images are offered.
   const uploaded = uploads.length;
+  const written = writes.length;
   box = await openReply();
-  await app.getByRole("button", { name: "Saved GIFs and images" }).click();
-  const saved = app.locator(".reply-saved-pick");
-  await saved.first().waitFor();
-  assert.equal(await saved.count(), 1);
-  await saved.first().click();
+  const pickSaved = async (src) => {
+    await app.getByRole("button", { name: "Saved GIFs and images" }).click();
+    const saved = app.locator(".reply-saved-pick");
+    await saved.first().waitFor();
+    assert.equal(await saved.count(), 3);
+    await saved.locator(`img[src="${src}"]`).click();
+  };
+  // One uploaded to a comment goes back by Reddit's asset ID, with nothing
+  // uploaded or sent until the reply is.
+  await pickSaved("https://i.redd.it/upload.png");
+  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
+  assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
+  assert.equal(uploads.length, uploaded);
+  assert.equal(writes.length, written);
+  await app.getByRole("button", { name: "Preview" }).click();
+  await app.locator('.reply-preview img[src="https://i.redd.it/upload.png"]').waitFor();
+  await app.getByRole("button", { name: "Edit" }).click();
+  // So does one linked from Reddit's image hosts, as Reddit's apps write a
+  // comment's image: the file name is its ID.
+  await box.fill("");
+  await pickSaved(linkedUpload);
+  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
+  assert.equal(await box.inputValue(), "![img](linkedasset1)\n\n");
+  assert.equal(uploads.length, uploaded);
+  assert.equal(writes.length, written);
+  // Any other linked image is fetched again and uploaded as a new attachment.
+  await box.fill("");
+  await pickSaved(linkedOther);
   await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
   assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
   assert.equal(uploads.length, uploaded + 1);
@@ -894,7 +919,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's image and GIF saved from the viewer and the image picked again, re-uploaded, where the community takes no Giphy GIFs), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, another linked one re-uploaded), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

@@ -50,6 +50,18 @@ export const toggleSaved = (item: SavedMedia): boolean => {
   return !saved;
 };
 
+/**
+ * Adds Reddit's asset ID to an image saved before IDs were kept, when the
+ * viewer opens it again; it keeps its place in the list.
+ */
+export const updateSaved = (item: SavedMedia): void => {
+  if (!item.asset) return;
+  const list = savedMedia();
+  const index = list.findIndex((other) => savedKey(other) === savedKey(item) && !other.asset);
+  if (index < 0) return;
+  store(list.map((other, i) => (i === index ? { ...other, asset: item.asset! } : other)));
+};
+
 export const forgetSaved = (item: SavedMedia): void =>
   store(withoutSaved(savedMedia(), savedKey(item)));
 

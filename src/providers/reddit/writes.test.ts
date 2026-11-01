@@ -387,6 +387,19 @@ test("uploads an image to Reddit's S3 bucket without credentials", async () => {
   assert.equal((form.get("file") as File).type, "image/png");
 });
 
+test("says so when Reddit refuses the upload lease", async () => {
+  resetWrites();
+  const { calls, fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json" ? json({ data: { modhash: "abc123modhash" } }) : json({}, 403),
+  );
+  await assert.rejects(apiUpload(fetchFn, origin, IMAGE), /refused the image upload/);
+  // Once more with a fresh modhash, then nothing goes to S3.
+  assert.deepEqual(
+    calls.map((call) => new URL(call.url).pathname),
+    ["/api/me.json", "/api/media/asset.json", "/api/me.json", "/api/media/asset.json"],
+  );
+});
+
 test("sends an upload lease nowhere but Reddit's bucket", async () => {
   for (const action of ["//evil.example.com", "//reddit-uploaded-media.s3.amazonaws.com.evil.example", "http://reddit-uploaded-media.s3-accelerate.amazonaws.com"]) {
     resetWrites();
