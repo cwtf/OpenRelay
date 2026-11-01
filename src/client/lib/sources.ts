@@ -25,6 +25,12 @@ const KEY = "lemmy-instances";
 /** Set while the reader on Reddit shows the hybrid feed. */
 const HYBRID_KEY = "hybrid-feed";
 const MAX_INSTANCES = 20;
+/**
+ * Hybrid is off for now: its Lemmy posts can only be read signed out in the
+ * Reddit tab, so opening one leaves Reddit. The drawer doesn't offer it, and
+ * a reader that had it on shows Reddit's own feed.
+ */
+const HYBRID_ENABLED = false;
 
 export const REDDIT: Source = {
   kind: "reddit",
@@ -60,8 +66,8 @@ const emit = () => {
 };
 
 /**
- * Reddit, Hybrid when there's an instance to mix in, then the Lemmy
- * instances: lemmy.world until the viewer changes the list.
+ * Reddit, Hybrid (when enabled) when there's an instance to mix in, then the
+ * Lemmy instances: lemmy.world until the viewer changes the list.
  */
 const sourceList = (): Source[] => {
   if (!sources) {
@@ -72,7 +78,11 @@ const sourceList = (): Source[] => {
             typeof host === "string" && instanceHost(host) === host,
         )
       : [];
-    sources = [REDDIT, ...(hosts.length ? [HYBRID] : []), ...hosts.map(lemmy)];
+    sources = [
+      REDDIT,
+      ...(HYBRID_ENABLED && hosts.length ? [HYBRID] : []),
+      ...hosts.map(lemmy),
+    ];
   }
   return sources;
 };
@@ -144,6 +154,7 @@ export const trustedSource = (): boolean =>
 
 /** Whether this reader shows the hybrid feed: on Reddit, with an instance listed. */
 export const hybridMode = (): boolean =>
+  HYBRID_ENABLED &&
   !offlineMode &&
   providerOf(pageUrl) === "reddit" &&
   instances().length > 0 &&

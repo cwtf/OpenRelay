@@ -76,6 +76,8 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 
 ### Hybrid feed
 
+Turned off for now: `HYBRID_ENABLED` in `client/lib/sources.ts` is `false`, so the drawer doesn't offer it and `hybridMode()` is always false, even with `hybrid-feed` stored. The code below stays for when it returns.
+
 The drawer's **Hybrid** source (shown once an instance is listed) is the Reddit tab with the `hybrid-feed` storage key set (`hybridMode()` in `client/lib/sources.ts`). Its Home feed is Reddit's plus each listed instance's Local feed:
 
 - `api.ts`'s `fetchFeed` hands Home to `fetchHybridFeed` (`client/lib/hybrid.ts`). Reddit goes through the bridge as usual. Each instance is read straight from the reader with `fetch` (`credentials: "omit"`, `allowedApiPath` only) through `lemmyFeed()` in `lemmy/reader.ts`. This is the one place the reader talks to a site itself; Lemmy's API sends CORS headers for any origin, so the wrapper apps need nothing extra.
