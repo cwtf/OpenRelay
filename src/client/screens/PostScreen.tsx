@@ -184,6 +184,10 @@ const archiveMessage = (error: unknown) =>
   error instanceof ArchiveError
     ? error.message
     : new ArchiveError("unreachable").message;
+/** How much of the scroller's top the sticky bars cover: the 44px comments
+ *  bar, plus the archive bar pinned with it when there is one. */
+const coveredTop = (scroller: HTMLElement) =>
+  44 + (scroller.querySelector<HTMLElement>(".archive-restore")?.offsetHeight ?? 0);
 
 export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const nav = useNav();
@@ -197,6 +201,21 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     wantsThumb(p) &&
     p.media.kind !== "poll";
   const scrollerRef = useRef<HTMLDivElement>(null);
+  /** The archive bar on a removed post sticks above the comments bar, which
+   *  then sticks just below it, so it needs the bar's (wrapping) height. */
+  const [archiveBar, setArchiveBar] = useState<HTMLDivElement | null>(null);
+  const [archiveBarHeight, setArchiveBarHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (!archiveBar) {
+      setArchiveBarHeight(0);
+      return;
+    }
+    const observer = new ResizeObserver(() =>
+      setArchiveBarHeight(archiveBar.offsetHeight),
+    );
+    observer.observe(archiveBar);
+    return () => observer.disconnect();
+  }, [archiveBar]);
   const [post, setPost] = useState<PostDetail | PostSummary | null>(
     seed ?? null,
   );
@@ -532,18 +551,19 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     const scroller = scrollerRef.current;
     const el = scroller?.querySelector<HTMLElement>(`[data-cid="${id}"]`);
     if (!scroller || !el) return;
+    const covered = coveredTop(scroller);
     const top =
       el.getBoundingClientRect().top -
       scroller.getBoundingClientRect().top +
       scroller.scrollTop -
-      44;
+      covered;
     const reduced = document.documentElement.dataset.motion === "reduced";
     scroller.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
     // Comments off screen use estimated heights (content-visibility), so the
     // target moves as they render. Once the scroll ends, re-measure and
     // correct until it holds (bounded, e.g. at the end of the thread).
     const offset = () =>
-      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 44;
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - covered;
     const correct = (attempt: number) => {
       const delta = offset();
       if (Math.abs(delta) <= 2 || attempt >= 8) return;
@@ -584,7 +604,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       return;
     }
     const base = scroller.getBoundingClientRect().top;
-    const viewTop = scroller.scrollTop + 44;
+    const viewTop = scroller.scrollTop + coveredTop(scroller);
     const offsets = targets.map((id) => {
       const el = scroller.querySelector<HTMLElement>(`[data-cid="${id}"]`);
       return el
@@ -936,21 +956,24 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
           </>
         );
     }
+    // The bar sticks to the top like the comments bar; the note scrolls away.
     return (
-      <div className="archive-restore">
-        <div className={`archive-bar${failed ? " is-error" : ""}`} role="status">
-          {restore.status === "loading" ? (
-            <span className="spinner" aria-hidden />
-          ) : (
-            <Icon name={icon} />
-          )}
-          <span className="grow">{message}</span>
-          {actions}
+      <>
+        <div className="archive-restore" ref={setArchiveBar}>
+          <div className={`archive-bar${failed ? " is-error" : ""}`} role="status">
+            {restore.status === "loading" ? (
+              <span className="spinner" aria-hidden />
+            ) : (
+              <Icon name={icon} />
+            )}
+            <span className="grow">{message}</span>
+            {actions}
+          </div>
         </div>
         {restore.status === "idle" || restore.status === "loading" ? (
           <p className="archive-note">{ARCHIVE_NOTE}</p>
         ) : null}
-      </div>
+      </>
     );
   };
 
@@ -1228,7 +1251,10 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
           </section>
         )}
 
-        <div className="comments-bar">
+        <div
+          className="comments-bar"
+          style={postRemoved && archiveBarHeight ? { top: archiveBarHeight } : undefined}
+        >
           <span className="label">Comments</span>
           <button type="button" className="sort-btn" onClick={openSortSheet}>
             {sortLabel[sort]}

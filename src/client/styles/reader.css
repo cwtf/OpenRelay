@@ -3428,8 +3428,16 @@ button.appbar-title {
    removed post (or above removed comments), the banner over a thread Reddit
    refuses, and the panel offering to restore one. */
 .archive-restore {
-  padding: 6px 12px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 6px 12px;
   background: var(--surface);
+}
+
+/* Above removed comments it sits under the comments bar, so it sticks there. */
+.comments .archive-restore {
+  top: 44px;
 }
 
 .archive-bar {
@@ -3478,6 +3486,13 @@ button.appbar-title {
   margin: 6px 4px 0;
   color: var(--text-3);
   font-size: 12px;
+}
+
+/* The note under the bar scrolls away while the bar stays. */
+.archive-restore + .archive-note {
+  margin: 0;
+  padding: 0 16px 8px;
+  background: var(--surface);
 }
 
 .archive-captured {
