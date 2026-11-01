@@ -90,6 +90,12 @@
       forget: async () => {},
       sync: async () => {},
     }),
+    // Inbox notifications: the app checks the inboxes itself in the background.
+    notifications: Object.freeze({
+      enabled: () => call("notifications.enabled").then(Boolean),
+      enable: () => call("notifications.enable"),
+      disable: () => call("notifications.disable").then(() => undefined),
+    }),
     onBack: (listener) => {
       backListener = listener;
     },

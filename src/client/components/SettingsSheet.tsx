@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { readerHost } from "../../hosts/reader";
+import type { InboxNotifications } from "../../hosts/types";
 import { COMMENT_SORTS, type Prefs } from "../../shared/api";
 import { usePrefs } from "../app/prefs";
 import { sortLabel } from "../lib/format";
@@ -72,6 +75,55 @@ const selectStyle = {
   padding: "8px 10px",
 } as const;
 
+/**
+ * Inbox notifications, kept by the host (the Android app), not in prefs: it
+ * checks the inboxes itself in the background and asks for the permission.
+ */
+const InboxNotificationsToggle = ({
+  notifications,
+}: {
+  notifications: InboxNotifications;
+}) => {
+  const [enabled, setEnabled] = useState(false);
+  const [declined, setDeclined] = useState(false);
+  useEffect(() => {
+    let live = true;
+    notifications
+      .enabled()
+      .then((value) => live && setEnabled(value))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [notifications]);
+  const change = async (value: boolean) => {
+    try {
+      if (!value) {
+        await notifications.disable();
+        setEnabled(false);
+        return;
+      }
+      const answer = await notifications.enable();
+      setEnabled(answer === "granted");
+      setDeclined(answer === "declined");
+    } catch {
+      setEnabled(await notifications.enabled().catch(() => false));
+    }
+  };
+  return (
+    <Toggle
+      label="Inbox notifications"
+      hint={
+        declined
+          ? "Allow notifications for OpenRelay in Android's settings first"
+          : "Replies, mentions and messages on Reddit and your Lemmy instances. Checked about every 15 minutes, or less often to save battery. Nothing is marked read"
+      }
+      value={enabled}
+      onChange={(value) => void change(value)}
+    />
+  );
+};
+
 type PaneMode = Prefs["paneModePortrait"];
 
 /** Relay's tabletModes list: Auto, Single Pane, Dual Pane. */
@@ -102,6 +154,7 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
     <K extends keyof Prefs>(key: K) =>
     (value: Prefs[K]) =>
       update({ [key]: value } as Partial<Prefs>);
+  const notifications = readerHost().notifications;
 
   return (
     <Sheet title="Settings" onClosed={onClosed}>
@@ -298,6 +351,13 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
                 value={prefs.offlineVideos}
                 onChange={set("offlineVideos")}
               />
+            </>
+          ) : null}
+
+          {notifications ? (
+            <>
+              <div className="sheet-section">Notifications</div>
+              <InboxNotificationsToggle notifications={notifications} />
             </>
           ) : null}
 

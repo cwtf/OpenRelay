@@ -1,5 +1,6 @@
 package io.github.cwtf.openrelay
 
+import android.Manifest
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.ContentValues
@@ -10,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
@@ -81,6 +83,19 @@ private val DEFAULT_INSTANCES = setOf("lemmy.world")
 private val INSTANCE_HOST = Regex("^(?!-)[a-z0-9-]{1,63}(?:\\.(?!-)[a-z0-9-]{1,63})+$")
 
 /**
+ * The Lemmy instances added in the reader, from its saved settings. The app
+ * treats them as it treats Reddit; adding one in the app is the consent.
+ */
+internal fun listedInstances(saved: JSONObject): Set<String> {
+    if (!saved.has(INSTANCES_KEY)) return DEFAULT_INSTANCES
+    val list = saved.optJSONArray(INSTANCES_KEY) ?: return emptySet()
+    return (0 until list.length())
+        .mapNotNull { list.optString(it).takeIf { host -> INSTANCE_HOST.matches(host) } }
+        .filter { !it.substringAfterLast('.').all(Char::isDigit) && !isReddit(Uri.parse("https://$it")) }
+        .toSet()
+}
+
+/**
  * Reddit in one WebView, with OpenRelay's content script, and the reader in a
  * second WebView over it. Reddit's CSP blocks the reader's origin as an iframe,
  * so the two talk through this activity: `openRelayPage` (Reddit's top frame
@@ -112,6 +127,12 @@ class MainActivity : ComponentActivity() {
     private val pickFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
         fileCallback = null
+    }
+    /** Answers the reader's `notifications.enable` once Android's prompt is answered. */
+    private var notificationsAnswer: ((Boolean) -> Unit)? = null
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notificationsAnswer?.invoke(it)
+        notificationsAnswer = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -189,6 +210,14 @@ class MainActivity : ComponentActivity() {
             }
         })
         redditView.loadUrl(intent.dataString?.takeIf { isSite(Uri.parse(it)) } ?: "https://www.reddit.com/")
+        InboxNotifications.schedule(this)
+    }
+
+    /** A notification opened while the app is running: its page replaces the current one. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val url = intent.data ?: return
+        if (isSite(url)) redditView.loadUrl(url.toString())
     }
 
     private fun newWebView(debuggable: Boolean) = WebView(this).apply {
@@ -301,6 +330,23 @@ class MainActivity : ComponentActivity() {
                 }
                 return@addWebMessageListener
             }
+            if (request.optString("method") == "notifications.enable") {
+                val answer = { granted: Boolean ->
+                    if (granted) InboxNotifications.enable(this)
+                    response.put("value", if (granted) "granted" else "declined")
+                    reply.postMessage(response.toString())
+                }
+                when {
+                    InboxNotifications.permitted(this) -> answer(true)
+                    Build.VERSION.SDK_INT >= 33 && notificationsAnswer == null -> {
+                        notificationsAnswer = { granted -> answer(granted && InboxNotifications.permitted(this)) }
+                        askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    // Turned off in Android's settings, or a prompt is already open.
+                    else -> answer(false)
+                }
+                return@addWebMessageListener
+            }
             try {
                 response.put("value", handleStorage(request.getString("method"), request.opt("args")))
             } catch (error: Exception) {
@@ -319,6 +365,8 @@ class MainActivity : ComponentActivity() {
         "offline.set" -> (args as JSONObject).let { offline.set(it.getString("key"), it.get("value")) }
             .let { JSONObject.NULL }
         "offline.remove" -> offline.remove(args as JSONArray).let { JSONObject.NULL }
+        "notifications.enabled" -> InboxNotifications.enabled(this)
+        "notifications.disable" -> InboxNotifications.disable(this).let { JSONObject.NULL }
         else -> throw IllegalArgumentException("Unsupported method")
     }
 
@@ -430,19 +478,7 @@ class MainActivity : ComponentActivity() {
 
     // --- Lemmy instances ------------------------------------------------------
 
-    /**
-     * The Lemmy instances added in the reader. The app treats them as it treats
-     * Reddit; adding one in the app is the consent.
-     */
-    private fun instanceHosts(): Set<String> {
-        val saved = storage.getAll()
-        if (!saved.has(INSTANCES_KEY)) return DEFAULT_INSTANCES
-        val list = saved.optJSONArray(INSTANCES_KEY) ?: return emptySet()
-        return (0 until list.length())
-            .mapNotNull { list.optString(it).takeIf { host -> INSTANCE_HOST.matches(host) } }
-            .filter { !it.substringAfterLast('.').all(Char::isDigit) && !isReddit(Uri.parse("https://$it")) }
-            .toSet()
-    }
+    private fun instanceHosts(): Set<String> = listedInstances(storage.getAll())
 
     /** A site OpenRelay reads: Reddit, or an added Lemmy instance. */
     private fun isSite(url: Uri) =

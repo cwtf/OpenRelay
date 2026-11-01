@@ -89,6 +89,10 @@ The drawer's **Hybrid** source (shown once an instance is listed) is the Reddit 
 
 Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, the offline store, image fetching for offline posts, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
 
+### Android inbox notifications
+
+`apps/android/.../InboxNotifications.kt` is the one Reddit/Lemmy client outside the content script: a WorkManager job (every 15 minutes, WorkManager's minimum; keep it there) reads the unread inbox with the WebView's cookies and user agent, never marks anything read, and posts notifications. The reader turns it on through the optional `ReaderHost.notifications` (Settings shows the toggle only on Android). The host keeps that state in its own preferences, not in reader storage. Its parsing is unit-tested in Kotlin (`cd apps/android && ./gradlew testDebugUnitTest`), not by `npm test`.
+
 ### Desktop app (`apps/desktop/`)
 
 Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` directly.

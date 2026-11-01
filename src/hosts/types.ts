@@ -84,6 +84,18 @@ export type InstanceAccess = {
 };
 
 /**
+ * Inbox notifications the host checks for by itself, in the background, with
+ * the signed-in sessions it already has (Android only; there's no push server).
+ */
+export type InboxNotifications = {
+  /** On, and the system still lets the host notify. */
+  enabled(): Promise<boolean>;
+  /** Turns them on, asking for the system's permission first if needed. */
+  enable(): Promise<"granted" | "declined">;
+  disable(): Promise<void>;
+};
+
+/**
  * A message channel between the reader and the Reddit page, for a host that
  * shows the reader outside the page (see `PageHost.readerView`). It carries the
  * same `openrelay:*` messages as the iframe's `postMessage`; the host checks
@@ -142,6 +154,8 @@ export type ReaderHost = {
    * open in the instance's own web app.
    */
   instances?: InstanceAccess;
+  /** Absent when the host can't notify; Settings then leaves the option out. */
+  notifications?: InboxNotifications;
   /**
    * The host's own back control (Android's back gesture), for a host whose
    * back doesn't reach the reader's history. The listener returns whether the
