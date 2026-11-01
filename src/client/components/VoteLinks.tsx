@@ -2,6 +2,8 @@ import { pageUrl } from "../../extension/bridge";
 import { compact } from "../lib/format";
 import { redditUrl } from "../lib/platform";
 import { castVote, useVote } from "../lib/votes";
+import { isLemmyItem } from "../lib/hybrid";
+import { LEMMY_ONLY } from "../lib/api";
 import type { Vote } from "../../providers/reddit/votes";
 import { Icon } from "./Icon";
 
@@ -42,7 +44,10 @@ export const VoteLinks = ({
   const shown = state.score ?? score;
   const href = new URL(redditUrl(permalink) || pageUrl.href);
   href.searchParams.set("openrelay", "off");
+  // The hybrid feed's Lemmy posts show their score; they're voted on there.
+  const lemmy = isLemmyItem(thingId);
   const arrow = (direction: Vote) => {
+    if (lemmy) return null;
     const label = direction === 1 ? "Upvote" : "Downvote";
     const selected = current === direction;
     return (
@@ -68,11 +73,11 @@ export const VoteLinks = ({
   );
   return (
     <span
-      className={`vote vote-${variant}`}
+      className={`vote vote-${variant}${lemmy ? " is-score-only" : ""}`}
       data-thing-id={thingId}
       data-vote={current}
       aria-busy={state.pending}
-      title={state.error || "Vote with your Reddit account"}
+      title={state.error || (lemmy ? LEMMY_ONLY : "Vote with your Reddit account")}
     >
       {variant === "pill" ? (
         <span className="vote-capsule">

@@ -5,6 +5,7 @@ import type { MediaFetcher } from "../../hosts/types";
 import { offlineMode } from "../../extension/bridge";
 import { loadCachedPrefs } from "../app/prefs";
 import { fetchFeed, fetchPostToSave } from "./api";
+import { isLemmyItem } from "./hybrid";
 import { plural } from "./format";
 import {
   clearOffline,
@@ -267,7 +268,8 @@ export const saveFeedOffline = (
     async () => {
       await loadOfflineIndex().catch(() => undefined);
       return pickUnsaved(shown, count, {
-        skip: (id) => isSavedOffline(id) || hiddenPosts.has(id),
+        // The hybrid feed's Lemmy posts are saved from their instance.
+        skip: (id) => isSavedOffline(id) || hiddenPosts.has(id) || isLemmyItem(id),
         ...(textPosts ? { only: (post: PostSummary) => post.media.kind === "self" } : {}),
         more: (after) => fetchFeed(shown.sub, shown.sort, shown.timeframe, after),
         beforePage: (page) => {

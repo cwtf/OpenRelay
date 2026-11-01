@@ -35,15 +35,28 @@ test("refuses anything but a public https host name", () => {
     assert.equal(instanceHost(input), null, input);
 });
 
-test("lets the tab go only to a source's front page", () => {
+test("lets the tab go only to a source's front page, or a hybrid feed item's page", () => {
   assert.equal(sourceUrl("https://www.reddit.com/"), "https://www.reddit.com/");
   assert.equal(sourceUrl(instanceHome("lemmy.world")), "https://lemmy.world/");
+  for (const value of [
+    "https://lemmy.world/post/123",
+    "https://lemmy.world/comment/45",
+    "https://lemmy.world/c/memes",
+    "https://lemmy.world/c/linux@lemmy.ml",
+    "https://lemmy.world/u/some_one@sh.itjust.works",
+  ])
+    assert.equal(sourceUrl(value), value);
   for (const value of [
     undefined,
     42,
     "https://www.reddit.com/r/all/",
+    "https://www.reddit.com/post/123",
     "https://old.reddit.com/",
-    "https://lemmy.world/c/memes",
+    "https://lemmy.world/post/abc",
+    "https://lemmy.world/post/123/edit",
+    "https://lemmy.world/c/me%20mes",
+    "https://lemmy.world/settings",
+    "https://lemmy.world/api/v3/user/logout",
     "https://lemmy.world/?x=1",
     "https://lemmy.world/#x",
     "https://lemmy.world:8536/",

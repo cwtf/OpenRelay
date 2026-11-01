@@ -641,6 +641,11 @@
   font-size: calc(13px * var(--ts));
 }
 
+/* A hybrid feed's Lemmy post: its score where the up arrow's icon would be. */
+.vote-stat.is-score-only {
+  padding-left: 10px;
+}
+
 .vote-stat .vote-btn {
   width: 36px;
   height: 36px;

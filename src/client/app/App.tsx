@@ -23,7 +23,9 @@ import { SettingsSheet } from "../components/SettingsSheet";
 import { fetchInit, entryRoute, site } from "../lib/api";
 import { useSwipeBack } from "../lib/gestures";
 import { resolveLink } from "../lib/links";
-import { openUrl } from "../lib/platform";
+import { openUrl, toast } from "../lib/platform";
+import { isLemmyItem, isLemmyName, lemmyActorUrl, lemmyItemUrl } from "../lib/hybrid";
+import { openOnInstance } from "../lib/sources";
 import { paneLayout, setSelectedPost, useWindowSize } from "../lib/panes";
 import { installRipple } from "../lib/ripple";
 import { recentCommunities } from "../lib/site";
@@ -54,6 +56,18 @@ import {
   type ViewerSpec,
 } from "./nav";
 import { PrefsProvider, usePrefs } from "./prefs";
+
+/**
+ * The hybrid feed's Lemmy posts, communities and users open on their
+ * instance. `true` when the item was one (and has gone, or can't).
+ */
+const leftForInstance = (lemmy: boolean, url: () => string | null): boolean => {
+  if (!lemmy) return false;
+  const page = url();
+  if (page) openOnInstance(page);
+  else toast("Add its Lemmy instance to open it");
+  return true;
+};
 
 type Route =
   | {
@@ -478,6 +492,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
 
   const openCommunity = useCallback(
     (name: string) => {
+      if (leftForInstance(isLemmyName(name), () => lemmyActorUrl("c", name)))
+        return;
       setCurrent(name);
       setExpanded(false);
       if (name.toLowerCase() !== init.subreddit.toLowerCase())
@@ -493,6 +509,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
 
   const openPost = useCallback(
     (post: PostSummary | string, focus?: string) => {
+      const id = typeof post === "string" ? post : post.id;
+      if (leftForInstance(isLemmyItem(id), () => lemmyItemUrl(id))) return;
       const route: Route =
         typeof post === "string"
           ? {
@@ -582,7 +600,10 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openSearch: () => push({ kind: "search", sub: current }),
       back,
       openLink,
-      openProfile: (user) => push({ kind: "profile", user }),
+      openProfile: (user) => {
+        if (!leftForInstance(isLemmyName(user), () => lemmyActorUrl("u", user)))
+          push({ kind: "profile", user });
+      },
       openInbox: () => push({ kind: "inbox" }),
       openModerator: () => push({ kind: "moderator" }),
       openFriends: () => push({ kind: "friends" }),

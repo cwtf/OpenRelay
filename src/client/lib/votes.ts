@@ -1,6 +1,8 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "../../extension/bridge";
 import { toast } from "./platform";
+import { isLemmyItem } from "./hybrid";
+import { LEMMY_ONLY } from "./api";
 import type { NativeVote, Vote, VoteResult } from "../../providers/reddit/votes";
 
 type State = NativeVote & {
@@ -22,7 +24,8 @@ function publish(id: string, patch: Partial<State>) {
 }
 async function refresh() {
   if (reading || document.hidden) return;
-  const ids = [...watchers.keys()];
+  // The hybrid feed's Lemmy posts aren't Reddit's to report on.
+  const ids = [...watchers.keys()].filter((id) => !isLemmyItem(id));
   if (!ids.length) return;
   reading = true;
   try {
@@ -95,6 +98,10 @@ export async function castVote(
   score: number,
 ): Promise<void> {
   if (states.get(id)?.pending) return;
+  if (isLemmyItem(id)) {
+    toast(LEMMY_ONLY);
+    return;
+  }
   revisions.set(id, (revisions.get(id) ?? 0) + 1);
   publish(id, { pending: true, error: undefined, fallback: false });
   try {

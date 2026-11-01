@@ -9,25 +9,38 @@ import {
 import { providerOf } from "../../providers/hosts";
 import { openSource } from "./api";
 import { toast } from "./platform";
-import { readJson, watchKey, writeJson } from "./storage";
+import { flushStorage, readJson, watchKey, writeJson } from "./storage";
 import { readerHost } from "../../hosts/reader";
 
-/** A site the drawer's source switcher can open. */
+/** A site the drawer's source switcher can open, or the hybrid feed. */
 export type Source = {
-  kind: "reddit" | "lemmy";
-  /** `reddit` for Reddit, the host name for a Lemmy instance. */
+  kind: "reddit" | "hybrid" | "lemmy";
+  /** `reddit` for Reddit, `hybrid`, or the host name for a Lemmy instance. */
   id: string;
   label: string;
   url: string;
 };
 
 const KEY = "lemmy-instances";
+/** Set while the reader on Reddit shows the hybrid feed. */
+const HYBRID_KEY = "hybrid-feed";
 const MAX_INSTANCES = 20;
 
 export const REDDIT: Source = {
   kind: "reddit",
   id: "reddit",
   label: "Reddit",
+  url: REDDIT_HOME,
+};
+
+/**
+ * Reddit's posts mixed with the listed instances'. It runs in the Reddit
+ * tab, so it's Reddit's front page with `HYBRID_KEY` set.
+ */
+export const HYBRID: Source = {
+  kind: "hybrid",
+  id: "hybrid",
+  label: "Hybrid",
   url: REDDIT_HOME,
 };
 
@@ -46,7 +59,10 @@ const emit = () => {
   for (const listener of listeners) listener();
 };
 
-/** Reddit, then the Lemmy instances: lemmy.world until the viewer changes the list. */
+/**
+ * Reddit, Hybrid when there's an instance to mix in, then the Lemmy
+ * instances: lemmy.world until the viewer changes the list.
+ */
 const sourceList = (): Source[] => {
   if (!sources) {
     const saved = readJson<unknown>(KEY, DEFAULT_INSTANCES);
@@ -56,7 +72,7 @@ const sourceList = (): Source[] => {
             typeof host === "string" && instanceHost(host) === host,
         )
       : [];
-    sources = [REDDIT, ...hosts.map(lemmy)];
+    sources = [REDDIT, ...(hosts.length ? [HYBRID] : []), ...hosts.map(lemmy)];
   }
   return sources;
 };
@@ -75,7 +91,8 @@ const subscribe = (listener: () => void) => {
 export const useSources = (): Source[] =>
   useSyncExternalStore(subscribe, sourceList);
 
-const instances = () =>
+/** The listed Lemmy instances' hosts. */
+export const instances = (): string[] =>
   sourceList()
     .filter((source) => source.kind === "lemmy")
     .map((source) => source.id);
@@ -125,10 +142,17 @@ export const trustedSource = (): boolean =>
   providerOf(pageUrl) === "reddit" ||
   (providerOf(pageUrl) === "lemmy" && instances().includes(pageUrl.hostname));
 
+/** Whether this reader shows the hybrid feed: on Reddit, with an instance listed. */
+export const hybridMode = (): boolean =>
+  !offlineMode &&
+  providerOf(pageUrl) === "reddit" &&
+  instances().length > 0 &&
+  readJson<unknown>(HYBRID_KEY, false) === true;
+
 /** The source this reader was opened from; `null` when reading offline. */
 export const currentSource = (): Source | null => {
   if (offlineMode) return null;
-  if (providerOf(pageUrl) === "reddit") return REDDIT;
+  if (providerOf(pageUrl) === "reddit") return hybridMode() ? HYBRID : REDDIT;
   const host = pageUrl.hostname;
   return sourceList().find((source) => source.id === host) ?? lemmy(host);
 };
@@ -139,30 +163,48 @@ export const currentSource = (): Source | null => {
  * call this straight from the click handler.
  */
 export function switchSource(source: Source): void {
-  const access = readerHost().instances;
-  if (source.kind === "lemmy" && access) {
-    void access
-      .allow(source.id)
-      .then(async (answer) => {
-        if (answer === "declined")
-          toast(`Without access to ${source.id}, it opens in its own web app`);
-        await syncInstances();
-      })
-      .catch(() => undefined)
-      .finally(() => go(source));
-    return;
-  }
-  go(source);
+  if (source.kind === "lemmy") withAccess(source.id, () => void go(source));
+  else void go(source);
 }
 
-function go(source: Source): void {
+/**
+ * Loads a hybrid feed item's page on its listed instance in this tab
+ * (`sourceUrl` checks it), asking for access first like `switchSource`.
+ */
+export function openOnInstance(url: string): void {
+  withAccess(new URL(url).hostname, () =>
+    void openSource(url).catch((error: unknown) =>
+      toast(error instanceof Error ? error.message : "Could not open it"),
+    ),
+  );
+}
+
+/** Asks for access to `host` where OpenRelay can run there, then runs `then`. */
+function withAccess(host: string, then: () => void): void {
+  const access = readerHost().instances;
+  if (!access) return then();
+  void access
+    .allow(host)
+    .then(async (answer) => {
+      if (answer === "declined")
+        toast(`Without access to ${host}, it opens in its own web app`);
+      await syncInstances();
+    })
+    .catch(() => undefined)
+    .finally(then);
+}
+
+async function go(source: Source): Promise<void> {
+  // Saved before the tab leaves, so the next reader there knows.
+  writeJson(HYBRID_KEY, source.kind === "hybrid");
+  await flushStorage().catch(() => undefined);
   // Read offline, the reader is the page itself (or the host's own view).
   if (offlineMode) {
     if (window.top === window) location.assign(source.url);
     else window.open(source.url, "_blank", "noopener,noreferrer");
     return;
   }
-  openSource(source.url).catch((error: unknown) =>
+  await openSource(source.url).catch((error: unknown) =>
     toast(error instanceof Error ? error.message : "Could not switch"),
   );
 }

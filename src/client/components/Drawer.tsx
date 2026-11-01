@@ -152,7 +152,13 @@ const SourceSwitcher = ({ onSwitch }: { onSwitch: () => void }) => {
   const [open, setOpen] = useState(false);
   const others = sources.filter((source) => source.id !== current?.id);
   const icon = (source: Source | null): IconName =>
-    !source ? "book" : source.kind === "reddit" ? "subreddit" : "globe";
+    !source
+      ? "book"
+      : source.kind === "reddit"
+        ? "subreddit"
+        : source.kind === "hybrid"
+          ? "hybrid"
+          : "globe";
   return (
     <>
       <button

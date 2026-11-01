@@ -1,7 +1,8 @@
 /**
  * The sites the drawer's source switcher can send the tab to: Reddit, or a
  * Lemmy instance the viewer added. Switching loads that site's front page in
- * the tab; the reader can't send the tab anywhere else.
+ * the tab; the hybrid feed's Lemmy posts, communities and users also open
+ * on their instance. The reader can't send the tab anywhere else.
  */
 
 export const REDDIT_HOME = "https://www.reddit.com/";
@@ -53,9 +54,14 @@ export function instanceHost(input: string): string | null {
 /** An instance's front page. */
 export const instanceHome = (host: string): string => `https://${host}/`;
 
+/** An instance's front page, a post or comment, or a community or user. */
+const INSTANCE_PAGE =
+  /^\/(?:|(?:post|comment)\/\d{1,12}|[cu]\/[A-Za-z0-9_]{1,50}(?:@[a-z0-9.-]{1,253})?)$/;
+
 /**
- * `value` if the reader may send the tab there: Reddit's front page, or the
- * front page of a host `instanceHost` accepts. Otherwise `null`.
+ * `value` if the reader may send the tab there: Reddit's front page, or a
+ * page `INSTANCE_PAGE` allows on a host `instanceHost` accepts. Otherwise
+ * `null`.
  */
 export function sourceUrl(value: unknown): string | null {
   if (typeof value !== "string" || value.length > 300) return null;
@@ -67,7 +73,6 @@ export function sourceUrl(value: unknown): string | null {
   }
   if (
     url.protocol !== "https:" ||
-    url.pathname !== "/" ||
     url.search ||
     url.hash ||
     url.username ||
@@ -76,5 +81,7 @@ export function sourceUrl(value: unknown): string | null {
   )
     return null;
   if (url.href === REDDIT_HOME) return url.href;
-  return instanceHost(url.hostname) === url.hostname ? url.href : null;
+  return instanceHost(url.hostname) === url.hostname && INSTANCE_PAGE.test(url.pathname)
+    ? url.href
+    : null;
 }

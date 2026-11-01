@@ -74,6 +74,15 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 - The wrapper apps read the list from their own storage file (`INSTANCES_KEY` in `apps/desktop/src/main.js` and `MainActivity.kt`) and treat those hosts like Reddit; their `instances` access just answers "granted". Android re-registers its document-start script and page channel when the list changes.
 - `isGatePage` for Lemmy is "not lemmy-ui": no `#root` or no `isoData` script, which covers Cloudflare/Anubis bot checks.
 
+### Hybrid feed
+
+The drawer's **Hybrid** source (shown once an instance is listed) is the Reddit tab with the `hybrid-feed` storage key set (`hybridMode()` in `client/lib/sources.ts`). Its Home feed is Reddit's plus each listed instance's Local feed:
+
+- `api.ts`'s `fetchFeed` hands Home to `fetchHybridFeed` (`client/lib/hybrid.ts`). Reddit goes through the bridge as usual. Each instance is read straight from the reader with `fetch` (`credentials: "omit"`, `allowedApiPath` only) through `lemmyFeed()` in `lemmy/reader.ts`. This is the one place the reader talks to a site itself; Lemmy's API sends CORS headers for any origin, so the wrapper apps need nothing extra.
+- The pure parts are in `providers/hybrid.ts`: `mergeFeeds` (New by time, other sorts spread by each source's own rank, since scores aren't comparable), the `hybrid:` JSON cursor holding each source's own `after`, and `hybridPost`, which writes local names as `name@host`.
+- In the Reddit tab, `isLemmyItem(id)` (a `t3_<n>_<tag>` ID) and `isLemmyName(name)` (contains `@`) mark hybrid items. Reddit must never get them: `runAction` and `castVote` refuse them, vote-status skips them, cards drop their vote/save buttons, and `site.communityLabel`/`userLabel` use Lemmy's labels for them.
+- `openPost`, `openCommunity` and `openProfile` in `App.tsx` send a hybrid item to its instance's page (`lemmyItemUrl`, `lemmyActorUrl`, then `openOnInstance`), which is why `sourceUrl()` also allows an instance's `/post/<n>`, `/comment/<n>`, `/c/<name>` and `/u/<name>`.
+
 ### Host adapter
 
 Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, the offline store, image fetching for offline posts, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
@@ -97,7 +106,7 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 - `action`: a write, which must be an entry in the `ACTIONS` table in `src/providers/reddit/writes.ts`, with validated params. **New writes go there.**
 - `upload`: an image or GIF for a reply. `decodeImage()` in `src/providers/upload.ts` checks its type (PNG, JPEG, GIF, WebP), first bytes and size (20 MB), and names it `image.<ext>`. Reddit's `apiUpload` gets a lease from `/api/media/asset.json` and posts the file, without credentials, only to the S3 host `UPLOAD_HOST` allows; a `comment` or `edit` whose text refers to uploaded media (`![img](<asset id>)`) is sent as `richtext_json`, converted by Reddit's `/api/convert_rte_body_format`. Lemmy's `lemmyUpload` posts to `/pictrs/image`. The bridge carries the bytes as base64, because the Android app's bridge carries only strings.
 - `me`: account name and avatar only.
-- `navigate`: the drawer's source switcher (handled by `content.ts` itself, for every site). Loads Reddit's front page or a Lemmy instance's front page in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
+- `navigate`: the drawer's source switcher (handled by `content.ts` itself, for every site). Loads Reddit's front page, or a Lemmy instance's front page or a hybrid feed item's page on it, in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
 
 The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, and host access to Reddit's image hosts for offline images), no third-party hosts apart from the optional Giphy GIFs and Arctic Shift (`lib/archive.ts`, fetched only when you press Restore from archive on a removed post), and the inbox read with `mark=false`. Keep changes consistent with it.
 

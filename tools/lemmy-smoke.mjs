@@ -1,6 +1,7 @@
 // Lemmy in the real extension: add an instance from the drawer's source
 // switcher, read its feed, a post and its comment tree through Lemmy's API,
-// switch back to Reddit, and remove it again. Fixture pages and API answers
+// switch back to Reddit, mix it into Reddit's front page as the hybrid feed,
+// and remove it again. Fixture pages and API answers
 // only (shaped like lemmy.world's, Lemmy 0.19); no real site is contacted.
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -96,8 +97,11 @@ const site = {
 };
 const lemmyReads = [];
 const lemmyWrites = [];
-await context.route(/^https:\/\/lemmy\.world\//, (route) => {
+// The hybrid feed's reads, which the reader makes itself, signed out.
+const readerReads = [];
+await context.route(/^https:\/\/lemmy\.world\//, async (route) => {
   const url = new URL(route.request().url());
+  const headers = await route.request().allHeaders();
   if (route.request().method() !== "GET") {
     const body = JSON.parse(route.request().postData() || "{}");
     lemmyWrites.push({
@@ -129,8 +133,20 @@ await context.route(/^https:\/\/lemmy\.world\//, (route) => {
     });
   }
   lemmyReads.push(url.pathname + url.search);
+  if (route.request().frame().url().startsWith("chrome-extension://"))
+    readerReads.push({
+      path: url.pathname + url.search,
+      cookie: headers.cookie ?? null,
+      auth: headers.authorization ?? null,
+    });
+  // Lemmy's API allows any origin, as lemmy.world's does.
   const answer = (body, status = 200) =>
-    route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    route.fulfill({
+      status,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": headers.origin ?? "*", vary: "Origin" },
+      body: JSON.stringify(body),
+    });
   switch (url.pathname) {
     case "/api/v3/site":
       return answer(site);
@@ -231,7 +247,10 @@ try {
   await address.press("Enter");
   await app.locator(".toast", { hasText: "Added lemmy.world" }).waitFor();
   await app.locator(".has-sheet").waitFor({ state: "detached" });
-  assert.equal(await app.locator(".source-row").count(), 1);
+  assert.deepEqual(
+    await app.locator(".source-row .label").evaluateAll((els) => els.map((el) => el.textContent)),
+    ["Hybrid", "lemmy.world"],
+  );
   await page.screenshot({ path: resolve(out, "lemmy-switcher.png") });
 
   // Opening it asks for access, registers the content script there, and
@@ -324,6 +343,55 @@ try {
   await page.waitForURL("https://www.reddit.com/");
   app = await reader();
 
+  // Hybrid opens Reddit's front page again, marked as the hybrid feed.
+  const switchTo = async (label) => {
+    await app.getByRole("button", { name: "Open menu" }).first().click();
+    await app.locator(".drawer-item.source-current").click();
+    await Promise.all([
+      page.waitForEvent("load"),
+      app.locator(".source-row .drawer-item", { hasText: label }).click(),
+    ]);
+    assert.equal(page.url(), "https://www.reddit.com/");
+    app = await reader();
+    await app.getByRole("button", { name: "Open menu" }).first().click();
+    await app.locator(".drawer-item.source-current .label", { hasText: label }).waitFor();
+    await app.locator("body").press("Escape");
+    await app.locator(".has-drawer").waitFor({ state: "detached" });
+  };
+  await switchTo("Hybrid");
+
+  // The hybrid feed: Reddit's front page with lemmy.world's Local feed,
+  // read by the reader signed out, under Lemmy's names.
+  await app.getByText("Which distro for an old laptop?").first().waitFor();
+  assert.ok(await app.getByText("A Reddit post").count());
+  assert.ok(await app.getByText("c/linux@lemmy.ml").count());
+  assert.ok(await app.getByText("@poster@lemmy.ml").count());
+  assert.ok(readerReads.length);
+  for (const read of readerReads) {
+    assert.match(read.path, /^\/api\/v3\/post\/list\?type_=Local&/);
+    assert.equal(read.cookie, null);
+    assert.equal(read.auth, null);
+  }
+  // Reddit's votes stay; Lemmy's posts are voted on on their instance.
+  assert.ok(await app.locator('[data-thing-id="t3_abc123"] .vote-btn').count());
+  assert.equal(await app.locator('[data-thing-id^="t3_101_"] .vote-btn').count(), 0);
+  await page.screenshot({ path: resolve(out, "lemmy-hybrid.png") });
+  // A Lemmy post opens on its instance, where OpenRelay reads it in full.
+  const writesBefore = lemmyWrites.length;
+  await app.getByRole("button", { name: "Which distro for an old laptop?", exact: true }).first().click();
+  await page.waitForURL("https://lemmy.world/post/101");
+  app = await reader();
+  await app.getByText("Nested reply").waitFor();
+  assert.equal(lemmyWrites.length, writesBefore);
+  // Reddit's front page stays the hybrid feed until another source is picked.
+  await page.goto("https://www.reddit.com/");
+  app = await reader();
+  await app.getByText("Which distro for an old laptop?").first().waitFor();
+
+  await switchTo("Reddit");
+  await app.getByText("A Reddit post").first().waitFor();
+  assert.equal(await app.getByText("Which distro for an old laptop?").count(), 0);
+
   // A site that wasn't added gets nothing, even with the reader in a frame.
   await page.goto("https://evil.example/");
   assert.equal(await page.locator("#openrelay-extension").count(), 0);
@@ -365,7 +433,7 @@ try {
   assert.deepEqual(lemmyWrites, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: lemmy.world listed by default and opened from the switcher (access, content script registered), add sheet checks, feed, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, switch back to Reddit, reader refused on a site not added, removal unregisters and stays removed; no other writes, no page errors.",
+    "PASS: lemmy.world listed by default and opened from the switcher (access, content script registered), add sheet checks, feed, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, hybrid feed (Reddit's front page with lemmy.world's Local feed read signed out, Lemmy names, no Lemmy votes, Lemmy posts opened on the instance) and back to Reddit, reader refused on a site not added, removal unregisters and stays removed; no other writes, no page errors.",
   );
 } finally {
   await context.close();

@@ -73,24 +73,33 @@ const commentNumber = (id: string) => {
   return n;
 };
 
-const posts = (views: unknown) =>
-  (Array.isArray(views) ? views : []).map((view) => normalizePost(view, origin));
+const posts = (views: unknown, from = origin) =>
+  (Array.isArray(views) ? views : []).map((view) => normalizePost(view, from));
 
-async function fetchFeed(
+/**
+ * A listing from the instance at `from`, read with `get`: through the page
+ * bridge here, or straight from the reader for the hybrid feed on Reddit.
+ */
+export async function lemmyFeed(
+  from: string,
+  get: (path: string) => Promise<any>,
   sub: string,
   sort: Parameters<ReaderProvider["fetchFeed"]>[1],
   t: Parameters<ReaderProvider["fetchFeed"]>[2],
   after?: string | null,
 ): Promise<FeedResponse> {
-  const data = await json(
+  const data = await get(
     "/api/v3/post/list" +
       query({ ...listingParams(sub), sort: feedSort(sort, t), limit: 25, page_cursor: after }),
   );
   if (!Array.isArray(data?.posts))
     throw new ApiFailure("Lemmy did not return a post listing. Use Original Lemmy to continue.");
-  const found = posts(data.posts);
+  const found = posts(data.posts, from);
   return { posts: found, after: found.length && typeof data.next_page === "string" ? data.next_page : null };
 }
+
+const fetchFeed: ReaderProvider["fetchFeed"] = (sub, sort, t, after) =>
+  lemmyFeed(origin, json, sub, sort, t, after);
 
 async function fetchSearch(
   sub: string,

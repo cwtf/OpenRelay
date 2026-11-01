@@ -1,5 +1,6 @@
 import type { PostSummary } from "../../shared/api";
 import { site } from "../lib/api";
+import { isLemmyItem } from "../lib/hybrid";
 import type { Nav } from "../app/nav";
 import {
   openUrl,
@@ -38,6 +39,8 @@ export const openPostActions = (
         const external =
           post.media.kind === "link" || post.media.kind === "embed";
         const savedOffline = isSavedOffline(post.id);
+        // A hybrid feed's Lemmy post: read and saved on its instance.
+        const lemmy = isLemmyItem(post.id);
         return (
           <>
             <SheetItem
@@ -75,10 +78,10 @@ export const openPostActions = (
             />
             <SheetItem
               icon="external"
-              label={`View on ${site.name}`}
+              label={`View on ${lemmy ? "Lemmy" : site.name}`}
               onClick={run(() => openUrl(redditUrl(post.permalink)))}
             />
-            {offlineAvailable() && !offlineMode ? (
+            {offlineAvailable() && !offlineMode && !lemmy ? (
               <SheetItem
                 icon="download"
                 label={savedOffline ? "Update offline copy" : "Save for offline"}

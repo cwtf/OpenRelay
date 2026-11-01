@@ -8,7 +8,9 @@ import type { CommentSort, PostResponse } from "../../shared/api";
 import { ApiFailure } from "../../shared/api";
 import { bridge, offlineMode, pageUrl } from "../../extension/bridge";
 import { readerProvider } from "../../providers/reader";
+import { lemmyReader } from "../../providers/lemmy/reader";
 import type { ReaderProvider } from "../../providers/types";
+import { fetchHybridFeed, isHybridFeed, isLemmyItem, isLemmyName } from "./hybrid";
 import { readOfflineCopy, withOfflineMedia } from "./offlineStore";
 import { fullDate } from "./format";
 
@@ -29,10 +31,13 @@ export const entryRoute = provider.parseRoute(pageUrl.href)!;
 export const site = {
   name: provider.name,
   features: provider.features,
-  communityLabel: provider.communityLabel,
+  // The hybrid feed's Lemmy names keep Lemmy's labels in the Reddit tab.
+  communityLabel: (name: string): string =>
+    (isLemmyName(name) ? lemmyReader : provider).communityLabel(name),
   isCommunity: provider.isCommunity,
   validCommunityName: provider.validCommunityName,
-  userLabel: provider.userLabel,
+  userLabel: (name: string): string =>
+    (isLemmyName(name) ? lemmyReader : provider).userLabel(name),
   baseUrl: provider.baseUrl,
   resolveLink: provider.resolveLink,
   communityUrl: provider.communityUrl,
@@ -40,7 +45,6 @@ export const site = {
 };
 export const {
   fetchInit,
-  fetchFeed,
   fetchSearch,
   fetchContext,
   fetchReplies,
@@ -57,9 +61,23 @@ export const {
   fetchRules,
   fetchModerators,
   fetchWiki,
-  runAction,
   uploadImage,
 } = provider;
+
+/** A feed, mixed with the listed instances' when it's the hybrid feed. */
+export const fetchFeed: ReaderProvider["fetchFeed"] = (sub, sort, t, after) =>
+  isHybridFeed(sub)
+    ? fetchHybridFeed((next) => provider.fetchFeed(sub, sort, t, next), sort, t, after)
+    : provider.fetchFeed(sub, sort, t, after);
+
+/** Why the hybrid feed's Lemmy posts can't be voted on or saved here. */
+export const LEMMY_ONLY = "Open this post on its Lemmy instance to do that.";
+
+/** A write; never one to Reddit about a Lemmy post from the hybrid feed. */
+export const runAction: ReaderProvider["runAction"] = (op, args) =>
+  args && Object.values(args).some(isLemmyItem)
+    ? Promise.reject(new ApiFailure(LEMMY_ONLY))
+    : provider.runAction(op, args);
 
 /** The copy saved for offline reading, with a notice saying so, or null. */
 async function offlineCopy(id: string): Promise<PostResponse | null> {
