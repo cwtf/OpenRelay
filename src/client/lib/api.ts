@@ -58,6 +58,7 @@ export const {
   fetchModerators,
   fetchWiki,
   runAction,
+  uploadImage,
 } = provider;
 
 /** The copy saved for offline reading, with a notice saying so, or null. */

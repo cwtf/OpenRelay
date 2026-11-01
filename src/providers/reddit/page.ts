@@ -1,5 +1,6 @@
 import type { PageProvider, PageRequest } from "../types";
-import { apiAction, apiVote } from "./writes";
+import { apiAction, apiUpload, apiVote } from "./writes";
+import { decodeImage } from "../upload";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
 import { allowedSearchPagePath, parseSearchPage } from "./search";
@@ -68,6 +69,10 @@ async function handle(
   if (action === "action") {
     if (!active) throw new Error("OpenRelay is not active");
     return apiAction(fetch, location.origin, payload?.op, payload?.args);
+  }
+  if (action === "upload") {
+    if (!active) throw new Error("OpenRelay is not active");
+    return apiUpload(fetch, location.origin, decodeImage(payload?.file));
   }
   if (action === "me") {
     // Only the name and picture reach the reader, never the session modhash.

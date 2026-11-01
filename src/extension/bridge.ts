@@ -1,5 +1,6 @@
 import { readerHost } from "../hosts/reader";
 import { providerOf } from "../providers/hosts";
+import type { ImagePayload } from "../providers/upload";
 
 const params = new URLSearchParams(location.hash.slice(1));
 const source = params.get("source");
@@ -61,6 +62,7 @@ export function bridge<T>(
     | "vote-status"
     | "me"
     | "action"
+    | "upload"
     | "navigate",
   path?: string,
   payload?: {
@@ -70,7 +72,10 @@ export function bridge<T>(
     ids?: string[];
     op?: string;
     args?: Record<string, unknown>;
+    file?: ImagePayload;
   },
+  /** How long the page gets to answer; uploads take longer. */
+  timeout = 22000,
 ): Promise<T> {
   if (offlineMode)
     return Promise.reject(new Error("You're offline. Open Reddit to do this."));
@@ -81,7 +86,7 @@ export function bridge<T>(
       reject(
         new Error("Reddit did not respond. Use Original Reddit or try again."),
       );
-    }, 22000);
+    }, timeout);
     pending.set(id, { resolve, reject, timer });
     toPage({ type: "openrelay:request", id, action, path, payload });
   });

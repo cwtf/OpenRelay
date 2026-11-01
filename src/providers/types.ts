@@ -70,6 +70,8 @@ export type ReaderFeatures = {
   wiki: boolean;
   /** Restoring removed posts from Arctic Shift's Reddit archive. */
   archive: boolean;
+  /** Images and GIFs attached to replies and edits, and to message replies. */
+  images: { comments: boolean; messages: boolean };
 };
 
 export type ReaderProvider = {
@@ -160,4 +162,9 @@ export type ReaderProvider = {
     op: string,
     args?: Record<string, unknown>,
   ): Promise<{ id?: string; url?: string; comment?: CommentNode }>;
+  /**
+   * Uploads an image for a reply, by the page with the viewer's session.
+   * `markdown` embeds it; `ref` is the ID or URL that Markdown refers to.
+   */
+  uploadImage(file: Blob): Promise<{ markdown: string; ref: string }>;
 };

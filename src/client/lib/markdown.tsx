@@ -264,6 +264,16 @@ const MediaRef = ({ target, alt }: { target: string; alt: string }) => {
   return <Link href={target}>{alt || target}</Link>;
 };
 
+/**
+ * An image on a Lemmy instance's image server (`/pictrs/image/<file>`), as
+ * Lemmy embeds uploads; any instance's, since comments federate. Only on
+ * Lemmy, where posts already show images from other instances.
+ */
+const PICTRS_IMAGE =
+  /^https:\/\/[a-z0-9.-]+(?::\d+)?\/pictrs\/image\/[\w-]+\.(jpe?g|png|gif|webp|avif)(\?[^\s]*)?$/i;
+const isEmbeddedImage = (url: string): boolean =>
+  isInlineImage(url) || (site.name === 'Lemmy' && PICTRS_IMAGE.test(url));
+
 const Highlighted = ({ text }: { text: string }) => {
   const { highlight } = useContext(MarkdownContext);
   if (!highlight || !text) return <>{text}</>;
@@ -312,7 +322,7 @@ const RULES: InlineRule[] = [
       const target = m[2] ?? '';
       if (/^emote\|/.test(target))
         return <span key={key}>{alt ? `:${alt}:` : ''}</span>;
-      if (isInlineImage(target))
+      if (isEmbeddedImage(target))
         return <InlineImage key={key} url={target} alt={alt} />;
       return <MediaRef key={key} target={target} alt={alt} />;
     },

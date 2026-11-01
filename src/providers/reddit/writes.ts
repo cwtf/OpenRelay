@@ -1,6 +1,7 @@
 import { isThingId, type Vote, type VoteResult } from "./votes.ts";
 import type { CommentNode } from "../../shared/api.ts";
 import { normalizeComments, safeUrl } from "./reddit.ts";
+import type { ImageFile } from "../upload.ts";
 
 /**
  * Writes to Reddit through its own `/api/*` endpoints with the tab's
@@ -271,6 +272,26 @@ async function postedComment(
   };
 }
 
+/**
+ * `![img](<asset id>)`, `![gif](<asset id>)` or `![gif](giphy|<id>)`: media
+ * Reddit takes in a comment only as richtext, not in its Markdown `text`.
+ */
+const MEDIA_REF = /!\[(?:img|gif)\]\((?!https?:)[^)\s]+/;
+
+/**
+ * Markdown to Reddit's richtext, by Reddit's own converter (as PRAW sends
+ * posts with inline images), for a body that refers to uploaded media.
+ */
+async function richtext(fetchFn: Fetch, origin: string, markdown: string): Promise<string> {
+  const body = await post(fetchFn, origin, "/api/convert_rte_body_format", () => ({
+    markdown_text: markdown,
+    output_mode: "rtjson",
+  }));
+  if (!body?.output || typeof body.output !== "object")
+    throw new Error("Reddit could not prepare the image for the reply.");
+  return JSON.stringify(body.output);
+}
+
 /** Run one allow-listed action; returns only what the reader needs. */
 export async function apiAction(
   fetchFn: Fetch,
@@ -281,10 +302,18 @@ export async function apiAction(
   if (!isAction(name) || !args || typeof args !== "object") fail();
   const action = ACTIONS[name as string]!;
   // Validate before reading the session, so bad input never reaches Reddit.
-  action.params(args as Args, { uh: "", id: "t2_validate", name: "" });
-  const body = await post(fetchFn, origin, action.path, (me) =>
-    action.params(args as Args, me),
-  );
+  const checked = action.params(args as Args, { uh: "", id: "t2_validate", name: "" });
+  // A reply or edit with an uploaded image goes as richtext instead.
+  const rtjson =
+    (name === "comment" || name === "edit") && MEDIA_REF.test(checked.text ?? "")
+      ? await richtext(fetchFn, origin, checked.text!)
+      : null;
+  const body = await post(fetchFn, origin, action.path, (me) => {
+    const params = action.params(args as Args, me);
+    if (rtjson === null) return params;
+    delete params.text;
+    return { ...params, richtext_json: rtjson };
+  });
   const data = body?.json?.data;
   const created = data?.things?.[0]?.data;
   const id = String(data?.name ?? created?.name ?? fullName(created?.id) ?? "");
@@ -299,6 +328,63 @@ export async function apiAction(
     ...(url ? { url } : {}),
     ...(comment ? { comment } : {}),
   };
+}
+
+/** Where Reddit's upload leases may send a file: its S3 bucket. */
+const UPLOAD_HOST = /^reddit-uploaded-media\.s3(?:-accelerate|[.-][a-z0-9-]+)?\.amazonaws\.com$/;
+
+/**
+ * Uploads a reply's image as Reddit's own uploader does (and PRAW): Reddit
+ * leases an upload to its S3 bucket and names the asset, the file goes to
+ * S3 without credentials, and the reply refers to it as `![img](<asset id>)`.
+ */
+export async function apiUpload(
+  fetchFn: Fetch,
+  origin: string,
+  image: ImageFile,
+): Promise<{ id: string }> {
+  const lease = await post(fetchFn, origin, "/api/media/asset.json", () => ({
+    filepath: image.name,
+    mimetype: image.type,
+  }));
+  const id = lease?.asset?.asset_id;
+  const fields: unknown = lease?.args?.fields;
+  let target: URL | null = null;
+  try {
+    target = new URL("https:" + String(lease?.args?.action ?? "").replace(/^https:/, ""));
+  } catch {
+    // Checked below.
+  }
+  if (
+    typeof id !== "string" ||
+    !/^[a-z0-9]{1,30}$/i.test(id) ||
+    !target ||
+    target.protocol !== "https:" ||
+    !UPLOAD_HOST.test(target.hostname) ||
+    !Array.isArray(fields)
+  )
+    throw new Error("Reddit did not accept the image upload.");
+  const form = new FormData();
+  for (const field of fields)
+    if (typeof field?.name === "string" && typeof field?.value === "string")
+      form.append(field.name, field.value);
+  form.append("file", new Blob([image.bytes], { type: image.type }), image.name);
+  const response = await fetchFn(target, {
+    method: "POST",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+    body: form,
+    signal: AbortSignal.timeout(80000),
+  });
+  if (!response.ok) {
+    const answer = await response.text().catch(() => "");
+    throw new Error(
+      /EntityTooLarge/.test(answer)
+        ? "The image is too large for Reddit."
+        : `Reddit could not store the image (${response.status}).`,
+    );
+  }
+  return { id };
 }
 
 /** Forget the cached session (tests). */

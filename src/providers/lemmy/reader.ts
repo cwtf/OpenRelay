@@ -12,6 +12,7 @@ import type {
 import { ApiFailure } from "../../shared/api";
 import { bridge, pageUrl } from "../../extension/bridge";
 import type { ReaderProvider } from "../types";
+import { encodeImage, UPLOAD_TIMEOUT } from "../upload";
 import {
   LEMMY_FEEDS,
   commentSort,
@@ -325,6 +326,7 @@ export const lemmyReader: ReaderProvider = {
     moderation: false,
     wiki: false,
     archive: false,
+    images: { comments: true, messages: true },
   },
   communityLabel: (name) => (name === "Home" || LEMMY_FEEDS.includes(name) ? name : `c/${name}`),
   isCommunity: (name) => name !== "Home" && !LEMMY_FEEDS.includes(name),
@@ -363,4 +365,14 @@ export const lemmyReader: ReaderProvider = {
     normalizeModerators(await json("/api/v3/community" + query({ name: sub }))),
   fetchWiki: async () => "",
   runAction: (op, args = {}) => bridge("action", undefined, { op, args }),
+  // An image on the instance's image server, embedded by its URL.
+  uploadImage: async (file) => {
+    const { url } = await bridge<{ url: string }>(
+      "upload",
+      undefined,
+      { file: await encodeImage(file) },
+      UPLOAD_TIMEOUT,
+    );
+    return { markdown: `![](${url})`, ref: url };
+  },
 };

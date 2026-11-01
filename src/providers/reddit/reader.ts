@@ -27,6 +27,7 @@ import type {
 import { ApiFailure } from "../../shared/api";
 import { bridge, pageUrl } from "../../extension/bridge";
 import type { ReaderProvider } from "../types";
+import { encodeImage, UPLOAD_TIMEOUT } from "../upload";
 import {
   safeUrl,
   normalizeCommunity,
@@ -470,6 +471,17 @@ const runAction = (
 ): Promise<{ id?: string; url?: string; comment?: CommentNode }> =>
   bridge("action", undefined, { op, args });
 
+/** An image for a reply, uploaded by the Reddit tab: `![img](<asset id>)`. */
+async function uploadImage(file: Blob): Promise<{ markdown: string; ref: string }> {
+  const { id } = await bridge<{ id: string }>(
+    "upload",
+    undefined,
+    { file: await encodeImage(file) },
+    UPLOAD_TIMEOUT,
+  );
+  return { markdown: `![${file.type === "image/gif" ? "gif" : "img"}](${id})`, ref: id };
+}
+
 const FEEDS = ["home", "popular"];
 
 export const redditReader: ReaderProvider = {
@@ -481,6 +493,8 @@ export const redditReader: ReaderProvider = {
     moderation: true,
     wiki: true,
     archive: true,
+    // Reddit's messages are plain Markdown.
+    images: { comments: true, messages: false },
   },
   communityLabel: (name) => `r/${name}`,
   isCommunity: (name) => !FEEDS.includes(name.toLowerCase()) && !name.includes("+"),
@@ -510,4 +524,5 @@ export const redditReader: ReaderProvider = {
   fetchModerators,
   fetchWiki,
   runAction,
+  uploadImage,
 };

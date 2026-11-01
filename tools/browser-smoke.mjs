@@ -81,6 +81,9 @@ let deny = false;
 const writes = [];
 /** The comment created by the last /api/comment, served by /api/info. */
 let postedReply = null;
+let replies = 0;
+/** What reached Reddit's S3 bucket (a fixture here). */
+const uploads = [];
 const searches = [];
 const htmlSearches = [];
 const infoLookups = [];
@@ -89,6 +92,18 @@ const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
+/** Reddit's richtext for the reply with an image (a fixture). */
+const richtext = { document: [{ e: "par", c: [{ e: "text", t: "Look" }] }, { e: "img", id: "fixtureasset1" }] };
+await context.route(/^https:\/\/reddit-uploaded-media\.s3-accelerate\.amazonaws\.com\//, async (route) => {
+  const request = route.request();
+  const headers = await request.allHeaders();
+  uploads.push({ method: request.method(), headers, body: request.postDataBuffer()?.toString("latin1") ?? "" });
+  return route.fulfill({
+    status: 201,
+    headers: { "access-control-allow-origin": headers.origin ?? "*" },
+    body: "",
+  });
+});
 await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
   const url = new URL(route.request().url());
   if (route.request().method() !== "GET") {
@@ -97,13 +112,39 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       body: Object.fromEntries(new URLSearchParams(route.request().postData())),
     });
     const sent = writes.at(-1).body;
-    if (url.pathname === "/api/comment")
+    if (url.pathname === "/api/media/asset.json")
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          args: {
+            action: "//reddit-uploaded-media.s3-accelerate.amazonaws.com",
+            fields: [{ name: "key", value: "rte_images/fixture/image.png" }],
+          },
+          asset: { asset_id: "fixtureasset1" },
+        }),
+      });
+    if (url.pathname === "/api/convert_rte_body_format")
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ output: richtext }),
+      });
+    if (url.pathname === "/api/comment") {
+      const id = `mine${++replies}`;
       postedReply = {
-        id: "mine1", name: "t1_mine1", parent_id: sent.thing_id,
-        author: "fixture_user", body: sent.text, score: 1,
+        id, name: `t1_${id}`, parent_id: sent.thing_id,
+        author: "fixture_user", score: 1,
         created_utc: Math.floor(Date.now() / 1000), likes: true,
-        permalink: post.permalink + "mine1/",
+        permalink: post.permalink + `${id}/`,
+        ...(sent.richtext_json
+          ? {
+              body: "Look\n\n![img](fixtureasset1)",
+              media_metadata: {
+                fixtureasset1: { status: "valid", e: "Image", m: "image/png", s: { u: "https://www.reddit.com/img/upload.png", x: 1, y: 1 } },
+              },
+            }
+          : { body: sent.text }),
       };
+    }
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(
@@ -118,8 +159,8 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
                     {
                       kind: "t1",
                       data: {
-                        id: "t1_mine1", parent: sent.thing_id, link: post.name,
-                        contentText: sent.text, contentHTML: "", replies: "",
+                        id: postedReply.name, parent: sent.thing_id, link: post.name,
+                        contentText: sent.text ?? "", contentHTML: "", replies: "",
                       },
                     },
                   ],
@@ -385,6 +426,46 @@ try {
   assert.equal(await box.inputValue(), "");
   await app.getByRole("button", { name: "Cancel" }).click();
   await app.locator(".sheet").waitFor({ state: "detached" }); // Fully closed.
+  // An attached image is uploaded at once: a lease from Reddit, then the file
+  // to Reddit's S3 bucket, with no cookies and under a generic name.
+  box = await openReply();
+  await box.fill("Look");
+  await app.locator('input[type="file"]').setInputFiles({ name: "holiday photo.png", mimeType: "image/png", buffer: png });
+  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
+  assert.equal(await box.inputValue(), "Look\n\n![img](fixtureasset1)\n\n");
+  assert.deepEqual(writes.at(-1), {
+    path: "/api/media/asset.json",
+    body: { filepath: "image.png", mimetype: "image/png", uh: "fixturemodhash1", api_type: "json" },
+  });
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].method, "POST");
+  assert.equal(uploads[0].headers.cookie, undefined);
+  assert.equal(uploads[0].headers.referer, undefined);
+  assert.ok(uploads[0].body.includes("rte_images/fixture/image.png"));
+  assert.ok(uploads[0].body.includes('filename="image.png"'));
+  assert.ok(!uploads[0].body.includes("holiday"));
+  // The preview shows the picked file; the reply goes as richtext.
+  await app.getByRole("button", { name: "Preview" }).click();
+  await app.locator('.reply-preview img[src^="blob:"]').waitFor();
+  await app.getByRole("button", { name: "Edit" }).click();
+  await app.getByRole("button", { name: "Send", exact: true }).click();
+  await app.locator(".toast", { hasText: "Reply sent" }).last().waitFor();
+  assert.deepEqual(writes.at(-2), {
+    path: "/api/convert_rte_body_format",
+    body: {
+      markdown_text: "Look\n\n![img](fixtureasset1)\n\n",
+      output_mode: "rtjson",
+      uh: "fixturemodhash1",
+      api_type: "json",
+    },
+  });
+  assert.deepEqual(writes.at(-1), {
+    path: "/api/comment",
+    body: { thing_id: "t1_c1", richtext_json: JSON.stringify(richtext), uh: "fixturemodhash1", api_type: "json" },
+  });
+  // The posted reply shows the image Reddit lists for it.
+  await app.locator('[data-cid="t1_mine2"] img[src="https://www.reddit.com/img/upload.png"]').waitFor();
+  await app.locator(".sheet").waitFor({ state: "detached" });
   // Relay's swipe actions: drag a comment left to reveal its actions.
   const swipeLeft = async (locator, stepDelay = 0) => {
     const box = await locator.boundingBox();
@@ -765,7 +846,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

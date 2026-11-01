@@ -1,6 +1,7 @@
 import type { CommentNode } from "../../shared/api.ts";
 import { safeUrl } from "../reddit/reddit.ts";
 import type { VoteResult } from "../reddit/votes.ts";
+import type { ImageFile } from "../upload.ts";
 import {
   hostTag,
   isCommunityName,
@@ -293,6 +294,44 @@ export async function lemmyAction(
     default:
       throw new Error("OpenRelay can't do that on Lemmy yet. Use Original Lemmy.");
   }
+}
+
+/**
+ * Uploads a reply's image to the instance's image server (pict-rs, behind
+ * lemmy-ui's `/pictrs/image`), signed in like the API. Returns its URL, which
+ * the reply embeds as `![](<url>)`.
+ */
+export async function lemmyUpload(
+  fetchFn: Fetch,
+  origin: string,
+  token: string | null,
+  image: ImageFile,
+): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("images[]", new Blob([image.bytes], { type: image.type }), image.name);
+  const response = await fetchFn(new URL("/pictrs/image", origin), {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: form,
+    signal: AbortSignal.timeout(80000),
+  });
+  if (response.status === 413) throw new Error("The image is too large for this instance.");
+  if (response.status === 401 || response.status === 403) throw new Error("Sign in to Lemmy first.");
+  if (response.status === 429)
+    throw new Error("This instance is rate limiting requests. Please wait and try again.");
+  const data = await response.json().catch(() => null);
+  const file = data?.files?.[0]?.file;
+  if (!response.ok || data?.msg !== "ok" || typeof file !== "string" || !/^[\w-]+\.[a-z0-9]{2,5}$/i.test(file))
+    throw new Error(
+      typeof data?.error === "string" && ERRORS[data.error]
+        ? ERRORS[data.error]
+        : `This instance did not take the image (${response.status}).`,
+    );
+  return { url: new URL(`/pictrs/image/${file}`, origin).href };
 }
 
 /** Forget pending votes (tests). */

@@ -1,6 +1,7 @@
 import type { PageProvider, PageRequest } from "../types";
 import { allowedApiPath, normalizeAccount, parseRoute } from "./lemmy";
-import { call, lemmyAction, lemmyVote, sessionToken } from "./writes";
+import { call, lemmyAction, lemmyUpload, lemmyVote, sessionToken } from "./writes";
+import { decodeImage } from "../upload";
 
 /**
  * Lemmy's half of the page bridge, in the content script on the instance's
@@ -44,6 +45,10 @@ async function handle(
   if (action === "action") {
     if (!active) throw new Error("OpenRelay is not active");
     return lemmyAction(fetch, location.origin, token(), payload?.op, payload?.args);
+  }
+  if (action === "upload") {
+    if (!active) throw new Error("OpenRelay is not active");
+    return lemmyUpload(fetch, location.origin, token(), decodeImage(payload?.file));
   }
   throw new Error("Unsupported request");
 }

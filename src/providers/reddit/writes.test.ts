@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { apiAction, apiVote, resetWrites } from "./writes.ts";
+import { apiAction, apiUpload, apiVote, resetWrites } from "./writes.ts";
 
 type Call = { url: string; init: RequestInit | undefined };
 const json = (body: unknown, status = 200) =>
@@ -347,4 +347,79 @@ test("saves, unsaves, edits and deletes with their own parameters", async () => 
   await apiAction(fetchFn, origin, "del", { id: "t3_abc" });
   assert.equal(new URL(calls[4]!.url).pathname, "/api/del");
   assert.deepEqual(sent(calls[4]!), { id: "t3_abc", uh: "abc123modhash", api_type: "json" });
+});
+
+const IMAGE = { name: "image.png", type: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
+const lease = (action: string) => ({
+  args: {
+    action,
+    fields: [
+      { name: "key", value: "rte_images/abc/image.png" },
+      { name: "policy", value: "p0licy" },
+    ],
+  },
+  asset: { asset_id: "asset123" },
+});
+
+test("uploads an image to Reddit's S3 bucket without credentials", async () => {
+  resetWrites();
+  const { calls, fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash" } })
+      : url.pathname === "/api/media/asset.json"
+        ? json(lease("//reddit-uploaded-media.s3-accelerate.amazonaws.com"))
+        : new Response("", { status: 201 }),
+  );
+  assert.deepEqual(await apiUpload(fetchFn, origin, IMAGE), { id: "asset123" });
+  assert.deepEqual(sent(calls[1]!), {
+    filepath: "image.png",
+    mimetype: "image/png",
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+  const upload = calls[2]!;
+  assert.equal(upload.url, "https://reddit-uploaded-media.s3-accelerate.amazonaws.com/");
+  assert.equal(upload.init?.credentials, "omit");
+  assert.equal(upload.init?.headers, undefined);
+  const form = upload.init?.body as FormData;
+  assert.deepEqual([...form.keys()], ["key", "policy", "file"]);
+  assert.equal(form.get("key"), "rte_images/abc/image.png");
+  assert.equal((form.get("file") as File).type, "image/png");
+});
+
+test("sends an upload lease nowhere but Reddit's bucket", async () => {
+  for (const action of ["//evil.example.com", "//reddit-uploaded-media.s3.amazonaws.com.evil.example", "http://reddit-uploaded-media.s3-accelerate.amazonaws.com"]) {
+    resetWrites();
+    const { calls, fetchFn } = fakeReddit((url) =>
+      url.pathname === "/api/me.json" ? json({ data: { modhash: "abc123modhash" } }) : json(lease(action)),
+    );
+    await assert.rejects(apiUpload(fetchFn, origin, IMAGE), /did not accept the image/);
+    assert.equal(calls.length, 2, action);
+  }
+});
+
+test("sends a reply with an uploaded image as Reddit's richtext", async () => {
+  resetWrites();
+  const output = { document: [{ e: "img", id: "asset123" }] };
+  const { calls, fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash" } })
+      : url.pathname === "/api/convert_rte_body_format"
+        ? json({ output })
+        : json({ json: { errors: [], data: { things: [] } } }),
+  );
+  await apiAction(fetchFn, origin, "comment", { parent: "t1_abc", text: "Look\n\n![img](asset123)\n\n" });
+  assert.equal(new URL(calls[1]!.url).pathname, "/api/convert_rte_body_format");
+  assert.equal(sent(calls[1]!).markdown_text, "Look\n\n![img](asset123)\n\n");
+  assert.equal(sent(calls[1]!).output_mode, "rtjson");
+  assert.deepEqual(sent(calls[2]!), {
+    thing_id: "t1_abc",
+    richtext_json: JSON.stringify(output),
+    uh: "abc123modhash",
+    api_type: "json",
+  });
+  // A plain reply, or one that only links an image, stays Markdown.
+  await apiAction(fetchFn, origin, "comment", { parent: "t1_abc", text: "![img](https://i.redd.it/x.png)" });
+  assert.equal(new URL(calls[3]!.url).pathname, "/api/comment");
+  assert.equal(sent(calls[3]!).text, "![img](https://i.redd.it/x.png)");
 });

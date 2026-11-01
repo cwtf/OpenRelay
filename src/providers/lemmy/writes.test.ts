@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { hostTag } from "./lemmy.ts";
-import { lemmyAction, lemmyVote, resetLemmyWrites, sessionToken } from "./writes.ts";
+import { lemmyAction, lemmyUpload, lemmyVote, resetLemmyWrites, sessionToken } from "./writes.ts";
 
 const ORIGIN = "https://lemmy.world";
 const TAG = hostTag("lemmy.world");
@@ -147,4 +147,30 @@ test("marks inbox items read through their own records, and sends messages", asy
   assert.deepEqual(composed, { id: `t4_78_${TAG}` });
   assert.deepEqual(replied, { id: `t4_78_${TAG}` });
   await assert.rejects(lemmyAction(fetchFn, ORIGIN, TOKEN, "compose", { to: "bad name!", text: "x" }), /Invalid request/);
+});
+
+test("uploads an image to the instance's image server, signed in", async () => {
+  const requests: { path: string; init: RequestInit }[] = [];
+  const fetchFn = (async (url: URL, init: RequestInit) => {
+    requests.push({ path: url.pathname, init });
+    return new Response(JSON.stringify({ msg: "ok", files: [{ file: "a1b2-c3.png", delete_token: "d" }] }), {
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+  const image = { name: "image.png", type: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
+  assert.deepEqual(await lemmyUpload(fetchFn, ORIGIN, TOKEN, image), {
+    url: "https://lemmy.world/pictrs/image/a1b2-c3.png",
+  });
+  assert.equal(requests[0]!.path, "/pictrs/image");
+  assert.equal(requests[0]!.init.method, "POST");
+  assert.equal((requests[0]!.init.headers as Record<string, string>).Authorization, `Bearer ${TOKEN}`);
+  const file = (requests[0]!.init.body as FormData).get("images[]") as File;
+  assert.equal(file.name, "image.png");
+
+  // Anything but a plain file name is refused.
+  const odd = (async () =>
+    new Response(JSON.stringify({ msg: "ok", files: [{ file: "../api/v3/x" }] }), {
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+  await assert.rejects(lemmyUpload(odd, ORIGIN, TOKEN, image), /did not take the image/);
 });

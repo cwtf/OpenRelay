@@ -22,6 +22,7 @@ import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.URLUtil
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -33,6 +34,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.JavaScriptReplyProxy
@@ -105,6 +107,12 @@ class MainActivity : ComponentActivity() {
     private val network = Executors.newFixedThreadPool(4)
     private lateinit var downloads: Downloads
     private val saves = Executors.newSingleThreadExecutor()
+    /** The file input waiting on the system picker; it's answered exactly once. */
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private val pickFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
+        fileCallback = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -199,6 +207,23 @@ class MainActivity : ComponentActivity() {
                 isUserGesture: Boolean,
                 resultMsg: Message,
             ): Boolean = isUserGesture && catchNewWindow(resultMsg)
+
+            // A file input (the reply composer's "Add image or GIF") opens the system picker.
+            override fun onShowFileChooser(
+                view: WebView,
+                callback: ValueCallback<Array<Uri>>,
+                params: FileChooserParams,
+            ): Boolean {
+                fileCallback?.onReceiveValue(null)
+                fileCallback = callback
+                return try {
+                    pickFile.launch(params.createIntent())
+                    true
+                } catch (error: ActivityNotFoundException) {
+                    fileCallback = null
+                    false
+                }
+            }
         }
     }
 
