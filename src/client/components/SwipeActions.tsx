@@ -83,7 +83,14 @@ export const SwipeActions = ({
 
   const onPointerDown = (event: ReactPointerEvent) => {
     if (event.button !== 0 || !event.isPrimary) return;
-    if ((event.target as Element).closest("input, textarea, select, video, .md-pre, .md-table-wrap"))
+    // A vote control's score ring is dragged sideways to vote. (Only the
+    // ring's data-no-swipe: this row sets its own while it is open.)
+    const target = event.target as Element;
+    if (
+      target.closest(
+        ".vote-score[data-no-swipe], input, textarea, select, video, .md-pre, .md-table-wrap",
+      )
+    )
       return;
     drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, swiping: false };
   };

@@ -174,12 +174,17 @@ async function vote(app, id, direction) {
   await v.locator("button:disabled").first().waitFor({ state: "detached" });
   return v;
 }
-// Relay's light-theme counter colours: orange up, purple down, grey neutral.
-const counterColour = { 1: "rgb(222, 113, 78)", 0: "rgb(116, 119, 127)", "-1": "rgb(123, 92, 177)" };
+// The light theme's score ring colours: orange up, purple down, yellow neutral.
+const ringColour = { 1: "rgb(222, 113, 78)", 0: "rgb(217, 164, 37)", "-1": "rgb(123, 92, 177)" };
 async function colour(v, dir) {
+  // The border is a color-mix(), which Chromium reports as color(srgb r g b).
+  const border = await v
+    .locator(".vote-score")
+    .evaluate((el) => getComputedStyle(el).borderTopColor);
+  const srgb = border.match(/^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)\)$/);
   assert.equal(
-    await v.locator(".vote-score").evaluate((el) => getComputedStyle(el).color),
-    counterColour[dir],
+    srgb ? `rgb(${srgb.slice(1).map((c) => Math.round(c * 255)).join(", ")})` : border,
+    ringColour[dir],
   );
 }
 async function selected(v, dir) {
@@ -308,7 +313,7 @@ try {
   assert.ok(writes.every((write) => write.path === "/api/vote"));
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: modern nested-shadow and old Reddit clicks, initial selection, undo/switch, duplicate suppression, exact comment ownership, API votes for reader-fetched comments with Reddit's reported vote and counts, Relay counter colours, signed-out handling, disabled/unconfirmed fallback, delayed rollback, spoof rejection; only /api/vote writes.",
+    "PASS: modern nested-shadow and old Reddit clicks, initial selection, undo/switch, duplicate suppression, exact comment ownership, API votes for reader-fetched comments with Reddit's reported vote and counts, score ring colours, signed-out handling, disabled/unconfirmed fallback, delayed rollback, spoof rejection; only /api/vote writes.",
   );
 } finally {
   await context.close();

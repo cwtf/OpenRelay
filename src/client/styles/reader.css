@@ -585,19 +585,73 @@
   height: 18px;
 }
 
-/* Vote arrows forward one click to the matching native Reddit control. */
+/* Vote arrows forward one click to the matching native Reddit control. Each
+   control is a capsule of arrows either side of a score ring whose border is
+   the current vote's colour. Dragging the ring toward an arrow (VoteLinks'
+   useDragVote) blends it into the vote letting go would leave, reaching that
+   colour once letting go would cast it. */
 .vote {
+  --ring: var(--vote-none);
   display: inline-flex;
   align-items: center;
   font-variant-numeric: tabular-nums;
 }
 
+.vote[data-vote='1'] {
+  --ring: var(--upvote);
+}
+
+.vote[data-vote='-1'] {
+  --ring: var(--downvote);
+}
+
+.vote[data-drag-to='1'] {
+  --ring-to: var(--upvote);
+}
+
+.vote[data-drag-to='-1'] {
+  --ring-to: var(--downvote);
+}
+
+.vote[data-drag-to='0'] {
+  --ring-to: var(--vote-none);
+}
+
+.vote-capsule {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+}
+
 .vote-score {
-  color: var(--vote-neutral);
-  transition: color 150ms;
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  border: 2px solid
+    color-mix(in srgb, var(--ring-to, var(--ring)) calc(var(--blend, 0) * 100%), var(--ring));
+  border-radius: 999px;
+  color: var(--text);
   font-weight: 600;
-  min-width: 2ch;
-  text-align: center;
+  white-space: nowrap;
+  touch-action: pan-y;
+  user-select: none;
+  transform: translateX(var(--drag-x, 0px));
+  transition:
+    border-color 150ms,
+    transform var(--dur-short) var(--ease-emph);
+}
+
+.vote-capsule .vote-score {
+  cursor: grab;
+}
+
+.vote[data-dragging] .vote-score {
+  cursor: grabbing;
+  transition: none;
 }
 
 .vote-btn {
@@ -608,15 +662,12 @@
   text-decoration: none;
   transition:
     color 150ms,
-    background-color 150ms;
+    opacity 150ms,
+    transform var(--dur-short) var(--ease-emph);
 }
 
-.vote-btn:hover {
-  background: var(--hover);
-}
-
-.vote-btn:active {
-  background: var(--press);
+.vote[data-dragging] .vote-btn {
+  transition: none;
 }
 
 .vote-btn.is-up:hover,
@@ -624,16 +675,31 @@
   color: var(--upvote);
 }
 
-.vote[data-vote='1'] .vote-score {
-  color: var(--upvote);
-}
-
-.vote[data-vote='-1'] .vote-score {
+.vote-btn.is-down:hover,
+.vote-btn.is-down:focus-visible {
   color: var(--downvote);
 }
 
-.vote-btn.is-down:hover,
-.vote-btn.is-down:focus-visible {
+/* The arrow being dragged toward leans out and takes the colour, then fades
+   as the ring slides over it: the ring has no fill, so rows of any colour
+   show through. */
+.vote[data-drag='1'] .vote-btn.is-up {
+  color: color-mix(in srgb, var(--upvote) calc(var(--blend) * 100%), var(--text-2));
+  opacity: clamp(0, (0.6 - var(--drag)) * 3, 1);
+  transform: translateX(calc(var(--drag) * -4px));
+}
+
+.vote[data-drag='-1'] .vote-btn.is-down {
+  color: color-mix(in srgb, var(--downvote) calc(var(--blend) * 100%), var(--text-2));
+  opacity: clamp(0, (0.6 - var(--drag)) * 3, 1);
+  transform: translateX(calc(var(--drag) * 4px));
+}
+
+.vote[data-drag='1'] .vote-btn.is-up.is-selected {
+  color: var(--upvote);
+}
+
+.vote[data-drag='-1'] .vote-btn.is-down.is-selected {
   color: var(--downvote);
 }
 
@@ -641,30 +707,48 @@
   font-size: calc(13px * var(--ts));
 }
 
-/* A hybrid feed's Lemmy post: its score where the up arrow's icon would be. */
+/* A hybrid feed's Lemmy post: its score ring alone, with no drag. */
 .vote-stat.is-score-only {
   padding-left: 10px;
 }
 
 .vote-stat .vote-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
 }
 
 .vote-stat .vote-btn .icon {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
+}
+
+.vote-stat .vote-score {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+}
+
+/* Rings this small widen for long scores rather than shrink their text. The
+   negative margin keeps a comment header or row as tall as its text. */
+.vote-inline {
+  margin-block: -4px;
 }
 
 .vote-inline .vote-btn {
-  width: 26px;
-  height: 26px;
-  margin: -5px -2px;
+  width: 20px;
+  height: 20px;
 }
 
 .vote-inline .vote-btn .icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
+}
+
+.vote-inline .vote-score {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  border-width: 1.5px;
 }
 
 .post-stats .grow {
@@ -1419,121 +1503,19 @@ button.post-action {
   height: 22px;
 }
 
-.vote-capsule {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px;
-  border: 1px solid var(--outline);
-  border-radius: 999px;
-}
-
-/* The score ring's colour is the current vote's; dragging it toward an arrow
-   (VoteLinks' useDragVote) blends it into the vote letting go would leave. */
-.vote-pill {
-  --ring: var(--vote-none);
-}
-
-.vote-pill[data-vote='1'] {
-  --ring: var(--upvote);
-}
-
-.vote-pill[data-vote='-1'] {
-  --ring: var(--downvote);
-}
-
-.vote-pill[data-drag-to='1'] {
-  --ring-to: var(--upvote);
-}
-
-.vote-pill[data-drag-to='-1'] {
-  --ring-to: var(--downvote);
-}
-
-.vote-pill[data-drag-to='0'] {
-  --ring-to: var(--vote-none);
-}
-
 .vote-pill .vote-score {
-  position: relative;
-  z-index: 1;
   min-width: 0;
-  border: 2px solid
-    color-mix(in srgb, var(--ring-to, var(--ring)) calc(var(--drag, 0) * 100%), var(--ring));
-  /* The post actions bar's own surface, so the ring hides an arrow it slides over. */
-  background: var(--surface);
-  color: var(--text);
-  cursor: grab;
-  touch-action: pan-y;
-  user-select: none;
-  transform: translateX(var(--drag-x, 0px));
-  transition:
-    color 150ms,
-    border-color 150ms,
-    transform var(--dur-short) var(--ease-emph);
-}
-
-.vote-pill[data-dragging] .vote-score {
-  cursor: grabbing;
-  transition: none;
-}
-
-.vote-pill.is-score-only .vote-score {
-  cursor: default;
+  padding: 0;
 }
 
 .vote-pill .vote-btn {
   width: 30px;
   height: 30px;
-  transition:
-    color 150ms,
-    background-color 150ms,
-    transform var(--dur-short) var(--ease-emph);
-}
-
-.vote-pill[data-dragging] .vote-btn {
-  transition: none;
-}
-
-.vote-pill .vote-btn .icon {
-  transition: transform 120ms;
-}
-
-/* The arrow being dragged toward leans out and takes its colour. */
-.vote-pill[data-drag='1'] .vote-btn.is-up {
-  color: color-mix(in srgb, var(--upvote) calc(var(--drag) * 100%), var(--text-2));
-  transform: translateX(calc(var(--drag) * -5px));
-}
-
-.vote-pill[data-drag='-1'] .vote-btn.is-down {
-  color: color-mix(in srgb, var(--downvote) calc(var(--drag) * 100%), var(--text-2));
-  transform: translateX(calc(var(--drag) * 5px));
-}
-
-.vote-pill[data-drag='1'] .vote-btn.is-up.is-selected {
-  color: var(--upvote);
-}
-
-.vote-pill[data-drag='-1'] .vote-btn.is-down.is-selected {
-  color: var(--downvote);
-}
-
-.vote-pill.is-armed[data-drag='1'] .vote-btn.is-up .icon,
-.vote-pill.is-armed[data-drag='-1'] .vote-btn.is-down .icon {
-  transform: scale(1.25);
-}
-
-.vote-pill.is-armed .vote-label {
-  color: var(--ring-to);
 }
 
 .vote-pill .vote-btn .icon {
   width: 19px;
   height: 19px;
-}
-
-.vote-pill .vote-btn.is-up.is-selected,
-.vote-pill .vote-btn.is-down.is-selected {
-  background: transparent;
 }
 
 .vote-pill[data-vote='1'] .vote-label {
@@ -1542,6 +1524,10 @@ button.post-action {
 
 .vote-pill[data-vote='-1'] .vote-label {
   color: var(--downvote);
+}
+
+.vote-pill.is-armed .vote-label {
+  color: var(--ring-to);
 }
 
 .vote-pill .vote-fallback {
@@ -2811,8 +2797,8 @@ img.avatar {
 }
 
 .vote-btn { border: 0; background: transparent; padding: 0; cursor: pointer; }
-.vote-btn.is-up.is-selected { color: var(--upvote); background: var(--press); }
-.vote-btn.is-down.is-selected { color: var(--downvote); background: var(--press); }
+.vote-btn.is-up.is-selected { color: var(--upvote); }
+.vote-btn.is-down.is-selected { color: var(--downvote); }
 .vote-btn:disabled { opacity: .5; cursor: progress; }
 .vote-fallback { color: var(--link); font-size: 11px; margin-left: 6px; }
 .vote > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

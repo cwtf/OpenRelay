@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { pageUrl } from "../../extension/bridge";
 import { compact } from "../lib/format";
 import { redditUrl } from "../lib/platform";
@@ -27,7 +33,11 @@ type VoteLinksProps = {
   /** The viewer's vote as reported by Reddit, if known. */
   vote?: Vote | undefined;
   kind: "post" | "comment";
-  /** `pill`: the post page's capsule, arrows around a score ring, labelled. */
+  /**
+   * Each is a capsule of arrows around a draggable score ring, by size: `stat`
+   * for the card layout's stats row, `inline` for compact/list rows and
+   * comments, `pill` for the post page's, which is labelled.
+   */
   variant: "stat" | "inline" | "pill";
 };
 
@@ -35,16 +45,15 @@ const pillLabel: Record<Vote, string> = { 1: "Liked", 0: "Like it", [-1]: "Disli
 /** The pill's label while letting go would cast a vote, by the vote it would leave. */
 const armedLabel: Record<Vote, string> = { 1: "Upvote", 0: "Undo", [-1]: "Downvote" };
 
-/** From the score ring's centre to an arrow's: half the 46px ring plus half a 30px arrow. */
-const REACH = 38;
-/** The share of REACH past which letting go casts the vote. */
+/** The share of the way to an arrow past which letting go casts the vote. */
 const COMMIT = 0.7;
 
 /**
- * Drag the pill's score ring toward an arrow to vote that way. The ring's
- * border blends from the current vote's colour to the one letting go would
- * give, through `--drag` (0..1) and `data-drag-to` on the pill; reader.css
- * does the colours. The ring keeps the new colour until the vote settles.
+ * Drag a vote control's score ring toward an arrow to vote that way. On the
+ * control it sets `--drag` (0..1 of the way to the arrow), `--blend` (0..1,
+ * full once letting go would vote), `--drag-x`, `data-drag` (the arrow's
+ * direction) and `data-drag-to` (the vote letting go would leave); reader.css
+ * does the rest. The ring keeps the new colour until the vote settles.
  */
 const useDragVote = (
   current: Vote,
@@ -53,7 +62,8 @@ const useDragVote = (
   cast: (direction: Vote) => void,
 ) => {
   const root = useRef<HTMLSpanElement>(null);
-  const drag = useRef<{ id: number; x: number; dx: number } | null>(null);
+  const drag = useRef<{ id: number; x: number; dx: number; reach: number } | null>(null);
+  const swallowClick = useRef(false);
   const [armed, setArmed] = useState<Vote | null>(null);
   const [holding, setHolding] = useState(false);
 
@@ -65,35 +75,49 @@ const useDragVote = (
     const el = root.current;
     if (!el) return;
     delete el.dataset.dragTo;
-    el.style.removeProperty("--drag");
+    el.style.removeProperty("--blend");
   }, [holding, pending]);
 
-  const show = (dx: number, keepColour = false) => {
+  const arm = (next: Vote | null) => {
+    setArmed((was) => {
+      if (next !== null && was !== next) {
+        try {
+          navigator.vibrate?.(10);
+        } catch {
+          // Optional.
+        }
+      }
+      return next;
+    });
+  };
+
+  const show = (dx: number, reach: number, keepColour = false) => {
     const el = root.current;
     if (!el) return;
     const distance = Math.abs(dx);
     // Past the arrow the ring only stretches a little further.
-    const x = distance > REACH ? Math.sign(dx) * (REACH + (distance - REACH) * 0.2) : dx;
+    const x = distance > reach ? Math.sign(dx) * (reach + (distance - reach) * 0.2) : dx;
     el.style.setProperty("--drag-x", `${x}px`);
-    if (keepColour) {
+    const direction: Vote = dx < 0 ? 1 : dx > 0 ? -1 : 0;
+    if (keepColour || !direction) {
       delete el.dataset.drag;
-      el.style.setProperty("--drag", "1");
+      el.style.removeProperty("--drag");
+      if (keepColour) {
+        el.style.setProperty("--blend", "1");
+      } else {
+        delete el.dataset.dragTo;
+        el.style.removeProperty("--blend");
+        arm(null);
+      }
       return;
     }
-    const direction: Vote = dx < 0 ? 1 : dx > 0 ? -1 : 0;
-    const progress = Math.min(1, distance / REACH);
-    if (direction) {
-      const target: Vote = current === direction ? 0 : direction;
-      el.dataset.drag = String(direction);
-      el.dataset.dragTo = String(target);
-      el.style.setProperty("--drag", String(progress));
-      setArmed(progress >= COMMIT ? target : null);
-    } else {
-      delete el.dataset.drag;
-      delete el.dataset.dragTo;
-      el.style.removeProperty("--drag");
-      setArmed(null);
-    }
+    const progress = Math.min(1, distance / reach);
+    const target: Vote = current === direction ? 0 : direction;
+    el.dataset.drag = String(direction);
+    el.dataset.dragTo = String(target);
+    el.style.setProperty("--drag", String(progress));
+    el.style.setProperty("--blend", String(Math.min(1, progress / COMMIT)));
+    arm(progress >= COMMIT ? target : null);
   };
 
   const finish = (event: ReactPointerEvent, commit: boolean) => {
@@ -101,26 +125,35 @@ const useDragVote = (
     if (!state || state.id !== event.pointerId) return;
     drag.current = null;
     if (root.current) delete root.current.dataset.dragging;
-    const direction: Vote = state.dx < 0 ? 1 : -1;
-    if (commit && Math.abs(state.dx) / REACH >= COMMIT) {
-      show(0, true);
+    if (Math.abs(state.dx) > 4) {
+      // A drag, not a tap: the click it may produce mustn't open the post or
+      // collapse the comment around the ring.
+      swallowClick.current = true;
+      window.setTimeout(() => (swallowClick.current = false), 80);
+    }
+    if (commit && Math.abs(state.dx) / state.reach >= COMMIT) {
+      show(0, state.reach, true);
       setArmed(null);
       setHolding(true);
-      cast(direction);
+      cast(state.dx < 0 ? 1 : -1);
     } else {
-      show(0);
+      show(0, state.reach);
     }
   };
 
   const handlers = enabled
     ? {
-        onPointerDown: (event: ReactPointerEvent) => {
+        onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
           if (event.button !== 0 || !event.isPrimary || pending || holding) return;
-          drag.current = { id: event.pointerId, x: event.clientX, dx: 0 };
+          const ring = event.currentTarget;
+          const arrow = ring.previousElementSibling as HTMLElement | null;
+          // From the ring's centre to the up arrow's; the arrows match.
+          const reach = ((arrow?.offsetWidth ?? 0) + ring.offsetWidth) / 2;
+          drag.current = { id: event.pointerId, x: event.clientX, dx: 0, reach };
           // A data attribute, not a class: React rewrites className when `armed` changes.
           if (root.current) root.current.dataset.dragging = "";
           try {
-            (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+            ring.setPointerCapture(event.pointerId);
           } catch {
             // Capture is best-effort.
           }
@@ -129,10 +162,16 @@ const useDragVote = (
           const state = drag.current;
           if (!state || state.id !== event.pointerId) return;
           state.dx = event.clientX - state.x;
-          show(state.dx);
+          show(state.dx, state.reach);
         },
         onPointerUp: (event: ReactPointerEvent) => finish(event, true),
         onPointerCancel: (event: ReactPointerEvent) => finish(event, false),
+        onClickCapture: (event: ReactMouseEvent) => {
+          if (!swallowClick.current) return;
+          swallowClick.current = false;
+          event.stopPropagation();
+          event.preventDefault();
+        },
       }
     : {};
 
@@ -175,17 +214,19 @@ export const VoteLinks = ({
       </button>
     );
   };
+  const draggable = !lemmy && !state.fallback;
   const dragVote = useDragVote(
     current,
     state.pending,
-    variant === "pill" && !lemmy && !state.fallback,
+    draggable,
     (direction) => void castVote(thingId, direction, current, shown),
   );
   const text = compact(shown);
   const scoreEl = (
     <span
-      className={`vote-score${text.length > 3 ? " is-long" : ""}`}
-      data-no-swipe={variant === "pill" || undefined}
+      // is-interactive: feed rows otherwise let presses through to the post.
+      className={`vote-score${text.length > 3 ? " is-long" : ""}${draggable ? " is-interactive" : ""}`}
+      data-no-swipe={draggable || undefined}
       {...dragVote.handlers}
     >
       {text}
@@ -201,18 +242,14 @@ export const VoteLinks = ({
       aria-busy={state.pending}
       title={state.error || (lemmy ? LEMMY_ONLY : "Vote with your Reddit account")}
     >
-      {variant === "pill" ? (
+      {lemmy ? (
+        scoreEl
+      ) : (
         <span className="vote-capsule">
           {arrow(1)}
           {scoreEl}
           {arrow(-1)}
         </span>
-      ) : (
-        <>
-          {arrow(1)}
-          {scoreEl}
-          {arrow(-1)}
-        </>
       )}
       {variant === "pill" && !state.fallback ? (
         <span className="vote-label" aria-hidden="true">
