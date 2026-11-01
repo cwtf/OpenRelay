@@ -13,6 +13,7 @@ import { useNav } from "../app/nav";
 import { usePrefs } from "../app/prefs";
 import { age, fullDate } from "../lib/format";
 import { useLongPress } from "../lib/gestures";
+import { useIsSelectedComment } from "../lib/panes";
 import { Markdown, MarkdownContext } from "../lib/markdown";
 import type { SavedMedia } from "../lib/savedMedia";
 import { Icon, type IconName } from "./Icon";
@@ -99,6 +100,7 @@ export const CommentCard = ({
   const account = useAccount();
   const vote = useVoteToggle(comment.id, comment.vote, comment.score);
   const own = account?.name.toLowerCase() === comment.author.toLowerCase();
+  const selected = useIsSelectedComment(comment.id);
   // Relay's listing-comment overflow menu; Delete only on your own comments.
   const more = () =>
     nav.openSheet((onClosed) => (
@@ -187,7 +189,7 @@ export const CommentCard = ({
   return (
     <SwipeActions actions={actions}>
     <article
-      className="list-card"
+      className={`list-card${selected ? " is-selected" : ""}`}
       data-cid={comment.id}
       tabIndex={0}
       onClick={(event) => {
@@ -261,10 +263,11 @@ export const MessageCard = ({
 }) => {
   const type = INBOX_TYPE[item.kind];
   const activate = onOpen ?? onToggle;
+  const selected = useIsSelectedComment(item.id);
   return (
     <SwipeActions actions={actions}>
     <article
-      className={`list-card message-card${item.unread ? " is-unread" : ""}`}
+      className={`list-card message-card${item.unread ? " is-unread" : ""}${selected ? " is-selected" : ""}`}
       data-mid={item.id}
       tabIndex={0}
       aria-expanded={onOpen ? undefined : expanded}

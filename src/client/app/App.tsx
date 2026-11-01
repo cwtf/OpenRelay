@@ -564,9 +564,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
   }, [panes.dual]);
 
   useEffect(() => {
-    setSelectedPost(
-      panes.dual && detail?.route.kind === "post" ? detail.route.id : null,
-    );
+    const post = panes.dual && detail?.route.kind === "post" ? detail.route : null;
+    setSelectedPost(post?.id ?? null, post?.focus ?? null);
   }, [panes.dual, detail]);
 
   // Full screen lasts until the right-hand pane closes: posts opened from

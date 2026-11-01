@@ -59,13 +59,18 @@ export const useWindowSize = (): Size =>
 
 // ------------------------------------------------------------------ selection
 
-/** The post shown in the right-hand pane, highlighted in the listing. */
+/**
+ * The post shown in the right-hand pane, highlighted in the listing, and the
+ * comment it was opened at (from a profile comment or an inbox reply).
+ */
 let selected: string | null = null;
+let selectedFocus: string | null = null;
 const selectionListeners = new Set<() => void>();
 
-export const setSelectedPost = (id: string | null): void => {
-  if (id === selected) return;
+export const setSelectedPost = (id: string | null, focus: string | null = null): void => {
+  if (id === selected && focus === selectedFocus) return;
   selected = id;
+  selectedFocus = id ? focus : null;
   for (const listener of selectionListeners) listener();
 };
 
@@ -78,3 +83,7 @@ const subscribeSelection = (notify: () => void) => {
 
 export const useIsSelectedPost = (id: string): boolean =>
   useSyncExternalStore(subscribeSelection, () => selected === id);
+
+/** Whether the right-hand pane shows this comment's context. */
+export const useIsSelectedComment = (id: string): boolean =>
+  useSyncExternalStore(subscribeSelection, () => selectedFocus === id);

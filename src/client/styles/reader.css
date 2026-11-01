@@ -703,34 +703,57 @@
   background: var(--bg);
 }
 
-/* Feed rows are Relay's rounded rows: unread posts on a grey card, read ones
-   straight on the page, the post open in the right-hand pane on a blue one.
-   Listing wrappers (Profile, Inbox) keep their flat rows. */
-.feed[data-layout='compact'] > .swipe:has(> .swipe-content > .post),
-.feed[data-layout='list'] > .swipe:has(> .swipe-content > .post) {
+/* Feed rows are Relay's rounded rows: unread posts and messages on a grey
+   card, read ones straight on the page, the item open in the right-hand pane
+   on a blue one. Comments (Profile, Moderator) have no read state, so they
+   keep their card. A profile post's card is its listing wrapper, which also
+   holds its moderation block. */
+.feed[data-layout='compact'] > .swipe:has(> .swipe-content > :is(.post, .list-card)),
+.feed[data-layout='list'] > .swipe:has(> .swipe-content > :is(.post, .list-card)),
+.feed[data-layout='compact'] > .listing-post,
+.feed[data-layout='list'] > .listing-post {
   margin: 8px 10px 0;
   border-radius: var(--radius-card);
 }
 
-.feed[data-layout='compact'] > .swipe:has(> .swipe-content > .post) > .swipe-actions,
-.feed[data-layout='list'] > .swipe:has(> .swipe-content > .post) > .swipe-actions {
+.feed[data-layout='compact'] > .swipe:has(> .swipe-content > :is(.post, .list-card)) > .swipe-actions,
+.feed[data-layout='list'] > .swipe:has(> .swipe-content > :is(.post, .list-card)) > .swipe-actions {
   border-radius: var(--radius-card);
 }
 
-.feed[data-layout='compact'] > .swipe > .swipe-content > .post,
-.feed[data-layout='list'] > .swipe > .swipe-content > .post {
+.feed[data-layout='compact'] > .swipe > .swipe-content > :is(.post, .list-card),
+.feed[data-layout='list'] > .swipe > .swipe-content > :is(.post, .list-card),
+.feed[data-layout='compact'] > .listing-post,
+.feed[data-layout='list'] > .listing-post {
   border-bottom: 0;
   border-radius: var(--radius-card);
   background: var(--row-unread);
 }
 
-.feed[data-layout='compact'] > .swipe > .swipe-content > .post.is-read,
-.feed[data-layout='list'] > .swipe > .swipe-content > .post.is-read {
+/* Clip the post sliding out under its swipe actions to the wrapper's card. */
+.feed[data-layout='compact'] > .listing-post,
+.feed[data-layout='list'] > .listing-post {
+  overflow: clip;
+}
+
+.feed[data-layout='compact'] > .listing-post .post,
+.feed[data-layout='list'] > .listing-post .post {
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.feed[data-layout='compact'] > .swipe > .swipe-content > :is(.post.is-read, .message-card:not(.is-unread)),
+.feed[data-layout='list'] > .swipe > .swipe-content > :is(.post.is-read, .message-card:not(.is-unread)),
+.feed[data-layout='compact'] > .listing-post:has(.post.is-read),
+.feed[data-layout='list'] > .listing-post:has(.post.is-read) {
   background: transparent;
 }
 
-.app.is-dual .feed[data-layout='compact'] > .swipe > .swipe-content > .post.is-selected,
-.app.is-dual .feed[data-layout='list'] > .swipe > .swipe-content > .post.is-selected {
+.app.is-dual .feed[data-layout='compact'] > .swipe > .swipe-content > :is(.post, .list-card).is-selected,
+.app.is-dual .feed[data-layout='list'] > .swipe > .swipe-content > :is(.post, .list-card).is-selected,
+.app.is-dual .feed[data-layout='compact'] > .listing-post:has(.post.is-selected),
+.app.is-dual .feed[data-layout='list'] > .listing-post:has(.post.is-selected) {
   background: var(--row-selected);
   box-shadow: none;
 }
@@ -3605,7 +3628,8 @@ button.appbar-title {
 }
 
 /* Profile, Inbox and Moderator lists follow the Layout setting, as Relay's
-   comment and message listings do: rounded cards with gaps, or flat rows. */
+   comment and message listings do: rounded cards with gaps here, or the
+   Compact/List feed's rounded rows. */
 .feed[data-layout='cards'] .list-card,
 .feed[data-layout='cards'] .listing-post,
 .feed[data-layout='cards'] .profile-head {
@@ -3619,20 +3643,6 @@ button.appbar-title {
 .feed[data-layout='cards'] .listing-post .post {
   border-radius: 0;
   box-shadow: none;
-}
-
-.feed[data-layout='compact'] .list-card,
-.feed[data-layout='list'] .list-card,
-.feed[data-layout='compact'] .listing-post,
-.feed[data-layout='list'] .listing-post {
-  margin-top: 0;
-  background: var(--bg);
-  border-bottom: 1px solid var(--divider);
-}
-
-.feed[data-layout='compact'] .listing-post .post,
-.feed[data-layout='list'] .listing-post .post {
-  border-bottom: 0;
 }
 
 .feed[data-layout='compact'] .profile-head,
