@@ -229,6 +229,8 @@ try {
   await page.screenshot({ path: resolve(out, "comment-gifs.png") });
   await gifs.nth(0).click();
   await app.locator(".viewer-page img.is-fit").waitFor();
+  // A comment's GIF can be saved for replies.
+  await app.getByRole("button", { name: "Save for replies" }).waitFor();
   await app.locator("body").press("Escape");
   await app.locator(".viewer").waitFor({ state: "detached" });
   // A GIF that fails to load falls back to a link.
