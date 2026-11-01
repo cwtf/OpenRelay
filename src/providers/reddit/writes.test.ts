@@ -413,26 +413,27 @@ test("sends an upload lease nowhere but Reddit's bucket", async () => {
 
 test("sends a reply with an uploaded image as Reddit's richtext", async () => {
   resetWrites();
-  const output = { document: [{ e: "img", id: "asset123" }] };
   const { calls, fetchFn } = fakeReddit((url) =>
     url.pathname === "/api/me.json"
       ? json({ data: { modhash: "abc123modhash" } })
-      : url.pathname === "/api/convert_rte_body_format"
-        ? json({ output })
-        : json({ json: { errors: [], data: { things: [] } } }),
+      : json({ json: { errors: [], data: { things: [] } } }),
   );
   await apiAction(fetchFn, origin, "comment", { parent: "t1_abc", text: "Look\n\n![img](asset123)\n\n" });
-  assert.equal(new URL(calls[1]!.url).pathname, "/api/convert_rte_body_format");
-  assert.equal(sent(calls[1]!).markdown_text, "Look\n\n![img](asset123)\n\n");
-  assert.equal(sent(calls[1]!).output_mode, "rtjson");
-  assert.deepEqual(sent(calls[2]!), {
+  // Built here: Reddit's converter answers a browser session with 404.
+  assert.deepEqual(
+    calls.map((call) => new URL(call.url).pathname),
+    ["/api/me.json", "/api/comment"],
+  );
+  assert.deepEqual(sent(calls[1]!), {
     thing_id: "t1_abc",
-    richtext_json: JSON.stringify(output),
+    richtext_json: JSON.stringify({
+      document: [{ e: "par", c: [{ e: "text", t: "Look" }] }, { e: "img", id: "asset123" }],
+    }),
     uh: "abc123modhash",
     api_type: "json",
   });
   // A plain reply, or one that only links an image, stays Markdown.
   await apiAction(fetchFn, origin, "comment", { parent: "t1_abc", text: "![img](https://i.redd.it/x.png)" });
-  assert.equal(new URL(calls[3]!.url).pathname, "/api/comment");
-  assert.equal(sent(calls[3]!).text, "![img](https://i.redd.it/x.png)");
+  assert.equal(new URL(calls[2]!.url).pathname, "/api/comment");
+  assert.equal(sent(calls[2]!).text, "![img](https://i.redd.it/x.png)");
 });

@@ -92,7 +92,7 @@ const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
-/** Reddit's richtext for the reply with an image (a fixture). */
+/** The richtext the extension builds for the reply with an image. */
 const richtext = { document: [{ e: "par", c: [{ e: "text", t: "Look" }] }, { e: "img", id: "fixtureasset1" }] };
 await context.route(/^https:\/\/reddit-uploaded-media\.s3-accelerate\.amazonaws\.com\//, async (route) => {
   const request = route.request();
@@ -126,11 +126,6 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
           },
           asset: { asset_id: "fixtureasset1" },
         }),
-      });
-    if (url.pathname === "/api/convert_rte_body_format")
-      return route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({ output: richtext }),
       });
     if (url.pathname === "/api/comment") {
       const id = `mine${++replies}`;
@@ -458,15 +453,8 @@ try {
   await app.getByRole("button", { name: "Send", exact: true }).click();
   // The first reply's toast may still be up: wait for this reply instead.
   await app.locator('[data-cid="t1_mine2"]').waitFor();
-  assert.deepEqual(writes.at(-2), {
-    path: "/api/convert_rte_body_format",
-    body: {
-      markdown_text: "Look\n\n![img](fixtureasset1)\n\n",
-      output_mode: "rtjson",
-      uh: "fixturemodhash1",
-      api_type: "json",
-    },
-  });
+  // Built by the extension: Reddit's converter answers a browser session with 404.
+  assert.ok(!writes.some((write) => write.path === "/api/convert_rte_body_format"));
   assert.deepEqual(writes.at(-1), {
     path: "/api/comment",
     body: { thing_id: "t1_c1", richtext_json: JSON.stringify(richtext), uh: "fixturemodhash1", api_type: "json" },

@@ -1,6 +1,7 @@
 import { isThingId, type Vote, type VoteResult } from "./votes.ts";
 import type { CommentNode } from "../../shared/api.ts";
 import { normalizeComments, safeUrl } from "./reddit.ts";
+import { hasMediaRef, toRichtext } from "./richtext.ts";
 import type { ImageFile } from "../upload.ts";
 
 /**
@@ -276,26 +277,6 @@ async function postedComment(
   };
 }
 
-/**
- * `![img](<asset id>)`, `![gif](<asset id>)` or `![gif](giphy|<id>)`: media
- * Reddit takes in a comment only as richtext, not in its Markdown `text`.
- */
-const MEDIA_REF = /!\[(?:img|gif)\]\((?!https?:)[^)\s]+/;
-
-/**
- * Markdown to Reddit's richtext, by Reddit's own converter (as PRAW sends
- * posts with inline images), for a body that refers to uploaded media.
- */
-async function richtext(fetchFn: Fetch, origin: string, markdown: string): Promise<string> {
-  const body = await post(fetchFn, origin, "/api/convert_rte_body_format", () => ({
-    markdown_text: markdown,
-    output_mode: "rtjson",
-  }));
-  if (!body?.output || typeof body.output !== "object")
-    throw new Error("Reddit could not prepare the image for the reply.");
-  return JSON.stringify(body.output);
-}
-
 /** Run one allow-listed action; returns only what the reader needs. */
 export async function apiAction(
   fetchFn: Fetch,
@@ -307,10 +288,11 @@ export async function apiAction(
   const action = ACTIONS[name as string]!;
   // Validate before reading the session, so bad input never reaches Reddit.
   const checked = action.params(args as Args, { uh: "", id: "t2_validate", name: "" });
-  // A reply or edit with an uploaded image goes as richtext instead.
+  // A reply or edit with media by ID (an upload, a Giphy GIF) goes as
+  // richtext instead.
   const rtjson =
-    (name === "comment" || name === "edit") && MEDIA_REF.test(checked.text ?? "")
-      ? await richtext(fetchFn, origin, checked.text!)
+    (name === "comment" || name === "edit") && hasMediaRef(checked.text ?? "")
+      ? toRichtext(checked.text!)
       : null;
   const body = await post(fetchFn, origin, action.path, (me) => {
     const params = action.params(args as Args, me);
