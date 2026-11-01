@@ -26,6 +26,9 @@
   --on-primary: #ffffff;
   --primary-soft: #d9e7fb;
   --on-primary-soft: #0c3a78;
+  /* Compact/List feed rows, as Relay: unread on a card, the open post on blue. */
+  --row-unread: #ffffff;
+  --row-selected: #d9e7fb;
   /* Vote states, matching Relay: orange up, purple down, outline grey neutral. */
   --upvote: #de714e;
   --downvote: #7b5cb1;
@@ -113,6 +116,8 @@
   --on-primary: #06244d;
   --primary-soft: #1c2f4a;
   --on-primary-soft: #cfe1ff;
+  --row-unread: #1e1f24;
+  --row-selected: #25314b;
   --upvote: #ce6543;
   --downvote: #6e50a4;
   --vote-neutral: #8e9099;

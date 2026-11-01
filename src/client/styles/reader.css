@@ -703,6 +703,38 @@
   background: var(--bg);
 }
 
+/* Feed rows are Relay's rounded rows: unread posts on a grey card, read ones
+   straight on the page, the post open in the right-hand pane on a blue one.
+   Listing wrappers (Profile, Inbox) keep their flat rows. */
+.feed[data-layout='compact'] > .swipe:has(> .swipe-content > .post),
+.feed[data-layout='list'] > .swipe:has(> .swipe-content > .post) {
+  margin: 8px 10px 0;
+  border-radius: var(--radius-card);
+}
+
+.feed[data-layout='compact'] > .swipe:has(> .swipe-content > .post) > .swipe-actions,
+.feed[data-layout='list'] > .swipe:has(> .swipe-content > .post) > .swipe-actions {
+  border-radius: var(--radius-card);
+}
+
+.feed[data-layout='compact'] > .swipe > .swipe-content > .post,
+.feed[data-layout='list'] > .swipe > .swipe-content > .post {
+  border-bottom: 0;
+  border-radius: var(--radius-card);
+  background: var(--row-unread);
+}
+
+.feed[data-layout='compact'] > .swipe > .swipe-content > .post.is-read,
+.feed[data-layout='list'] > .swipe > .swipe-content > .post.is-read {
+  background: transparent;
+}
+
+.app.is-dual .feed[data-layout='compact'] > .swipe > .swipe-content > .post.is-selected,
+.app.is-dual .feed[data-layout='list'] > .swipe > .swipe-content > .post.is-selected {
+  background: var(--row-selected);
+  box-shadow: none;
+}
+
 .row {
   display: flex;
   gap: 12px;
@@ -1245,9 +1277,8 @@
 
 .feed[data-layout='compact'] .skeleton-card,
 .feed[data-layout='list'] .skeleton-card {
-  border-radius: 0;
-  background: transparent;
-  border-bottom: 1px solid var(--divider);
+  margin: 8px 10px 0;
+  background: var(--row-unread);
 }
 
 /* Pull to refresh */
