@@ -84,7 +84,6 @@ A button at the bottom left switches between **OpenRelay** and **Original Reddit
 The Android app is newer than the others, and not everything works yet:
 
 - The back button goes back in Reddit's history, not the reader's own back stack.
-- The media viewer's download button is unavailable.
 - Videos can't go fullscreen.
 - It has been checked against real Reddit signed out only.
 
@@ -140,7 +139,7 @@ The content script runs in its own isolated JavaScript world in the Reddit windo
 
 ### Android app
 
-The Android app runs the same reader and content script, with the same bridge, allowlists, Giphy exception and archive button, and sends nothing anywhere else. Its only permission is `INTERNET`. Reddit's cookies live in the app's own WebView cookie store, separate from your browsers. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the app's private storage, and posts saved for offline reading in its `offline` folder, both excluded from Android backups. The app fetches their images itself, from Reddit's image hosts only, without cookies.
+The Android app runs the same reader and content script, with the same bridge, allowlists, Giphy exception and archive button, and sends nothing anywhere else. Its only permission is `INTERNET`. Reddit's cookies live in the app's own WebView cookie store, separate from your browsers. Preferences, favourites, the cached subscription list and read/hidden markers are kept in `openrelay-storage.json` in the app's private storage, and posts saved for offline reading in its `offline` folder, both excluded from Android backups. The app fetches their images itself, from Reddit's image hosts only, without cookies. The media viewer's download button saves into your Downloads folder: images through Android's download manager, which fetches them without cookies and shows its own notification, and Reddit videos, joined with their sound in the reader, written there by the app. Neither needs a storage permission.
 
 The reader is served from the app's own `https://appassets.androidplatform.net` origin, answered from the APK and never from the network, and its WebView doesn't send Reddit's cookies. The app gives each WebView one message channel: Reddit's channel only to Reddit's top frame, and the reader's only to the reader's origin. Only the reader's channel reaches storage. Android's WebView has no isolated worlds, so unlike the browsers and desktop app, the content script runs in Reddit's own JavaScript world. It starts before Reddit's scripts, takes its channel off the global object and locks its host in place, and the session modhash stays inside the content script. Reddit's scripts already hold your session, so this exposes nothing new to them.
 

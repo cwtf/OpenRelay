@@ -90,7 +90,7 @@ Suggested design:
    - A second document-start script, limited to the appassets origin, defines `openRelayReaderHost` as a small promise-based RPC over `openRelayNative.postMessage` and its `onmessage`.
    - **Storage:** a single JSON file or DataStore in app-private storage.
    - **`save({url})`:** `DownloadManager` into Downloads.
-   - **`save({data})`:** write through MediaStore Downloads (API 29+). Videos can be tens of MB, so send them as ArrayBuffer web messages (`WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER`) or in chunks, not base64 in one message.
+   - **`save({data})`:** write through MediaStore Downloads (API 29+). Videos can be tens of MB, so `reader-host.js` sends them in 1 MiB base64 pieces (`downloads.begin`, `downloads.chunk`, `downloads.end`), each answered before the next, not in one message. A reader that goes away mid-video leaves its unfinished file deleted.
 5. **Android is less isolated than the browsers.** Its content script runs in the page's main JavaScript world; Android has no isolated world. Reddit's own scripts share the globals, though not `content.js`'s private state. Reddit already holds the session, so this exposes nothing new. State it in the README's Android data section anyway.
 6. **Back button:** `OnBackPressedDispatcher` sends the reader `{"kind":"back"}` and waits up to 500 ms for its `{"kind":"back","handled":…}` answer, then, if it went unhandled, falls back to `webView.goBack()` or leaves the app.
 

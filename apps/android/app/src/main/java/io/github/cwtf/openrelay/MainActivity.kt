@@ -1,6 +1,9 @@
 package io.github.cwtf.openrelay
 
+import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
@@ -8,7 +11,9 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.os.Message
+import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.util.TypedValue
@@ -16,6 +21,7 @@ import android.view.Gravity
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -24,6 +30,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
@@ -39,6 +46,7 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -95,11 +103,16 @@ class MainActivity : ComponentActivity() {
     private var pageScript: ScriptHandler? = null
     private var pageOrigins: Set<String> = REDDIT_ORIGINS
     private val network = Executors.newFixedThreadPool(4)
+    private lateinit var downloads: Downloads
+    private val saves = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         storage = JsonFileStorage(File(filesDir, "openrelay-storage.json"))
         offline = OfflineFiles(File(filesDir, "offline"))
+        downloads = Downloads(this) { message ->
+            runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
+        }
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         WebView.setWebContentsDebuggingEnabled(debuggable)
         CookieManager.getInstance().setAcceptCookie(true)
@@ -249,6 +262,20 @@ class MainActivity : ComponentActivity() {
                 }
                 return@addWebMessageListener
             }
+            if (request.optString("method").startsWith("downloads.")) {
+                // One at a time, so a video's pieces are written in order.
+                val method = request.optString("method")
+                val args = request.optJSONObject("args") ?: JSONObject()
+                saves.execute {
+                    try {
+                        response.put("value", downloads.handle(method, args))
+                    } catch (error: Exception) {
+                        response.put("error", error.message ?: "Download failed")
+                    }
+                    runOnUiThread { reply.postMessage(response.toString()) }
+                }
+                return@addWebMessageListener
+            }
             try {
                 response.put("value", handleStorage(request.getString("method"), request.opt("args")))
             } catch (error: Exception) {
@@ -316,15 +343,22 @@ class MainActivity : ComponentActivity() {
         offlineShown = false
         showReader(false)
         readerProxy = null
+        abortSaves()
         readerView.loadUrl("about:blank")
     }
 
     /** Reddit didn't load: show the posts saved for offline reading. */
     private fun openOffline() {
         readerProxy = null
+        abortSaves()
         readerView.loadUrl(OFFLINE_URL)
         offlineShown = true
         showReader(true)
+    }
+
+    /** The reader document is going away: drop the videos it was still sending. */
+    private fun abortSaves() {
+        saves.execute { downloads.abortAll() }
     }
 
     private fun updateToggle() {
@@ -419,6 +453,7 @@ class MainActivity : ComponentActivity() {
             when (command.optString("kind")) {
                 "open" -> {
                     readerProxy = null
+                    abortSaves()
                     readerView.loadUrl(READER_URL + "#" + command.optString("hash"))
                 }
                 "visible" -> showReader(command.optBoolean("visible"))
@@ -485,6 +520,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         network.shutdownNow()
+        abortSaves()
+        saves.shutdown()
         redditView.destroy()
         readerView.destroy()
         super.onDestroy()
@@ -531,6 +568,112 @@ class OfflineFiles(private val dir: File) {
     @Synchronized
     fun remove(keys: JSONArray) {
         for (i in 0 until keys.length()) file(keys.getString(i)).delete()
+    }
+}
+
+/**
+ * The media viewer's downloads, into the shared Downloads folder: a remote file
+ * through DownloadManager (without cookies), and a file the reader built (a
+ * v.redd.it video joined with its sound) through MediaStore, sent in pieces.
+ * Neither needs a storage permission from API 29. Called on one thread only.
+ */
+class Downloads(context: Context, private val notify: (String) -> Unit) {
+    private val context = context.applicationContext
+    private class Pending(val uri: Uri, val output: OutputStream) {
+        var size = 0L
+    }
+    private val pending = HashMap<Int, Pending>()
+    private var nextId = 0
+
+    fun handle(method: String, args: JSONObject): Any = when (method) {
+        "downloads.url" -> enqueue(args.optString("url"), args.optString("filename"))
+        "downloads.begin" -> begin(args.optString("filename"), args.optString("type"))
+        "downloads.chunk" -> chunk(args.getInt("id"), args.getString("data"))
+        "downloads.end" -> end(args.getInt("id"))
+        "downloads.abort" -> abort(args.getInt("id"))
+        else -> throw IllegalArgumentException("Unsupported method")
+    }
+
+    private fun enqueue(value: String, filename: String): Any {
+        val uri = Uri.parse(value)
+        require(uri.scheme == "https" && !uri.host.isNullOrEmpty()) { "Not an https URL" }
+        val name = filename.takeIf { FILE_NAME.matches(it) }
+            ?: URLUtil.guessFileName(value, null, null).replace(Regex("[^\\w.-]"), "_")
+        val request = DownloadManager.Request(uri)
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+        context.getSystemService(DownloadManager::class.java).enqueue(request)
+        notify("Downloading $name")
+        return JSONObject.NULL
+    }
+
+    private fun begin(filename: String, type: String): Int {
+        require(FILE_NAME.matches(filename)) { "Invalid file name" }
+        require(MIME_TYPE.matches(type)) { "Invalid type" }
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, filename)
+            put(MediaStore.Downloads.MIME_TYPE, type)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("Can't save to Downloads")
+        val output = try {
+            resolver.openOutputStream(uri) ?: throw IllegalStateException("Can't save to Downloads")
+        } catch (error: Exception) {
+            resolver.delete(uri, null, null)
+            throw error
+        }
+        val id = ++nextId
+        pending[id] = Pending(uri, output)
+        return id
+    }
+
+    private fun chunk(id: Int, data: String): Any {
+        val file = pending[id] ?: throw IllegalArgumentException("No such download")
+        try {
+            val bytes = Base64.decode(data, Base64.DEFAULT)
+            file.size += bytes.size
+            if (file.size > SAVE_MAX_BYTES) throw IllegalStateException("Too large")
+            file.output.write(bytes)
+        } catch (error: Exception) {
+            abort(id)
+            throw error
+        }
+        return JSONObject.NULL
+    }
+
+    private fun end(id: Int): Any {
+        val file = pending.remove(id) ?: throw IllegalArgumentException("No such download")
+        try {
+            file.output.close()
+            val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+            context.contentResolver.update(file.uri, done, null, null)
+        } catch (error: Exception) {
+            context.contentResolver.delete(file.uri, null, null)
+            throw error
+        }
+        notify("Saved to Downloads")
+        return JSONObject.NULL
+    }
+
+    private fun abort(id: Int): Any {
+        val file = pending.remove(id) ?: return JSONObject.NULL
+        runCatching { file.output.close() }
+        runCatching { context.contentResolver.delete(file.uri, null, null) }
+        return JSONObject.NULL
+    }
+
+    /** Drops every unfinished file, when the reader that was sending them is gone. */
+    fun abortAll() {
+        for (id in pending.keys.toList()) abort(id)
+    }
+
+    private companion object {
+        val FILE_NAME = Regex("^[\\w-][\\w.-]{0,119}\\.\\w{1,10}$")
+        val MIME_TYPE = Regex("^(?:image|video|audio)/[\\w.+-]{1,60}$")
+        const val SAVE_MAX_BYTES = 1L shl 30
     }
 }
 

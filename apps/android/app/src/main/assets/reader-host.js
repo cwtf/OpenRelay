@@ -1,6 +1,6 @@
-// openRelayReaderHost for the reader's WebView: storage as a promise-based RPC,
-// and the channel to the Reddit page, both over `openRelayNative`, which the
-// app gives only to this origin.
+// openRelayReaderHost for the reader's WebView: storage and downloads as a
+// promise-based RPC, and the channel to the Reddit page, both over
+// `openRelayNative`, which the app gives only to this origin.
 (() => {
   if (
     location.origin !== "https://appassets.androidplatform.net" ||
@@ -44,6 +44,30 @@
       pending.set(id, { resolve, reject });
       send({ kind: "rpc", id, method, args });
     });
+  // A video the reader built goes over in base64 pieces of this many bytes,
+  // each answered before the next, not as one message of tens of MB.
+  const CHUNK = 1024 * 1024;
+  const base64 = (bytes) => {
+    let text = "";
+    for (let i = 0; i < bytes.length; i += 0x8000)
+      text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(text);
+  };
+  const save = async (file) => {
+    if (!file.data) {
+      await call("downloads.url", { url: file.url, filename: file.filename });
+      return;
+    }
+    const id = await call("downloads.begin", { filename: file.filename, type: file.type });
+    try {
+      for (let i = 0; i < file.data.length; i += CHUNK)
+        await call("downloads.chunk", { id, data: base64(file.data.subarray(i, i + CHUNK)) });
+    } catch (error) {
+      await call("downloads.abort", { id }).catch(() => {});
+      throw error;
+    }
+    await call("downloads.end", { id });
+  };
   globalThis.openRelayReaderHost = Object.freeze({
     name: "android",
     storage: Object.freeze({
@@ -58,7 +82,7 @@
     }),
     media: async () =>
       Object.freeze({ fetch: (url) => call("media.fetch", url) }),
-    downloads: async () => "unavailable",
+    downloads: async () => Object.freeze({ save }),
     // Lemmy instances: the app reads the reader's list of them, and adding
     // one in the app is the consent.
     instances: Object.freeze({
