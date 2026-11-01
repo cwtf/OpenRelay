@@ -2,7 +2,7 @@ import { memo, useSyncExternalStore } from 'react';
 import type { Prefs, PostSummary } from '../../shared/api';
 import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
-import { age, compact, fullDate, plural } from '../lib/format';
+import { compact, plural } from '../lib/format';
 import { useLongPress } from '../lib/gestures';
 import { useIsSelectedPost } from '../lib/panes';
 import { readPosts } from '../lib/storage';
@@ -122,7 +122,7 @@ const PostRow = ({
 
 /**
  * Relay's crosspost block: an "Original Post" header over the original as a
- * small card, or with Compact Crosspost Layout one "N Comments in r/sub"
+ * small card styled like a feed row, or with Compact Crosspost Layout one "N Comments in r/sub"
  * link. Both open the original's comments.
  */
 const Crosspost = ({ original }: { original: PostSummary }) => {
@@ -171,48 +171,21 @@ const Crosspost = ({ original }: { original: PostSummary }) => {
           aria-label={`Original post: ${original.title}`}
           {...press.handlers}
         />
-        {/* Relay's original card: "score author in sub", the title, then
-            "N Comments • domain • age • flair", with no thumbnail or buttons
-            since the crosspost above already shows the media. */}
-        <div className="crosspost-byline">
-          <span className="score">{compact(original.score)}</span>
-          <span className="name">{original.author}</span>
-          <span className="in">in</span>
-          <span className="name">{original.subreddit}</span>
-        </div>
+        {/* The original as a feed row: title, flags, meta and its score and
+            comments, with no thumbnail or buttons since the crosspost above
+            already shows the media and has its own. */}
         <h3 className="post-title">{original.title}</h3>
-        <div className="post-meta crosspost-meta">
-          <span>{plural(original.comments, 'Comment')}</span>
-          <span className="dot" />
-          <span className="domain">
-            {original.domain || `self.${original.subreddit}`}
+        <PostFlags post={original} />
+        <PostMeta post={original} showSub />
+        <div className="crosspost-stats">
+          <span>
+            <Icon name="up" size={14} />
+            {compact(original.score)}
           </span>
-          <span className="dot" />
-          <time
-            dateTime={new Date(original.createdAt).toISOString()}
-            title={fullDate(original.createdAt)}
-          >
-            {age(original.createdAt)}
-            {original.edited ? ' (edited)' : ''}
-          </time>
-          {original.nsfw ? (
-            <>
-              <span className="dot" />
-              <span className="nsfw">NSFW</span>
-            </>
-          ) : null}
-          {original.spoiler ? (
-            <>
-              <span className="dot" />
-              <span className="spoiler">Spoiler</span>
-            </>
-          ) : null}
-          {original.flair ? (
-            <>
-              <span className="dot" />
-              <span className="flair">{original.flair.text}</span>
-            </>
-          ) : null}
+          <span>
+            <Icon name="comment" size={14} />
+            {compact(original.comments)}
+          </span>
         </div>
       </article>
     </div>

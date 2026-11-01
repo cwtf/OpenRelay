@@ -864,46 +864,20 @@
   z-index: 1;
 }
 
-.crosspost-byline {
+/* The original's score and comments, shown like the List layout's stats. */
+.crosspost-stats {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  font-size: calc(14px * var(--ts));
-}
-
-.crosspost-byline .score {
-  flex: none;
-  font-size: calc(22px * var(--ts));
-  font-weight: 300;
+  align-items: center;
+  gap: 12px;
+  font-size: calc(12.5px * var(--ts));
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
 
-.crosspost-byline .name {
-  font-weight: 600;
-  color: var(--link);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.crosspost-byline .in {
-  flex: none;
-  font-size: calc(12px * var(--ts));
-  color: var(--text-2);
-}
-
-.crosspost-meta .flair {
-  color: var(--mod);
-}
-
-.crosspost-meta .nsfw {
-  color: var(--nsfw);
-}
-
-.crosspost-meta .spoiler {
-  color: var(--warn);
+.crosspost-stats > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .crosspost-card.is-read .post-title {
