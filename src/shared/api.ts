@@ -246,6 +246,11 @@ export type SubredditAbout = {
   sidebar?: string;
   /** Whether the signed-in viewer subscribes; absent when unknown. */
   subscribed?: boolean;
+  /**
+   * What comments here may embed (Reddit's `allowed_media_in_comments`:
+   * `giphy`, `static`, `animated`, `expression`); absent when unknown.
+   */
+  commentMedia?: string[];
   description?: string;
   subscribers?: number;
   active?: number;

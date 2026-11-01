@@ -14,6 +14,7 @@ import { usePrefs } from "../app/prefs";
 import { age, fullDate } from "../lib/format";
 import { useLongPress } from "../lib/gestures";
 import { Markdown, MarkdownContext } from "../lib/markdown";
+import type { SavedMedia } from "../lib/savedMedia";
 import { Icon, type IconName } from "./Icon";
 import { inlineViewerItem } from "./PostParts";
 import { ActionStrip, type BarAction } from "./Relay";
@@ -38,8 +39,12 @@ export const ReaderMarkdown = ({
   const actions = useMemo(
     () => ({
       onLink: nav.openLink,
-      onImage: (url: string, inline?: InlineMedia) =>
-        nav.openMedia({ items: [inlineViewerItem(url, inline)], index: 0 }),
+      onImage: (url: string, inline?: InlineMedia, save?: SavedMedia) =>
+        nav.openMedia({
+          items: [inlineViewerItem(url, inline)],
+          index: 0,
+          ...(save ? { save } : {}),
+        }),
       highlight: null,
       autoplayGifs: prefs.autoplayGifs,
       giphyGifs: prefs.giphyGifs,
@@ -138,7 +143,13 @@ export const CommentCard = ({
       label: "Reply",
       onClick: () =>
         nav.openSheet((onClosed) => (
-          <ReplySheet parentId={comment.id} author={comment.author} quote={comment.body} onClosed={onClosed} />
+          <ReplySheet
+            parentId={comment.id}
+            community={comment.subreddit}
+            author={comment.author}
+            quote={comment.body}
+            onClosed={onClosed}
+          />
         )),
     },
     ...(own
@@ -151,6 +162,7 @@ export const CommentCard = ({
               nav.openSheet((onClosed) => (
                 <ReplySheet
                   parentId={comment.postId}
+                  community={comment.subreddit}
                   author={comment.author}
                   quote=""
                   editing={{ id: comment.id, text: comment.body }}

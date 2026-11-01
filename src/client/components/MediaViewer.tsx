@@ -15,7 +15,10 @@ import {
   downloadVideo,
   openUrl,
   redditUrl,
+  toast,
 } from '../lib/platform';
+import type { SavedMedia } from '../lib/savedMedia';
+import { isSaved, toggleSaved, useSavedMedia } from '../lib/savedMediaStore';
 import { Icon } from './Icon';
 
 type Transform = { scale: number; x: number; y: number };
@@ -547,6 +550,26 @@ const VideoPage = ({
   );
 };
 
+/** Keeps a comment's GIF or image for replies (the composer's Saved tab). */
+const SaveButton = ({ item }: { item: SavedMedia }) => {
+  useSavedMedia();
+  const saved = isSaved(item);
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      aria-label={saved ? 'Remove from saved GIFs and images' : 'Save for replies'}
+      aria-pressed={saved}
+      title={saved ? 'Saved for replies' : 'Save for replies'}
+      onClick={() =>
+        toast(toggleSaved(item) ? 'Saved for replies' : 'Removed from saved')
+      }
+    >
+      <Icon name={saved ? 'starFilled' : 'star'} />
+    </button>
+  );
+};
+
 type MediaViewerProps = { spec: ViewerSpec; onClosed: () => void };
 
 export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
@@ -717,6 +740,7 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
             {index + 1} / {spec.items.length}
           </span>
         ) : null}
+        {spec.save ? <SaveButton item={spec.save} /> : null}
         {current?.kind === 'image' ? (
           <>
             <button

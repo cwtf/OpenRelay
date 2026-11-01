@@ -347,6 +347,7 @@ export const InboxScreen = () => {
         nav.openSheet((onClosed) => (
           <ReplySheet
             parentId={item.id}
+            {...(item.subreddit ? { community: item.subreddit } : {})}
             author={item.author}
             quote={item.body}
             onClosed={onClosed}

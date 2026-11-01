@@ -57,6 +57,7 @@ import {
 } from "../lib/itemAnimator";
 import { compact, fullDate, plural, sortLabel } from "../lib/format";
 import { Markdown, MarkdownContext, decodeEntities } from "../lib/markdown";
+import type { SavedMedia } from "../lib/savedMedia";
 import {
   openUrl,
   copyText,
@@ -635,6 +636,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     nav.openSheet((onClosed) => (
       <ReplySheet
         parentId={parentId}
+        {...(post ? { community: post.subreddit } : {})}
         author={author}
         quote={quote}
         onClosed={onClosed}
@@ -685,6 +687,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       nav.openSheet((onClosed) => (
         <ReplySheet
           parentId={node.parentId}
+          {...(post ? { community: post.subreddit } : {})}
           author={node.author}
           quote=""
           editing={{ id: node.id, text: decodeEntities(node.body) }}
@@ -854,11 +857,12 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const markdownActions = useMemo(
     () => ({
       onLink: nav.openLink,
-      onImage: (url: string, media?: InlineMedia) =>
+      onImage: (url: string, media?: InlineMedia, save?: SavedMedia) =>
         nav.openMedia({
           items: [inlineViewerItem(url, media)],
           index: 0,
           sourceUrl: url,
+          ...(save ? { save } : {}),
         }),
       highlight,
       autoplayGifs: prefs.autoplayGifs,

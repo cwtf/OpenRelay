@@ -332,6 +332,13 @@ async function fetchAbout(sub: string): Promise<AboutResponse> {
       ...(typeof d.user_is_subscriber === "boolean"
         ? { subscribed: d.user_is_subscriber }
         : {}),
+      ...(Array.isArray(d.allowed_media_in_comments)
+        ? {
+            commentMedia: d.allowed_media_in_comments.filter(
+              (kind: unknown): kind is string => typeof kind === "string",
+            ),
+          }
+        : {}),
       title: d.title,
       description: d.public_description,
       subscribers: d.subscribers,

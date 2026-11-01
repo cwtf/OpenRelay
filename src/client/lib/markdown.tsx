@@ -13,6 +13,7 @@ import {
 import type { InlineMedia } from '../../shared/api';
 import { isInlineImage, normaliseHref } from './links';
 import { site } from './api';
+import { savableMedia, type SavedMedia } from './savedMedia';
 import { decodeEntities, parseBlocks, type Block } from './markdownParser';
 
 export { decodeEntities };
@@ -24,8 +25,11 @@ export { decodeEntities };
 
 export type MarkdownActions = {
   onLink: (href: string) => void;
-  /** `media` is set for an image the body refers to by ID, like a GIF. */
-  onImage: (url: string, media?: InlineMedia) => void;
+  /**
+   * `media` is set for an image the body refers to by ID, like a GIF; `save`
+   * is what the viewer's Save button keeps, for an image that can be reused.
+   */
+  onImage: (url: string, media?: InlineMedia, save?: SavedMedia) => void;
   highlight: RegExp | null;
   /** The Autoplay GIFs and Load GIFs from Giphy preferences. */
   autoplayGifs: boolean;
@@ -192,10 +196,13 @@ const InlineImage = ({
   url,
   alt,
   media,
+  target = url,
 }: {
   url: string;
   alt: string;
   media?: InlineMedia;
+  /** What the body refers to: the image's ID (`giphy|<id>`) or its URL. */
+  target?: string;
 }) => {
   const { onImage, onLink } = useContext(MarkdownContext);
   const [failed, setFailed] = useState(false);
@@ -209,7 +216,12 @@ const InlineImage = ({
       className="md-image"
       onClick={(event) => {
         event.stopPropagation();
-        onImage(url, media && size ? { ...media, ...size } : media);
+        const shown = media && size ? { ...media, ...size } : media;
+        onImage(
+          url,
+          shown,
+          savableMedia(target, url, shown, Date.now()) ?? undefined
+        );
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -245,7 +257,10 @@ const MediaRef = ({ target, alt }: { target: string; alt: string }) => {
   // `giphy|<id>|downsized` may be listed under `giphy|<id>`.
   const item =
     media?.[target] ?? media?.[target.split('|').slice(0, 2).join('|')];
-  if (item) return <InlineImage url={item.url} alt={alt} media={item} />;
+  if (item)
+    return (
+      <InlineImage url={item.url} alt={alt} media={item} target={target} />
+    );
   if (/^giphy\|/.test(target)) {
     const id = target.split('|')[1] ?? '';
     // Reddit often lists a Giphy GIF only as `"status": "invalid"`, with no
@@ -257,7 +272,9 @@ const MediaRef = ({ target, alt }: { target: string; alt: string }) => {
         width: 0,
         height: 0,
       };
-      return <InlineImage url={giphy.url} alt={alt} media={giphy} />;
+      return (
+        <InlineImage url={giphy.url} alt={alt} media={giphy} target={target} />
+      );
     }
     return <Link href={`https://giphy.com/gifs/${id}`}>GIF</Link>;
   }
