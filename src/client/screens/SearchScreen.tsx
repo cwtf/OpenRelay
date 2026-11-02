@@ -8,8 +8,6 @@ import { fetchSearch, entryRoute, site } from "../lib/api";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { sortLabel } from "../lib/format";
 import { openUrl } from "../lib/platform";
-import { pageUrl } from "../../extension/bridge";
-import { searchPagePath } from "../../providers/reddit/search";
 import { readJson, writeJson } from "../lib/storage";
 import { siteKey } from "../lib/site";
 
@@ -231,19 +229,9 @@ export const SearchScreen = ({ sub }: { sub: string }) => {
                 type="button"
                 className="btn is-tonal"
                 data-ripple
-                onClick={() =>
-                  openUrl(
-                    pageUrl.origin +
-                      searchPagePath(
-                        sub,
-                        query,
-                        sort,
-                        pageUrl.hostname === "old.reddit.com",
-                      ),
-                  )
-                }
+                onClick={() => openUrl(site.searchPageUrl(sub, query, sort))}
               >
-                Search on Original Reddit
+                Search on Original {site.name}
               </button>
             </div>
           ) : null}

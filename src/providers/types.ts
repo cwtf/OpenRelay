@@ -65,6 +65,8 @@ export type ReaderFeatures = {
   /** Voting, replying, saving, subscribing and the other `runAction` writes. */
   writes: boolean;
   inbox: boolean;
+  /** Messages to a community's moderators (`/r/name` as the recipient). */
+  modmail: boolean;
   friends: boolean;
   moderation: boolean;
   wiki: boolean;
@@ -97,6 +99,8 @@ export type ReaderProvider = {
   communityUrl(name: string): string;
   /** The site's sign-in page. */
   loginUrl: string;
+  /** The site's own search page for a query, offered when the reader's search fails. */
+  searchPageUrl(sub: string, q: string, sort: SearchSort): string;
   parseRoute(href: string): PageRoute | null;
   fetchInit(): Promise<InitResponse>;
   fetchFeed(

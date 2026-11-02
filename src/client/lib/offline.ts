@@ -4,7 +4,7 @@ import { readerHost } from "../../hosts/reader";
 import type { MediaFetcher } from "../../hosts/types";
 import { offlineMode } from "../../extension/bridge";
 import { loadCachedPrefs } from "../app/prefs";
-import { fetchFeed, fetchPostToSave } from "./api";
+import { fetchFeed, fetchPostToSave, site } from "./api";
 import { isLemmyItem } from "./hybrid";
 import { plural } from "./format";
 import {
@@ -248,9 +248,9 @@ async function save(
         saved++;
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
-        // Reddit refusing more requests, or nowhere to keep them: stop.
+        // The site refusing more requests, or nowhere to keep them: stop.
         if (/rate limit|offline|storage|quota/i.test(message) || ids.length === 1) {
-          stopped = message || "Reddit could not load this post.";
+          stopped = message || `${site.name} could not load this post.`;
           break;
         }
       }

@@ -9,10 +9,13 @@ import {
 } from 'react';
 import type { ViewerItem, ViewerSpec } from '../app/nav';
 import type Hls from 'hls.js';
+import { providerOf } from '../../providers/hosts';
+import { site } from '../lib/api';
 import {
   copyText,
   downloadImage,
   downloadVideo,
+  isRedditVideo,
   openUrl,
   redditUrl,
   toast,
@@ -347,12 +350,14 @@ const VideoPage = ({
   onDismissDrag,
   stageRef,
   fallbackUrl,
+  fallbackLabel,
 }: {
   item: Extract<ViewerItem, { kind: 'video' }>;
   active: boolean;
   onDismissDrag: (dy: number, done: boolean) => void;
   stageRef?: (el: HTMLDivElement | null) => void;
   fallbackUrl: string | undefined;
+  fallbackLabel: string;
 }) => {
   const ref = useRef<HTMLVideoElement>(null);
   const stage = useRef<HTMLDivElement | null>(null);
@@ -543,7 +548,7 @@ const VideoPage = ({
               className="btn"
               onClick={() => openUrl(fallbackUrl)}
             >
-              <Icon name="external" /> Watch on Reddit
+              <Icon name="external" /> {fallbackLabel}
             </button>
           ) : null}
         </div>
@@ -588,6 +593,14 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
   const firstStage = useRef<HTMLDivElement | null>(null);
   const many = spec.items.length > 1;
   const source = spec.permalink ? redditUrl(spec.permalink) : spec.sourceUrl;
+  // The post's page on the site, else the media's own link (a comment's
+  // video player link is still Reddit's).
+  const sourceSite = spec.permalink
+    ? site.name
+    : spec.sourceUrl &&
+        (providerOf(spec.sourceUrl) === 'reddit' || isRedditVideo(spec.sourceUrl))
+      ? 'Reddit'
+      : '';
 
   const close = useCallback(() => {
     if (closing) return;
@@ -719,6 +732,7 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
                 active={i === index}
                 onDismissDrag={onDismissDrag}
                 fallbackUrl={source}
+                fallbackLabel={sourceSite ? `Watch on ${sourceSite}` : 'Open original'}
                 {...(i === spec.index
                   ? {
                       stageRef: (el: HTMLDivElement | null) =>
@@ -783,7 +797,7 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
           <button
             type="button"
             className="icon-btn"
-            aria-label="Open on Reddit"
+            aria-label={sourceSite ? `Open on ${sourceSite}` : 'Open original'}
             onClick={() => openUrl(source)}
           >
             <Icon name="external" />

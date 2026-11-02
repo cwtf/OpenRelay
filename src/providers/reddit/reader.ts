@@ -500,6 +500,7 @@ export const redditReader: ReaderProvider = {
   features: {
     writes: true,
     inbox: true,
+    modmail: true,
     friends: true,
     moderation: true,
     wiki: true,
@@ -514,6 +515,8 @@ export const redditReader: ReaderProvider = {
   baseUrl: "https://www.reddit.com",
   communityUrl: (name) => `https://www.reddit.com/r/${name}/`,
   loginUrl: "https://www.reddit.com/login",
+  searchPageUrl: (sub, q, sort) =>
+    pageUrl.origin + searchPagePath(sub, q, sort, pageUrl.hostname === "old.reddit.com"),
   parseRoute,
   fetchInit,
   fetchFeed,

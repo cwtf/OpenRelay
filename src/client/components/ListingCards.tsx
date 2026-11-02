@@ -118,7 +118,7 @@ export const CommentCard = ({
                 label="Copy link"
                 onClick={run(() => void copyText(redditUrl(comment.permalink), "Link copied"))}
               />
-              <SheetItem icon="external" label="View on Reddit" onClick={run(() => openUrl(redditUrl(comment.permalink)))} />
+              <SheetItem icon="external" label={`View on ${site.name}`} onClick={run(() => openUrl(redditUrl(comment.permalink)))} />
               {own ? (
                 <SheetItem
                   icon="trash"

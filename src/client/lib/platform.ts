@@ -67,6 +67,7 @@ export async function downloadImage(value: string): Promise<void> {
 }
 
 const VREDDIT = /^https:\/\/v\.redd\.it\/([\w-]+)\//;
+export const isRedditVideo = (url: string): boolean => VREDDIT.test(url);
 
 const fetchBytes = async (url: string, max = Infinity): Promise<Uint8Array> => {
   const response = await fetch(url);

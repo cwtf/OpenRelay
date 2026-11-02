@@ -5,7 +5,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { setBottomInset } from "../../extension/bridge";
 import { useNav } from "../app/nav";
-import { runAction } from "../lib/api";
+import { runAction, site } from "../lib/api";
 import { markDeleted } from "../lib/deleted";
 import { toast } from "../lib/platform";
 import { Icon, type IconName } from "./Icon";
@@ -386,7 +386,7 @@ export const ModActionsSheet = ({
     runAction(op, { id, ...args })
       .then(() => toast(done))
       .catch((error: unknown) =>
-        toast(error instanceof Error ? error.message : "Reddit could not do that."),
+        toast(error instanceof Error ? error.message : `${site.name} could not do that.`),
       );
   return (
     <Sheet title="Moderate" onClosed={onClosed}>

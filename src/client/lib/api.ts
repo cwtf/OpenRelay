@@ -10,7 +10,7 @@ import { bridge, offlineMode, pageUrl } from "../../extension/bridge";
 import { readerProvider } from "../../providers/reader";
 import { lemmyReader } from "../../providers/lemmy/reader";
 import type { ReaderProvider } from "../../providers/types";
-import { fetchHybridFeed, isHybridFeed, isLemmyItem, isLemmyName } from "./hybrid";
+import { fetchHybridFeed, isHybridFeed, isLemmyId, isLemmyItem, isLemmyName } from "./hybrid";
 import { readOfflineCopy, withOfflineMedia } from "./offlineStore";
 import { fullDate } from "./format";
 
@@ -42,6 +42,7 @@ export const site = {
   resolveLink: provider.resolveLink,
   communityUrl: provider.communityUrl,
   loginUrl: provider.loginUrl,
+  searchPageUrl: provider.searchPageUrl,
 };
 export const {
   fetchInit,
@@ -85,9 +86,11 @@ async function offlineCopy(id: string): Promise<PostResponse | null> {
   if (!copy) return null;
   const { savedAt, media, ...saved } = copy;
   const page = await withOfflineMedia(saved, media);
+  // The offline reader (`#offline`) shows saved Lemmy posts too.
+  const from = isLemmyId(id) ? "Lemmy" : "Reddit";
   return {
     ...page,
-    notice: `Saved for offline reading ${fullDate(savedAt)}. Votes, replies and more comments need Reddit.`,
+    notice: `Saved for offline reading ${fullDate(savedAt)}. Votes, replies and more comments need ${from}.`,
   };
 }
 /** A post and its comments: from the site, else the copy saved for offline reading. */

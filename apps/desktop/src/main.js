@@ -357,7 +357,7 @@ function setUpMenu() {
         submenu: [
           {
             id: "toggle-reader",
-            label: "Toggle OpenRelay / Original Reddit",
+            label: "Toggle OpenRelay / Original Site",
             accelerator: "CmdOrCtrl+Shift+R",
             click: (_item, window) => toggleReader(window),
           },

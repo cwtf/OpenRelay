@@ -66,7 +66,7 @@ const GoToUserSheet = ({
             autoFocus
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="u/username"
+            placeholder={site.userLabel("username")}
             aria-label="Username"
             autoCapitalize="off"
             autoCorrect="off"

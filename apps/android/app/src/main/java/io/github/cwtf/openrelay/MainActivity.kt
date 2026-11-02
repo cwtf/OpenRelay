@@ -437,7 +437,7 @@ class MainActivity : ComponentActivity() {
     private fun updateToggle() {
         toggleButton.text = when {
             offlineShown -> "Try Reddit"
-            readerShown -> "Original Reddit"
+            readerShown -> if (redditView.url?.let { isReddit(Uri.parse(it)) } != false) "Original Reddit" else "Original Lemmy"
             else -> "OpenRelay"
         }
         (toggleButton.layoutParams as? FrameLayout.LayoutParams)?.let {

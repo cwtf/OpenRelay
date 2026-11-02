@@ -331,6 +331,7 @@ export const lemmyReader: ReaderProvider = {
   features: {
     writes: true,
     inbox: true,
+    modmail: false,
     friends: false,
     moderation: false,
     wiki: false,
@@ -345,6 +346,8 @@ export const lemmyReader: ReaderProvider = {
   resolveLink: (href) => resolveLink(href, origin),
   communityUrl: (name) => new URL(`/c/${name}`, origin).href,
   loginUrl: new URL("/login", origin).href,
+  // lemmy-ui picks a community by its number, so this searches the whole instance.
+  searchPageUrl: (_sub, q) => new URL("/search" + query({ q, type: "Posts" }), origin).href,
   parseRoute,
   fetchInit: async () => ({
     subreddit: entryRoute.sub,

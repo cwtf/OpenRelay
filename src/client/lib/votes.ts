@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "../../extension/bridge";
 import { toast } from "./platform";
 import { isLemmyItem } from "./hybrid";
-import { LEMMY_ONLY } from "./api";
+import { LEMMY_ONLY, site } from "./api";
 import type { NativeVote, Vote, VoteResult } from "../../providers/reddit/votes";
 
 type State = NativeVote & {
@@ -131,7 +131,7 @@ export async function castVote(
       id,
       result.status === "unavailable"
         ? "Voting isn’t available here. It may be archived or locked."
-        : "Reddit hasn’t confirmed the vote. Check the original page before trying again.",
+        : `${site.name} hasn’t confirmed the vote. Check the original page before trying again.`,
     );
   } catch (error) {
     fail(

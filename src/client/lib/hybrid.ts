@@ -29,12 +29,16 @@ export const isHybridFeed = (sub: string): boolean =>
 
 const LEMMY_ID = /^t[13]_(\d{1,12})_([a-z0-9]{1,8})$/;
 
+/** Whether `id` is a Lemmy post or comment's, in whichever tab. */
+export const isLemmyId = (id: unknown): boolean =>
+  typeof id === "string" && LEMMY_ID.test(id);
+
 /**
  * Whether `id` is a Lemmy post or comment shown in the Reddit tab (from the
  * hybrid feed). Reddit's writes and votes must never get one.
  */
 export const isLemmyItem = (id: unknown): boolean =>
-  typeof id === "string" && LEMMY_ID.test(id) && providerOf(pageUrl) === "reddit";
+  isLemmyId(id) && providerOf(pageUrl) === "reddit";
 
 /**
  * Whether a community or user name is a Lemmy one in the Reddit tab: the

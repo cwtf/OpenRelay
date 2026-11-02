@@ -52,7 +52,7 @@ import {
   site,
 } from "../lib/api";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
-import { compact, timeframeLabel } from "../lib/format";
+import { compact, plural, timeframeLabel } from "../lib/format";
 import { toast } from "../lib/platform";
 import { useListing } from "../lib/useListing";
 import { Avatar } from "./FeedScreen";
@@ -67,7 +67,7 @@ const attempt = async (work: () => Promise<unknown>, done?: string) => {
     if (done) toast(done);
     return true;
   } catch (error) {
-    toast(error instanceof Error ? error.message : "Reddit could not do that.");
+    toast(error instanceof Error ? error.message : `${site.name} could not do that.`);
     return false;
   }
 };
@@ -245,9 +245,11 @@ export const ProfileScreen = ({ user }: { user: string }) => {
               <div className="profile-name">{about?.name ?? user}</div>
               {about ? (
                 <div className="profile-karma">
-                  Karma: {compact(about.linkKarma)} / {compact(about.commentKarma)}
+                  {about.linkKarma !== undefined
+                    ? `Karma: ${compact(about.linkKarma)} / ${compact(about.commentKarma ?? 0)}`
+                    : `${plural(about.postCount ?? 0, "post")} · ${plural(about.commentCount ?? 0, "comment")}`}
                   {about.createdAt
-                    ? ` · Redditor since ${new Date(about.createdAt).getFullYear()}`
+                    ? ` · ${site.name === "Reddit" ? "Redditor since" : "Joined"} ${new Date(about.createdAt).getFullYear()}`
                     : ""}
                 </div>
               ) : (
@@ -363,7 +365,7 @@ export const InboxScreen = () => {
               nav.openSheet((onClosed) => (
                 <ConfirmSheet
                   title="Delete message?"
-                  message="It will be removed from your inbox on Reddit."
+                  message={`It will be removed from your inbox on ${site.name}.`}
                   confirm="Delete"
                   onConfirm={() =>
                     void attempt(() => runAction("del_msg", { id: item.id }), "Message deleted").then(
@@ -937,10 +939,12 @@ export const ComposeScreen = ({
   const [title, setTitle] = useState(subject ?? "");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const toCommunity = /^\/?r\/([A-Za-z0-9][A-Za-z0-9_]{1,20})$/i.exec(recipient.trim());
+  const toCommunity = site.features.modmail
+    ? /^\/?r\/([A-Za-z0-9][A-Za-z0-9_]{1,20})$/i.exec(recipient.trim())
+    : null;
   const name = toCommunity
     ? `/r/${toCommunity[1]}`
-    : recipient.trim().replace(/^\/?u(?:ser)?\//i, "");
+    : recipient.trim().replace(/^\/?u(?:ser)?\/|^@/i, "");
   const ready =
     (toCommunity || USER_RE.test(name)) && title.trim() && message.trim();
 
@@ -961,7 +965,7 @@ export const ComposeScreen = ({
           {toCommunity ? (
             <Field icon="modShield" label="Moderators of" value={recipient} onChange={setRecipient} />
           ) : (
-            <Field icon="user" label="Username" prefix="u/" value={recipient} onChange={setRecipient} autoFocus={!to} />
+            <Field icon="user" label="Username" prefix={site.userLabel("")} value={recipient} onChange={setRecipient} autoFocus={!to} />
           )}
           <Field icon="text" label="Title" value={title} onChange={setTitle} max={100} />
           <Field icon="mail" label="Message" value={message} onChange={setMessage} multiline max={10000} autoFocus={Boolean(to)} />

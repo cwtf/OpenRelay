@@ -313,8 +313,8 @@ export function normalizeUser(data: Raw): UserAbout | null {
   return {
     name,
     ...(icon ? { icon } : {}),
-    linkKarma: num(view.counts?.post_count),
-    commentKarma: num(view.counts?.comment_count),
+    postCount: num(view.counts?.post_count),
+    commentCount: num(view.counts?.comment_count),
     createdAt: time(view.person.published),
     isFriend: false,
     suspended: Boolean(view.person.banned),

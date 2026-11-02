@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { runAction } from "./api";
+import { runAction, site } from "./api";
 import { toast } from "./platform";
 
 /**
@@ -33,6 +33,6 @@ export const toggleSaved = (id: string, saved: boolean): void => {
     .then(() => toast(saved ? "Removed from saved" : "Saved"))
     .catch((error: unknown) => {
       set(id, saved);
-      toast(error instanceof Error ? error.message : "Reddit could not do that.");
+      toast(error instanceof Error ? error.message : `${site.name} could not do that.`);
     });
 };

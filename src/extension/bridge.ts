@@ -11,6 +11,7 @@ const source = params.get("source");
 export const offlineMode = params.has("offline");
 export const pageUrl = new URL(source || "https://www.reddit.com/");
 if (!providerOf(pageUrl)) throw new Error("Invalid source page");
+const siteName = providerOf(pageUrl) === "lemmy" ? "Lemmy" : "Reddit";
 let nextId = 0;
 const pending = new Map<
   number,
@@ -84,7 +85,7 @@ export function bridge<T>(
     const timer = window.setTimeout(() => {
       pending.delete(id);
       reject(
-        new Error("Reddit did not respond. Use Original Reddit or try again."),
+        new Error(`${siteName} did not respond. Use Original ${siteName} or try again.`),
       );
     }, timeout);
     pending.set(id, { resolve, reject, timer });

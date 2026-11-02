@@ -110,11 +110,13 @@ export const CommunityMenu = ({ sub, onClosed }: { sub: string; onClosed: () => 
             />
             {account && site.features.writes ? (
               <>
-                <SheetItem
-                  icon="mail"
-                  label="Message Mods"
-                  onClick={run(() => nav.openCompose({ to: `/r/${sub}` }))}
-                />
+                {site.features.modmail ? (
+                  <SheetItem
+                    icon="mail"
+                    label="Message Mods"
+                    onClick={run(() => nav.openCompose({ to: `/r/${sub}` }))}
+                  />
+                ) : null}
                 <SheetItem
                   icon="text"
                   label="Create Post: Text"

@@ -10,7 +10,7 @@ import { compact } from "../lib/format";
 import { redditUrl } from "../lib/platform";
 import { castVote, useVote } from "../lib/votes";
 import { isLemmyItem } from "../lib/hybrid";
-import { LEMMY_ONLY } from "../lib/api";
+import { LEMMY_ONLY, site } from "../lib/api";
 import type { Vote } from "../../providers/reddit/votes";
 import { Icon } from "./Icon";
 
@@ -240,7 +240,7 @@ export const VoteLinks = ({
       data-thing-id={thingId}
       data-vote={current}
       aria-busy={state.pending}
-      title={state.error || (lemmy ? LEMMY_ONLY : "Vote with your Reddit account")}
+      title={state.error || (lemmy ? LEMMY_ONLY : `Vote with your ${site.name} account`)}
     >
       {lemmy ? (
         scoreEl
@@ -263,9 +263,9 @@ export const VoteLinks = ({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(event) => event.stopPropagation()}
-          aria-label={`Vote on Reddit: ${kind}`}
+          aria-label={`Vote on ${site.name}: ${kind}`}
         >
-          Vote on Reddit
+          Vote on {site.name}
         </a>
       ) : null}
       {state.error ? (

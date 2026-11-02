@@ -224,8 +224,11 @@ export type InboxResponse = { items: InboxItem[]; after: string | null };
 export type UserAbout = {
   name: string;
   icon?: string;
-  linkKarma: number;
-  commentKarma: number;
+  /** Reddit's scores; Lemmy keeps none and counts posts and comments instead. */
+  linkKarma?: number;
+  commentKarma?: number;
+  postCount?: number;
+  commentCount?: number;
   createdAt: number;
   isFriend: boolean;
   suspended: boolean;
