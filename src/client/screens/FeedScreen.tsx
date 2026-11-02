@@ -500,9 +500,20 @@ export const FeedScreen = ({
         </button>
         <button
           type="button"
+          className={`icon-btn${refreshing ? " is-spinning" : ""}`}
+          data-ripple
+          aria-label="Refresh"
+          title="Refresh"
+          disabled={refreshing || state.status === "loading"}
+          onClick={() => void load("refresh")}
+        >
+          <Icon name="refresh" />
+        </button>
+        <button
+          type="button"
           className="icon-btn"
           data-ripple
-          aria-label={`Layout: ${prefs.layout}. Switch layout`}
+          aria-label={`Layout:${prefs.layout}. Switch layout`}
           onClick={() => update({ layout: NEXT_LAYOUT[prefs.layout] })}
         >
           <Icon name={LAYOUT_ICONS[prefs.layout]} />

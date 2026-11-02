@@ -1382,7 +1382,8 @@
   opacity: 0;
 }
 
-.ptr.is-spinning .icon {
+.ptr .is-spinning .icon,
+.icon-btn.is-spinning .icon {
   animation: spin 700ms linear infinite;
 }
 
