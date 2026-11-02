@@ -18,6 +18,7 @@ import type {
 import { readerHost } from "../../hosts/reader";
 import { Drawer } from "../components/Drawer";
 import { Icon } from "../components/Icon";
+import { SaveProgressBar } from "../components/SaveFeedSheet";
 import { MediaViewer } from "../components/MediaViewer";
 import { SettingsSheet } from "../components/SettingsSheet";
 import { fetchInit, entryRoute, site } from "../lib/api";
@@ -764,6 +765,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
         {viewer ? (
           <MediaViewer spec={viewer} onClosed={() => setViewer(null)} />
         ) : null}
+        <SaveProgressBar />
         {localToast ? (
           <div className="toast" key={localToast.id} role="status">
             {localToast.text}

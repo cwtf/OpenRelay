@@ -204,19 +204,20 @@ const pause = () => new Promise<void>((resolve) => setTimeout(resolve, PAUSE_MS)
 /**
  * Save the posts `pick` chooses one after another, with the images and
  * videos `media` asks for, until done or stopped. Progress goes to
- * `useSaveProgress` (the drawer) and `useOfflineState` (the cards), the
- * outcome to a toast.
+ * `useSaveProgress` (the progress bar, shown when there's a `label`, and the
+ * drawer) and `useOfflineState` (the cards), the outcome to a toast.
  */
 async function save(
   pick: () => Promise<string[]>,
   media: SaveMedia,
   fromFeed: boolean,
+  label: string | null,
 ): Promise<void> {
   if (progress) {
     toast("Already saving posts for offline reading");
     return;
   }
-  setProgress({ ids: [], done: 0, started: Date.now(), stopping: false });
+  setProgress({ label, ids: [], done: 0, started: Date.now(), stopping: false });
   // Before anything is awaited: the extension asks for permission in the click.
   const access = media.images ? mediaAccess() : Promise.resolve(null);
   const sort = loadCachedPrefs().commentSort;
@@ -227,7 +228,6 @@ async function save(
   let textOnly = false;
   try {
     ids = await pick();
-    if (ids.length > 1) toast(`Saving ${plural(ids.length, "post")} for offline reading…`);
     const fetcher = await access;
     textOnly = media.images && !fetcher && Boolean(readerHost().media);
     updateProgress({ ids, started: Date.now() });
@@ -291,19 +291,20 @@ export const saveOffline = (
         async () => posts.map((post) => (typeof post === "string" ? post : post.id)),
         media,
         false,
+        posts.length > 1 ? "posts" : null,
       )
     : Promise.resolve();
 
 /**
  * Save the next `count` posts of `shown` that aren't saved yet (or hidden),
- * reading further pages from Reddit when the loaded ones run out.
- * `textPosts` keeps only text posts.
+ * reading further pages from Reddit when the loaded ones run out. `title`
+ * names the feed on the progress bar; `textPosts` keeps only text posts.
  */
 export const saveFeedOffline = (
   shown: OfflineFeed,
   count: number,
   media: SaveMedia,
-  textPosts = false,
+  { title, textPosts = false }: { title: string; textPosts?: boolean },
 ): Promise<void> =>
   save(
     async () => {
@@ -313,14 +314,12 @@ export const saveFeedOffline = (
         skip: (id) => isSavedOffline(id) || hiddenPosts.has(id) || isLemmyItem(id),
         ...(textPosts ? { only: (post: PostSummary) => post.media.kind === "self" } : {}),
         more: (after) => fetchFeed(shown.sub, shown.sort, shown.timeframe, after),
-        beforePage: (page) => {
-          if (!page) toast("Looking further down the feed…");
-          return pause();
-        },
+        beforePage: pause,
       });
     },
     media,
     true,
+    title,
   );
 
 /** Remove these saved posts, or every one (`"all"`). */

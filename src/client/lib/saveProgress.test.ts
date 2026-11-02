@@ -8,6 +8,7 @@ import {
 } from "./saveProgress.ts";
 
 const progress = (done: number, stopping = false): SaveProgress => ({
+  label: "r/test",
   ids: ["t3_a", "t3_b", "t3_c", "t3_d"],
   done,
   started: 0,

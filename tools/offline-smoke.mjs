@@ -227,9 +227,10 @@ const save = async (app, nth) => {
 };
 /**
  * Choose `option` in the drawer's "Save feed for offline" sheet, after
- * `count` if given. Returns the count the sheet opened with.
+ * `count` if given, then run `during` while it saves. Returns the count the
+ * sheet opened with.
  */
-const saveFeed = async (app, option, done, count) => {
+const saveFeed = async (app, option, done, count, during) => {
   await app.locator(".toast").waitFor({ state: "detached" });
   await app.locator(".has-sheet").waitFor({ state: "detached" });
   await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
@@ -241,6 +242,7 @@ const saveFeed = async (app, option, done, count) => {
   const opened = await app.getByRole("radio", { checked: true }).textContent();
   if (count) await app.getByRole("radio", { name: count, exact: true }).click();
   await app.getByRole("button", { name: option }).click();
+  await during?.();
   await toast(app, done);
   return opened;
 };
@@ -304,10 +306,27 @@ try {
   assert.ok(feedPages.includes("t3_vid789"));
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
   // Text only: the posts not saved yet, without their images or videos. The
-  // count chosen last time is kept.
+  // count chosen last time is kept. The bar at the bottom shows the save, and
+  // its Stop keeps the post under way and starts no other.
   forget();
-  assert.equal(await saveFeed(app, /^Text only/, "Saved 2 posts for offline reading"), "10");
-  assert.equal(commentLoads.length, 2);
+  const bar = app.locator(".save-bar");
+  const stop = async () => {
+    await bar.getByText("0 of 2 posts").waitFor();
+    assert.match(await bar.textContent(), /Saving r\/test/);
+    await app.locator(".sheet").waitFor({ state: "detached" });
+    await page.screenshot({ path: resolve(out, "offline-save-bar.png") });
+    await bar.getByRole("button", { name: "Stop" }).click();
+  };
+  assert.equal(
+    await saveFeed(app, /^Text only/, "Stopped after saving 1 of 2 posts", undefined, stop),
+    "10",
+  );
+  await bar.waitFor({ state: "detached" });
+  assert.equal(commentLoads.length, 1);
+  // Again: the one left.
+  forget();
+  await saveFeed(app, /^Text only/, "Saved for offline reading");
+  assert.equal(commentLoads.length, 1);
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
   // Again: everything in the feed is saved.
   forget();

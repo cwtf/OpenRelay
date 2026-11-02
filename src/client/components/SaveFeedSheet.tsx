@@ -10,6 +10,7 @@ import {
   type OfflineFeed,
 } from "../lib/offline";
 import { secondsLeft, timeLeftLabel, type SaveProgress } from "../lib/saveProgress";
+import { Icon } from "./Icon";
 import { Segmented } from "./SettingsSheet";
 import { Sheet, SheetItem } from "./Sheet";
 
@@ -65,6 +66,35 @@ export const SavingItem = ({
     </span>
   </button>
 );
+
+/**
+ * The bar at the bottom while a feed (or several posts) is saved: what, how
+ * far, the time left, and Stop. Toasts show above it.
+ */
+export const SaveProgressBar = () => {
+  const progress = useSaveProgress();
+  if (!progress?.label) return null;
+  const { ids, done, stopping } = progress;
+  return (
+    <div className="save-bar">
+      <Icon name="download" size={20} />
+      <div className="save-bar-text" role="status">
+        <span className="save-bar-title">
+          {stopping ? "Stopping…" : `Saving ${progress.label}`}
+        </span>
+        <span className="save-bar-detail">{progressText(progress)}</span>
+      </div>
+      {stopping ? null : (
+        <button type="button" className="save-bar-stop" data-ripple onClick={stopSaving}>
+          Stop
+        </button>
+      )}
+      <div className={`save-bar-track${ids.length ? "" : " is-indeterminate"}`}>
+        <span style={ids.length ? { width: `${(done / ids.length) * 100}%` } : undefined} />
+      </div>
+    </div>
+  );
+};
 
 /** Opened from that row: the progress again, and Stop. */
 export const SavingSheet = ({ onClosed }: { onClosed: () => void }) => {
@@ -143,20 +173,22 @@ export const SaveFeedSheet = ({
                 icon="image"
                 label={withMedia}
                 hint={`${next}, as set in Settings`}
-                onClick={run(() => void saveFeedOffline(feed, count, media))}
+                onClick={run(() => void saveFeedOffline(feed, count, media, { title }))}
               />
             ) : null}
             <SheetItem
               icon="text"
               label="Text only"
               hint={`${next}, without images or videos`}
-              onClick={run(() => void saveFeedOffline(feed, count, TEXT_ONLY))}
+              onClick={run(() => void saveFeedOffline(feed, count, TEXT_ONLY, { title }))}
             />
             <SheetItem
               icon="comment"
               label="Text posts only"
               hint={`The next ${plural(count, "text post")} you haven't saved, skipping links, images and videos`}
-              onClick={run(() => void saveFeedOffline(feed, count, TEXT_ONLY, true))}
+              onClick={run(
+                () => void saveFeedOffline(feed, count, TEXT_ONLY, { title, textPosts: true }),
+              )}
             />
           </>
         );

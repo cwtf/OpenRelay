@@ -1,6 +1,8 @@
 /** How far saving posts for offline reading has got, for the drawer and the cards. */
 
 export type SaveProgress = {
+  /** What's being saved ("r/pics", "posts"), for the progress bar; null for one post. */
+  label: string | null;
   /** The posts being saved, in order; empty while they're still being picked. */
   ids: string[];
   /** Posts finished, saved or not. */

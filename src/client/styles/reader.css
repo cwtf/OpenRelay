@@ -2415,6 +2415,104 @@ button.post-action {
   animation: spin 900ms linear infinite;
 }
 
+/* The bar at the bottom while a feed is saved for offline; toasts and the
+   comment navigation pill move up over it. */
+.save-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(420px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 8px 12px 16px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow-high);
+  animation: toast-in 220ms var(--ease-out);
+}
+
+.save-bar-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.save-bar-title,
+.save-bar-detail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.save-bar-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.save-bar-detail {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--bg) 70%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.save-bar-stop {
+  flex: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--primary-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.save-bar-stop:hover {
+  background: color-mix(in srgb, var(--bg) 12%, transparent);
+}
+
+.save-bar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg) 22%, transparent);
+}
+
+.save-bar-track span {
+  display: block;
+  height: 100%;
+  background: var(--primary-soft);
+  transition: width 300ms var(--ease-out);
+}
+
+.save-bar-track.is-indeterminate span {
+  width: 30%;
+  animation: save-bar-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes save-bar-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+.save-bar ~ .toast {
+  bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.app:has(> .save-bar) .comment-nav {
+  bottom: 92px;
+}
+
 .drawer-count {
   flex: none;
   min-width: 22px;
