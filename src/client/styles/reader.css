@@ -2042,6 +2042,10 @@ button.post-action {
   min-height: 56px;
 }
 
+.setting .icon {
+  color: var(--text-2);
+}
+
 .setting .label {
   flex: 1;
   min-width: 0;

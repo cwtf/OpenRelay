@@ -192,7 +192,7 @@ export const useOfflineState = (id: string): SaveState | "offline" => {
 
 /** What to save with each post's text. */
 export type SaveMedia = { images: boolean; videos: boolean };
-/** The images and videos Settings asks for. */
+/** The images and videos chosen in the "Save feed for offline" sheet. */
 export const savedMedia = (): SaveMedia => {
   const prefs = loadCachedPrefs();
   return { images: prefs.offlineImages, videos: prefs.offlineVideos };
@@ -280,7 +280,7 @@ async function save(
 
 /**
  * Save these posts (again, if saved already), with the images and videos
- * `media` asks for (by default, as set in Settings).
+ * `media` asks for (by default, as last chosen when saving a feed).
  */
 export const saveOffline = (
   posts: PostSummary[] | string[],

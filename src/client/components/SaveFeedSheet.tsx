@@ -4,14 +4,13 @@ import {
   FEED_SAVE_COUNTS,
   TEXT_ONLY,
   saveFeedOffline,
-  savedMedia,
   stopSaving,
   useSaveProgress,
   type OfflineFeed,
 } from "../lib/offline";
 import { secondsLeft, timeLeftLabel, type SaveProgress } from "../lib/saveProgress";
 import { Icon } from "./Icon";
-import { Segmented } from "./SettingsSheet";
+import { Segmented, Toggle } from "./SettingsSheet";
 import { Sheet, SheetItem } from "./Sheet";
 
 /** "12 of 50 · about 2 min left", or what it's doing before that. */
@@ -124,8 +123,8 @@ export const SavingSheet = ({ onClosed }: { onClosed: () => void }) => {
 
 /**
  * "Save feed for offline": the feed's next posts that aren't saved yet, as
- * many as chosen, with the images and videos Settings asks for, as text
- * only, or only its text posts.
+ * many as chosen, with the images and videos switched on here (a post's own
+ * save uses the same choice), or only its text posts.
  */
 export const SaveFeedSheet = ({
   title,
@@ -140,16 +139,15 @@ export const SaveFeedSheet = ({
   const count = FEED_SAVE_COUNTS.includes(prefs.offlineFeedCount as never)
     ? prefs.offlineFeedCount
     : 25;
-  const media = savedMedia();
+  const media = { images: prefs.offlineImages, videos: prefs.offlineVideos };
   const withMedia =
     media.images && media.videos
-      ? "With images and videos"
+      ? "with images and videos"
       : media.images
-        ? "With images"
+        ? "with images, without videos"
         : media.videos
-          ? "With videos"
-          : null;
-  const next = `The next ${plural(count, "post")} you haven't saved`;
+          ? "with videos, without images"
+          : "without images or videos";
   return (
     <Sheet title={`Save ${title} for offline`} onClosed={onClosed}>
       {(close) => {
@@ -167,20 +165,27 @@ export const SaveFeedSheet = ({
               onChange={(value) => update({ offlineFeedCount: Number(value) })}
               options={FEED_SAVE_COUNTS.map((n) => ({ value: String(n), label: String(n) }))}
             />
+            <div className="sheet-section">Include</div>
+            <Toggle
+              icon="image"
+              label="Images"
+              hint="Pictures, galleries, link previews and comment images, up to 40 MB a post"
+              value={media.images}
+              onChange={(offlineImages) => update({ offlineImages })}
+            />
+            <Toggle
+              icon="play"
+              label="Videos"
+              hint="Reddit videos with their sound, up to 15 MB each"
+              value={media.videos}
+              onChange={(offlineVideos) => update({ offlineVideos })}
+            />
             <div className="sheet-section">Save</div>
-            {withMedia ? (
-              <SheetItem
-                icon="image"
-                label={withMedia}
-                hint={`${next}, as set in Settings`}
-                onClick={run(() => void saveFeedOffline(feed, count, media, { title }))}
-              />
-            ) : null}
             <SheetItem
-              icon="text"
-              label="Text only"
-              hint={`${next}, without images or videos`}
-              onClick={run(() => void saveFeedOffline(feed, count, TEXT_ONLY, { title }))}
+              icon="download"
+              label="All posts"
+              hint={`The next ${plural(count, "post")} you haven't saved, ${withMedia}`}
+              onClick={run(() => void saveFeedOffline(feed, count, media, { title }))}
             />
             <SheetItem
               icon="comment"

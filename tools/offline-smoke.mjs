@@ -225,38 +225,39 @@ const save = async (app, nth) => {
   await app.getByRole("button", { name: /Save for offline|Update offline copy/ }).click();
   await toast(app, "Saved for offline reading");
 };
-/**
- * Choose `option` in the drawer's "Save feed for offline" sheet, after
- * `count` if given, then run `during` while it saves. Returns the count the
- * sheet opened with.
- */
-const saveFeed = async (app, option, done, count, during) => {
+/** Open the drawer's "Save feed for offline" sheet. */
+const openSaveFeed = async (app) => {
   await app.locator(".toast").waitFor({ state: "detached" });
   await app.locator(".has-sheet").waitFor({ state: "detached" });
   await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
   await app.getByRole("button", { name: "Open menu" }).click();
   await app.getByRole("button", { name: "Save feed for offline" }).click();
-  await app.getByRole("button", { name: /^Text only/ }).waitFor();
+  await app.getByRole("button", { name: /^All posts/ }).waitFor();
+};
+/** Set the open sheet's Images and Videos switches. */
+const mediaSwitches = async (app, on) => {
+  for (const name of [/^Images/, /^Videos/]) {
+    const toggle = app.getByRole("switch", { name });
+    if ((await toggle.getAttribute("aria-checked")) !== String(on)) await toggle.click();
+    assert.equal(await toggle.getAttribute("aria-checked"), String(on));
+  }
+};
+/**
+ * Choose `option` in the "Save feed for offline" sheet, after `count` and
+ * the media switches (`media`) if given, then run `during` while it saves.
+ * Returns the count the sheet opened with.
+ */
+const saveFeed = async (app, option, done, { count, media, during } = {}) => {
+  await openSaveFeed(app);
   await page.waitForTimeout(400); // Let the sheet finish sliding in.
   await page.screenshot({ path: resolve(out, "offline-save-feed.png") });
   const opened = await app.getByRole("radio", { checked: true }).textContent();
   if (count) await app.getByRole("radio", { name: count, exact: true }).click();
+  if (media !== undefined) await mediaSwitches(app, media);
   await app.getByRole("button", { name: option }).click();
   await during?.();
   await toast(app, done);
   return opened;
-};
-/** Set Settings' offline images and videos switches. */
-const offlineSettings = async (app, on) => {
-  await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
-  await app.locator(".has-drawer").waitFor({ state: "detached" });
-  await app.locator(".screen.is-feed").getByRole("button", { name: "Settings", exact: true }).click();
-  for (const name of [/^Save images/, /^Save videos/]) {
-    const toggle = app.getByRole("switch", { name });
-    if ((await toggle.getAttribute("aria-checked")) !== String(on)) await toggle.click();
-  }
-  await app.locator("body").press("Escape");
-  await app.locator(".has-sheet").waitFor({ state: "detached" });
 };
 const forget = () => {
   commentLoads.length = mediaLoads.length = videoLoads.length = 0;
@@ -301,13 +302,17 @@ try {
   // From the feed, text posts only: the loaded one is saved already, so the
   // next one comes from further down the feed, and nothing else is fetched.
   forget();
-  assert.equal(await saveFeed(app, /^Text posts only/, "Saved for offline reading", "10"), "25");
+  assert.equal(
+    await saveFeed(app, /^Text posts only/, "Saved for offline reading", { count: "10" }),
+    "25",
+  );
   assert.deepEqual(commentLoads.map((search) => search.length > 0), [true]);
   assert.ok(feedPages.includes("t3_vid789"));
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
-  // Text only: the posts not saved yet, without their images or videos. The
-  // count chosen last time is kept. The bar at the bottom shows the save, and
-  // its Stop keeps the post under way and starts no other.
+  // All posts with Images and Videos off: the posts not saved yet, without
+  // their images or videos. The count chosen last time is kept. The bar at
+  // the bottom shows the save, and its Stop keeps the post under way and
+  // starts no other.
   forget();
   const bar = app.locator(".save-bar");
   const stop = async () => {
@@ -318,36 +323,49 @@ try {
     await bar.getByRole("button", { name: "Stop" }).click();
   };
   assert.equal(
-    await saveFeed(app, /^Text only/, "Stopped after saving 1 of 2 posts", undefined, stop),
+    await saveFeed(app, /^All posts/, "Stopped after saving 1 of 2 posts", {
+      media: false,
+      during: stop,
+    }),
     "10",
   );
   await bar.waitFor({ state: "detached" });
   assert.equal(commentLoads.length, 1);
-  // Again: the one left.
+  // Again: the one left. The switches stay off.
   forget();
-  await saveFeed(app, /^Text only/, "Saved for offline reading");
+  await openSaveFeed(app);
+  assert.match(
+    await app.getByRole("button", { name: /^All posts/ }).textContent(),
+    /without images or videos/,
+  );
+  await app.locator("body").press("Escape");
+  await saveFeed(app, /^All posts/, "Saved for offline reading");
   assert.equal(commentLoads.length, 1);
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
   // Again: everything in the feed is saved.
   forget();
-  await saveFeed(app, /^Text only/, "Nothing new to save in this feed");
+  await saveFeed(app, /^All posts/, "Nothing new to save in this feed");
   assert.equal(commentLoads.length, 0);
-  // With images and videos off in Settings, a post's own save fetches neither,
-  // and the feed sheet has no "with media" choice.
-  await offlineSettings(app, false);
+  // With the switches off, a post's own save fetches neither too.
   forget();
   await save(app, 2);
   assert.equal(commentLoads.length, 1);
   assert.deepEqual([...mediaLoads, ...videoLoads], []);
+  // Settings no longer has them; they're turned back on in the sheet.
   await app.locator(".toast").waitFor({ state: "detached" });
   await app.locator(".screen.is-feed .scroller").evaluate((el) => el.scrollTo(0, 0));
-  await app.getByRole("button", { name: "Open menu" }).click();
-  await app.getByRole("button", { name: "Save feed for offline" }).click();
-  await app.getByRole("button", { name: /^Text only/ }).waitFor();
-  assert.equal(await app.getByRole("button", { name: /^With / }).count(), 0);
+  await app.locator(".screen.is-feed").getByRole("button", { name: "Settings", exact: true }).click();
+  await app.getByRole("switch", { name: /^Reduce motion/ }).waitFor();
+  assert.equal(await app.getByRole("switch", { name: /^Save (images|videos)/ }).count(), 0);
+  await app.locator("body").press("Escape");
+  await openSaveFeed(app);
+  await mediaSwitches(app, true);
+  assert.match(
+    await app.getByRole("button", { name: /^All posts/ }).textContent(),
+    /with images and videos/,
+  );
   await app.locator("body").press("Escape");
   await app.locator(".has-sheet").waitFor({ state: "detached" });
-  await offlineSettings(app, true);
 
   // The picture is saved with its images.
   forget();
