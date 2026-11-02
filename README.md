@@ -1,14 +1,15 @@
 # OpenRelay for Reddit/Lemmy
 
-A project inspired by **Relay for Reddit**, the Android app by DBrandy. It replaces Reddit's interface with a Relay-style reader: React screens, design tokens, cards, compact/list layouts, themes, comment rails, sheets, drawer, Markdown renderer, gestures, and media viewer.
+A **Relay-style reader for Reddit and Lemmy**, available as a browser extension, desktop app and Android app. Inspired by **Relay for Reddit**, the Android app by DBrandy, OpenRelay brings gestures, threaded comments, rich media and dual-pane browsing to the sites you already use.
 
-OpenRelay runs as:
+## Key features
 
-- a **browser extension** for Chrome and Firefox, which also installs in Edge Canary on Android;
-- a **desktop app** for Windows, macOS and Linux;
-- an **Android app**.
-
-All of them run the same reader and the same code for talking to Reddit. Each one shows Reddit's own site with the reader on top, and uses your Reddit session from that site. There's no OpenRelay server and no API key.
+- **The same reader across browser, desktop and Android.** Use OpenRelay in Chrome or Firefox (including the Chrome extension in Edge Canary on Android), as a desktop app for Windows, macOS and Linux, or as an Android app. All share the same reader and core code.
+- **Your existing site session, with no API key or OpenRelay server.** OpenRelay shows the site's own pages with its reader on top and uses the account signed in there. Vote, reply, post and use account features from the reader without setting up API credentials or hosting a service.
+- **Reddit and Lemmy in one familiar interface.** Switch between Reddit and your [Lemmy instances](#lemmy), with consistent cards, comment threads, media viewing and offline reading. Each source uses its own signed-in account.
+- **Offline reading with comments and media.** [Save individual posts or batches from a feed](#offline-reading), including comments, supported images and Reddit-hosted videos with sound. Repeating a feed save continues with posts you haven't saved yet, and saved copies remain available when the site won't load.
+- **Archive restoration inside the thread.** [Restore removed posts and comments](#removed-threads) from Arctic Shift on demand, shown in place with archive badges. Unavailable Reddit threads can be rebuilt as read-only copies; content deleted by its author is left alone.
+- **A Relay-style reading experience on screens of every size.** Choose cards, compact or list layouts, customize themes, navigate comments with rails and gestures, open images and videos in the media viewer, and browse the feed beside a thread in the dual-pane layout.
 
 <img width="1645" height="990" alt="image" src="https://github.com/user-attachments/assets/86a7fe14-74a2-4cf4-9aed-b81fe559c4f6" />
 
