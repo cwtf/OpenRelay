@@ -154,7 +154,7 @@ The reader is served from the app's own `https://appassets.androidplatform.net` 
 
 ## Limits
 
-Reddit can block or rate-limit its JSON endpoints. Reading the currently loaded feed still works when its markup is available; direct post pages fall back to loaded text/comments with a notice. Fresh feeds, search, more comments, and full media details require Reddit to return data. DOM fallback contains only loaded material and may lose Markdown formatting or media details.
+Reddit can block or rate-limit its JSON endpoints. Signed out, it refuses all of them, so the reader then reads new Reddit's own HTML instead: the pages of posts and comments that www.reddit.com loads while you scroll. Community feeds, Home and Popular (Reddit's signed-out front page, which it picks by your country), posts with their text and media, comments and their replies all work that way. Search, profiles, community details (icon, banner, sidebar) and multireddits still need Reddit's JSON, as do votes, saves and replies, which need an account anyway. Old Reddit sends signed-out visitors to its login page. If the HTML is refused too, direct post pages fall back to the text and comments already loaded on the page, with a notice; that fallback may lose Markdown formatting or media details.
 
 Reddit-hosted videos use HLS streaming to play their separate audio and video tracks together. If streaming fails, the viewer falls back to the MP4 and shows **Audio unavailable**; that fallback may have no sound. Videos without a playlist use their MP4 directly. The reader opens on feed, post and search pages. It has its own profile, inbox, moderator and friends screens, but Reddit's own pages for those, and settings, stay native when you open them directly. The address bar keeps the original Reddit URL while navigating inside the reader; use Share/Copy link for the selected post. Original Reddit returns to the original page.
 
@@ -169,7 +169,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 140 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 144 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

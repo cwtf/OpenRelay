@@ -59,6 +59,7 @@ export function bridge<T>(
     | "snapshot"
     | "json"
     | "search-page"
+    | "html"
     | "vote"
     | "vote-status"
     | "me"
@@ -74,6 +75,7 @@ export function bridge<T>(
     op?: string;
     args?: Record<string, unknown>;
     file?: ImagePayload;
+    cursor?: string;
   },
   /** How long the page gets to answer; uploads take longer. */
   timeout = 22000,

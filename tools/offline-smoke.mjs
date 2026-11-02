@@ -177,6 +177,12 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
     offlineRequests.push(url.href);
     return route.abort("internetdisconnected");
   }
+  // Refused, a post's own page and new Reddit's HTML pieces get the block page too.
+  if (
+    network === "deny" &&
+    (url.pathname.startsWith("/svc/shreddit/") || /^\/comments\/\w+\/$/.test(url.pathname))
+  )
+    return route.fulfill({ status: 403, contentType: "text/html", body: "<p>blocked</p>" });
   if (url.pathname.endsWith(".json")) {
     if (network === "deny")
       return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });

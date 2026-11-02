@@ -43,7 +43,13 @@ import {
   parseRoute,
 } from "./reddit";
 import { searchPagePath, type SearchPage } from "./search";
-import type { Snapshot } from "./snapshot";
+import {
+  commentsPath,
+  feedPagePath,
+  postPagePath,
+  type MoreComments,
+} from "./shreddit";
+import type { HtmlPage, Snapshot } from "./snapshot";
 
 /**
  * Reddit's half of the reader's data layer: listings, posts and account
@@ -65,6 +71,41 @@ let seededSearch = false;
 /** Reddit refuses /search.json to some sessions; its own search page works. */
 let jsonSearchBlocked = false;
 let infoBlocked = false;
+/**
+ * Signed out, Reddit refuses every JSON read; new Reddit's HTML still has
+ * the posts and comments (`shreddit.ts`). Once it has refused, reads that
+ * can go there do, for the rest of the session. Old Reddit has no such HTML.
+ */
+let jsonRefused = false;
+const htmlFallback = pageUrl.hostname !== "old.reddit.com";
+const refused = (error: unknown) =>
+  error instanceof Error &&
+  /blocked this request|sign-in or access page/.test(error.message);
+const html = (path: string, cursor?: string) =>
+  bridge<HtmlPage>("html", path, cursor === undefined ? undefined : { cursor });
+/** Posts read from HTML, for when a post's own page is refused. */
+const htmlPosts = new Map<string, PostSummary>();
+/** Where to load each comment's further replies, from the HTML. */
+const moreReplies = new Map<string, MoreComments>();
+function remember(page: { posts?: PostSummary[]; more?: MoreComments[] }) {
+  for (const post of page.posts ?? []) htmlPosts.set(post.id, post);
+  for (const more of page.more ?? []) if (more.parent) moreReplies.set(more.parent, more);
+}
+/** `read` from JSON, or from the HTML once Reddit refuses this session's JSON. */
+async function orHtml<T>(
+  read: () => Promise<T>,
+  fromHtml: () => Promise<T>,
+): Promise<T> {
+  if (!htmlFallback) return read();
+  if (jsonRefused) return fromHtml();
+  try {
+    return await read();
+  } catch (error) {
+    if (!refused(error)) throw error;
+    jsonRefused = true;
+    return fromHtml();
+  }
+}
 const fetchInit = async (): Promise<InitResponse> => ({
   subreddit: entryRoute.sub,
   username: null,
@@ -105,14 +146,43 @@ async function fetchFeed(
   ) {
     seededFeed = true;
     const loaded = await snapshot();
+    remember(loaded);
     if (loaded.posts.length)
       return { posts: loaded.posts, after: loaded.posts.at(-1)!.id };
   }
-  return listing(
-    await json(
-      prefix(sub) + "/" + sort + ".json" + query({ t, after, limit: 25 }),
-    ),
+  return orHtml(
+    async () =>
+      listing(
+        await json(
+          prefix(sub) + "/" + sort + ".json" + query({ t, after, limit: 25 }),
+        ),
+      ),
+    () => htmlFeed(sub, sort, t, after),
   );
+}
+async function htmlFeed(
+  sub: string,
+  sort: FeedSort,
+  t: Timeframe,
+  after?: string | null,
+): Promise<FeedResponse> {
+  const posts: PostSummary[] = [];
+  let cursor = after ?? null;
+  // A community's page has about 25 posts; the popular feed's, a few.
+  for (let page = 0; page < 5 && posts.length < 10; page++) {
+    const path = feedPagePath(sub, sort, t, cursor);
+    if (!path)
+      throw new ApiFailure(
+        "Reddit refused this feed, and has no other page of it. Use Original Reddit to continue.",
+      );
+    const loaded = await html(path);
+    remember(loaded);
+    const fresh = loaded.posts.filter((post) => !posts.some((p) => p.id === post.id));
+    if (!fresh.length) return { posts, after: null };
+    posts.push(...fresh);
+    cursor = fresh.at(-1)!.id;
+  }
+  return { posts, after: cursor };
 }
 async function fetchSearch(
   sub: string,
@@ -197,6 +267,90 @@ async function postsById(ids: string[]): Promise<PostSummary[]> {
       if (post) posts.push(post);
   return posts;
 }
+async function jsonPost(
+  id: string,
+  sort: CommentSort,
+  limit: number,
+): Promise<PostResponse> {
+  const result = await json(
+    "/comments/" +
+      id.replace(/^t3_/, "") +
+      ".json" +
+      query({ sort, limit: Math.min(limit, 500) }),
+  );
+  if (!result?.[0]?.data?.children?.[0]?.data)
+    throw new Error("This post is unavailable.");
+  const tree = normalizeComments(result[1]?.data?.children);
+  return {
+    post: normalizePost(result[0].data.children[0].data),
+    comments: tree.comments,
+    moreComments: tree.more && limit < 500,
+    ...(tree.more && limit >= 500
+      ? {
+          notice:
+            "Reddit limits the comments returned here. Open the original thread to read further.",
+        }
+      : {}),
+  };
+}
+/** A post from its own page, and its comments in the pieces new Reddit loads. */
+async function htmlPost(
+  id: string,
+  sort: CommentSort,
+  limit: number,
+): Promise<PostResponse> {
+  const known = htmlPosts.get(id);
+  const [page, early] = await Promise.all([
+    html(postPagePath(id)).catch((error: unknown) => {
+      if (known) return null;
+      throw error;
+    }),
+    known ? htmlComments(id, known.subreddit, sort, limit) : null,
+  ]);
+  const post = page?.posts.find((p) => p.id === id) ?? known;
+  if (!post) throw new ApiFailure("This post is unavailable.");
+  const thread = early ?? (await htmlComments(id, post.subreddit, sort, limit));
+  return {
+    post,
+    comments: thread.comments,
+    moreComments: thread.more,
+    ...(page ? {} : { notice: "Reddit refused this post's own page, so its text may be missing." }),
+  };
+}
+/** Top-level comments, a page of about 25 and then pieces of about 10. */
+async function htmlComments(
+  id: string,
+  sub: string,
+  sort: CommentSort,
+  limit: number,
+): Promise<{ comments: CommentNode[]; more: boolean }> {
+  const comments: CommentNode[] = [];
+  let next: MoreComments | undefined;
+  for (let piece = 0; piece < 6 && (!piece || (next && comments.length < limit / 2)); piece++) {
+    const page = next ? await html(next.path, next.cursor) : await html(commentsPath(id, sub, sort));
+    remember(page);
+    comments.push(...page.comments.filter((c) => !comments.some((seen) => seen.id === c.id)));
+    next = page.more.find((more) => !more.parent);
+  }
+  return { comments, more: Boolean(next) };
+}
+/**
+ * A comment's replies from the "more replies" piece its page left; the rest
+ * of a long list follows the last piece.
+ */
+async function htmlReplies(comment: string): Promise<RepliesResponse> {
+  let next = moreReplies.get(comment);
+  if (!next)
+    throw new ApiFailure("Reddit did not return this thread. Open it on Reddit to continue.");
+  const replies: CommentNode[] = [];
+  for (let piece = 0; next && piece < 6; piece++) {
+    const page: HtmlPage = await html(next.path, next.cursor);
+    remember(page);
+    replies.push(...page.comments);
+    next = page.more.find((more) => !more.parent);
+  }
+  return { replies, more: Boolean(next) };
+}
 const memo = new Map<string, { at: number; value: Promise<PostResponse> }>();
 /** A post and its comments, kept for a minute unless `fresh`. */
 function redditPost(
@@ -210,26 +364,10 @@ function redditPost(
   if (!fresh && hit && Date.now() - hit.at < 60000) return hit.value;
   const value = (async () => {
     try {
-      const result = await json(
-        "/comments/" +
-          id.replace(/^t3_/, "") +
-          ".json" +
-          query({ sort, limit: Math.min(limit, 500) }),
+      return await orHtml(
+        () => jsonPost(id, sort, limit),
+        () => htmlPost(id, sort, limit),
       );
-      if (!result?.[0]?.data?.children?.[0]?.data)
-        throw new Error("This post is unavailable.");
-      const tree = normalizeComments(result[1]?.data?.children);
-      return {
-        post: normalizePost(result[0].data.children[0].data),
-        comments: tree.comments,
-        moreComments: tree.more && limit < 500,
-        ...(tree.more && limit >= 500
-          ? {
-              notice:
-                "Reddit limits the comments returned here. Open the original thread to read further.",
-            }
-          : {}),
-      };
     } catch (error) {
       if (id === entryRoute.postId && !fresh) {
         const loaded = await snapshot();
@@ -260,6 +398,8 @@ async function fetchContext(
   sort: CommentSort,
   context = 3,
 ): Promise<PostResponse> {
+  // The HTML has no single thread; the post screen then shows the whole post.
+  if (jsonRefused) throw new ApiFailure("Reddit refused this thread.");
   const result = await json(
     "/comments/" +
       id.replace(/^t3_/, "") +
@@ -290,6 +430,13 @@ async function fetchReplies(
   comment: string,
   sort: CommentSort,
   _op: string,
+): Promise<RepliesResponse> {
+  return orHtml(() => jsonReplies(post, comment, sort), () => htmlReplies(comment));
+}
+async function jsonReplies(
+  post: string,
+  comment: string,
+  sort: CommentSort,
 ): Promise<RepliesResponse> {
   const result = await json(
     "/comments/" +

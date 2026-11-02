@@ -4,19 +4,28 @@ import { decodeImage } from "../upload";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
 import { allowedSearchPagePath, parseSearchPage } from "./search";
-import { readSnapshot } from "./snapshot";
+import { readHtmlPage, readSnapshot } from "./snapshot";
+import { allowedHtmlPath } from "./shreddit";
 
 /**
  * Reddit's half of the page bridge, in the content script on Reddit's
  * origin. Requests run same-origin with the tab's session; the session
  * modhash stays in `writes.ts` and never reaches the reader.
  */
-async function read(path: string, accept: string) {
+async function read(path: string, accept: string, form?: URLSearchParams) {
   const response = await fetch(new URL(path, location.origin), {
     credentials: "same-origin",
     signal: AbortSignal.timeout(18000),
     headers: { Accept: accept },
+    ...(form ? { method: "POST", body: form } : {}),
   });
+  if (response.status === 403) {
+    // A community that is private or quarantined says why; a session Reddit
+    // won't serve at all (signed out, it refuses all JSON) gets a block page.
+    const reason = await response.json().then((body) => body?.reason, () => undefined);
+    if (typeof reason !== "string")
+      throw new Error("Reddit blocked this request (403). Try Original Reddit.");
+  }
   if (!response.ok)
     throw new Error(
       response.status === 429
@@ -26,6 +35,13 @@ async function read(path: string, accept: string) {
             "). Try Original Reddit.",
     );
   return response;
+}
+/** The form new Reddit posts for more comments, with its CSRF cookie if set. */
+function moreCommentsForm(cursor: string) {
+  const form = new URLSearchParams({ cursor });
+  const csrf = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
+  if (csrf) form.set("csrf_token", decodeURIComponent(csrf));
+  return form;
 }
 
 async function handle(
@@ -107,6 +123,20 @@ async function handle(
     if (!response.headers.get("content-type")?.includes("html"))
       throw new Error("Reddit did not return a search page.");
     return parseSearchPage(await response.text());
+  }
+  if (action === "html" && allowedHtmlPath(path, payload?.cursor)) {
+    // Only the posts and comments reach the reader, never the page.
+    const cursor: string | undefined = payload?.cursor;
+    const response = await read(
+      path,
+      "text/html",
+      cursor === undefined ? undefined : moreCommentsForm(cursor),
+    );
+    if (!response.headers.get("content-type")?.includes("html"))
+      throw new Error("Reddit did not return a page.");
+    return readHtmlPage(
+      new DOMParser().parseFromString(await response.text(), "text/html"),
+    );
   }
   throw new Error("Unsupported request");
 }

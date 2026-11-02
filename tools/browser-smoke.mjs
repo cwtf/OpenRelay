@@ -78,6 +78,14 @@ const comment = {
 };
 const fixture = `<!doctype html><html><head><title>Reddit fixture</title></head><body><h1>Original Reddit fixture</h1><shreddit-post id="t3_abc123" post-title="${post.title}" author="example_user" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="123" comment-count="2" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post></body></html>`;
 let deny = false;
+/** Also refuse new Reddit's HTML pieces and the post's own page. */
+let denyHtml = false;
+/** New Reddit's HTML, as it serves it signed out: the pieces its pages load. */
+const replyCursor = "Y29tbWVudHRyZWU6Zml4dHVyZQ==";
+const htmlComments = `<!doctype html><html><body><shreddit-comment-tree><shreddit-comment thingId="t1_h1" postId="t3_abc123" author="html_reader" score="5" depth="0" created="2023-11-14T22:20:00Z" permalink="/r/test/comments/abc123/comment/h1/"><div class="min-w-0"><div class="md" slot="comment"><div id="t1_h1-post-rtjson-content"><p>A comment from new Reddit's <strong>HTML</strong></p></div></div></div><faceplate-partial loading="action" src="/svc/shreddit/more-comments/test/t3_abc123?sort=CONFIDENCE&amp;startingDepth=1&amp;commentParentPositions=0" method="post" slot="children"><input type="hidden" name="cursor" value="${replyCursor}"><button type="button">1 more reply</button></faceplate-partial></shreddit-comment></shreddit-comment-tree><template id="deferred-comments"><shreddit-comment thingId="t1_h2" postId="t3_abc123" author="later_reader" score="2" depth="0" created="2023-11-14T22:21:00Z"><div class="md" slot="comment"><p>A deferred comment</p></div></shreddit-comment></template></body></html>`;
+const htmlReplies = `<!doctype html><html><body><shreddit-comment thingId="t1_h3" parentId="t1_h1" postId="t3_abc123" author="replier" score="1" depth="1" created="2023-11-14T22:30:00Z"><div class="md" slot="comment"><p>A reply loaded with its cursor</p></div></shreddit-comment></body></html>`;
+const htmlFeed = `<!doctype html><html><body><shreddit-post id="t3_def456" post-title="A post from the next page" author="html_poster" subreddit-name="test" permalink="/r/test/comments/def456/next/" content-href="https://i.redd.it/next.png" post-type="image" score="9" comment-count="0" created-timestamp="2023-11-14T22:40:00Z"><img data-post-media-primary alt="r/test - A post from the next page" src="https://preview.redd.it/next.png?width=640" width="640" height="480"></shreddit-post><shreddit-ad-post id="t3_ad"></shreddit-ad-post></body></html>`;
+const htmlRequests = [];
 const writes = [];
 /** The comment created by the last /api/comment, served by /api/info. */
 let postedReply = null;
@@ -110,6 +118,26 @@ await context.route(/^https:\/\/(i|preview)\.redd\.it\//, (route) =>
 );
 await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
   const url = new URL(route.request().url());
+  if (url.pathname.startsWith("/svc/shreddit/") || url.pathname === "/comments/abc123/") {
+    const method = route.request().method();
+    htmlRequests.push({
+      method,
+      path: url.pathname + url.search,
+      ...(method === "POST" ? { body: Object.fromEntries(new URLSearchParams(route.request().postData())) } : {}),
+    });
+    if (denyHtml)
+      return route.fulfill({ status: 403, contentType: "text/html", body: "<p>blocked</p>" });
+    const body = url.pathname === "/comments/abc123/"
+      ? fixture
+      : url.pathname.startsWith("/svc/shreddit/comments/")
+        ? htmlComments
+        : url.pathname.startsWith("/svc/shreddit/more-comments/") && method === "POST"
+          ? htmlReplies
+          : url.pathname.startsWith("/svc/shreddit/community-more-posts/")
+            ? htmlFeed
+            : "<!doctype html><p>Unknown piece</p>";
+    return route.fulfill({ contentType: "text/html; charset=utf-8", body });
+  }
   if (route.request().method() !== "GET") {
     writes.push({
       path: url.pathname,
@@ -262,11 +290,12 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         '</a><time datetime="2023-11-14T22:13:20Z"></time></div>',
     });
   if (url.pathname.endsWith(".json")) {
+    // Signed out, Reddit answers JSON with its network-security block page.
     if (deny)
       return route.fulfill({
         status: 403,
-        contentType: "application/json",
-        body: "{}",
+        contentType: "text/html",
+        body: "<p>You've been blocked by network security.</p>",
       });
     const body = url.pathname === "/subreddits/mine/subscriber.json"
       ? {
@@ -894,7 +923,46 @@ try {
   assert.deepEqual(infoLookups, [post.name]);
   await app.locator(".screen.is-entering").waitFor({ state: "detached" });
   await page.screenshot({ path: resolve(out, "search-fallback.png") });
+  // Signed out, Reddit refuses JSON: posts and comments come from the HTML
+  // pieces new Reddit's own pages load.
   deny = true;
+  await page.goto("https://www.reddit.com/r/test/comments/abc123/example/");
+  app = await reader();
+  await app.getByText(/A comment from new Reddit/).waitFor();
+  assert.equal(
+    await app.locator(".comment strong", { hasText: "HTML" }).count(),
+    1,
+  );
+  await app.getByText("A deferred comment", { exact: true }).waitFor();
+  await app.getByRole("button", { name: "Load more replies" }).first().click();
+  await app.getByText("A reply loaded with its cursor", { exact: true }).waitFor();
+  // Dual pane also loads the community's feed beside the post.
+  assert.ok(
+    htmlRequests.some((r) => r.path === "/svc/shreddit/community-more-posts/hot/?name=test"),
+  );
+  assert.deepEqual(htmlRequests.filter((r) => !r.path.includes("community-more-posts")), [
+    { method: "GET", path: "/comments/abc123/" },
+    { method: "GET", path: "/svc/shreddit/comments/r/test/t3_abc123?sort=CONFIDENCE" },
+    {
+      method: "POST",
+      path: "/svc/shreddit/more-comments/test/t3_abc123?sort=CONFIDENCE&startingDepth=1&commentParentPositions=0",
+      body: { cursor: replyCursor },
+    },
+  ]);
+  await page.screenshot({ path: resolve(out, "html-fallback.png") });
+  // The feed's next page too, after the posts the page had loaded.
+  htmlRequests.length = 0;
+  await page.goto("https://www.reddit.com/r/test/");
+  app = await reader();
+  await app
+    .getByRole("button", { name: "A post from the next page", exact: true })
+    .waitFor();
+  assert.deepEqual(htmlRequests[0], {
+    method: "GET",
+    path: "/svc/shreddit/community-more-posts/hot/?name=test&after=dDNfYWJjMTIz",
+  });
+  // With that refused as well, the post shows what the page had loaded.
+  denyHtml = true;
   await page.goto("https://www.reddit.com/r/test/comments/abc123/example/");
   app = await reader();
   await app.getByText(/Showing content already loaded/).waitFor();
@@ -907,7 +975,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, another linked one re-uploaded), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, another linked one re-uploaded), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();
