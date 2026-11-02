@@ -23,7 +23,7 @@ import { ensureAccount, useAccount } from "../lib/account";
 import { runAction, searchCommunities, site } from "../lib/api";
 import { compact as compactNumber } from "../lib/format";
 import { promptLogin, toast } from "../lib/platform";
-import { offlineAvailable, offlineFeed } from "../lib/offline";
+import { offlineAvailable, offlineFeed, useSaveProgress } from "../lib/offline";
 import {
   addInstance,
   currentSource,
@@ -32,7 +32,7 @@ import {
   useSources,
   type Source,
 } from "../lib/sources";
-import { SaveFeedSheet } from "./SaveFeedSheet";
+import { SaveFeedSheet, SavingItem, SavingSheet } from "./SaveFeedSheet";
 import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
@@ -837,6 +837,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
   const about = useAbout(current);
   const picture = useFeedPicture(current, about);
   const account = useAccount();
+  const saving = useSaveProgress();
   const [closing, setClosing] = useState(false);
   const panel = useRef<HTMLElement>(null);
   const drag = useRef<{ x: number; dx: number } | null>(null);
@@ -1001,7 +1002,17 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
           {offlineAvailable() ? (
             <>
               <div className="drawer-sep" />
-              {item("download", "Save feed for offline", () => {
+              {saving ? (
+                <SavingItem
+                  progress={saving}
+                  onClick={() => {
+                    close();
+                    nav.openSheet((onSheetClosed) => (
+                      <SavingSheet onClosed={onSheetClosed} />
+                    ));
+                  }}
+                />
+              ) : item("download", "Save feed for offline", () => {
                 const feed = offlineFeed();
                 if (feed?.sub.toLowerCase() === current.toLowerCase() && feed.posts.length)
                   nav.openSheet((onSheetClosed) => (

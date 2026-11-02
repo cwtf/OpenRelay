@@ -87,6 +87,7 @@ export const OfflineScreen = ({ base = false }: { base?: boolean }) => {
                 layout={prefs.layout}
                 showThumbnails={prefs.showThumbnails}
                 showSub
+                offlineTag={false}
               />
             ))
           ) : (

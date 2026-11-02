@@ -23,6 +23,7 @@ import {
   type OfflineFile,
 } from "./offlineStore";
 import { pickUnsaved, type FeedPage } from "./offlinePick";
+import { saveState, type SaveProgress, type SaveState } from "./saveProgress";
 import { redditVideo, toast } from "./platform";
 import { hiddenPosts } from "./storage";
 
@@ -160,7 +161,34 @@ export const setOfflineFeed = (shown: OfflineFeed): void => {
 };
 export const offlineFeed = (): OfflineFeed | null => feed;
 
-let saving = false;
+/** The save running now, if any. */
+let progress: SaveProgress | null = null;
+const progressListeners = new Set<() => void>();
+const setProgress = (next: SaveProgress | null): void => {
+  progress = next;
+  for (const listener of progressListeners) listener();
+};
+const updateProgress = (change: Partial<SaveProgress>): void => {
+  if (progress) setProgress({ ...progress, ...change });
+};
+const subscribeProgress = (listener: () => void): (() => void) => {
+  progressListeners.add(listener);
+  return () => progressListeners.delete(listener);
+};
+
+export const useSaveProgress = (): SaveProgress | null =>
+  useSyncExternalStore(subscribeProgress, () => progress);
+
+/** Stop the save running now after the post it's on. */
+export const stopSaving = (): void => updateProgress({ stopping: true });
+const stopPressed = (): boolean => progress?.stopping === true;
+
+/** A card's offline state: being saved, waiting to be, or saved. */
+export const useOfflineState = (id: string): SaveState | "offline" => {
+  const state = useSyncExternalStore(subscribeProgress, () => saveState(progress, id));
+  const saved = useSavedOffline(id);
+  return state ?? (saved ? "offline" : null);
+};
 
 /** What to save with each post's text. */
 export type SaveMedia = { images: boolean; videos: boolean };
@@ -174,33 +202,41 @@ export const TEXT_ONLY: SaveMedia = { images: false, videos: false };
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, PAUSE_MS));
 
 /**
- * Save the posts `pick` chooses one after another, reporting progress in
- * toasts, with the images and videos `media` asks for.
+ * Save the posts `pick` chooses one after another, with the images and
+ * videos `media` asks for, until done or stopped. Progress goes to
+ * `useSaveProgress` (the drawer) and `useOfflineState` (the cards), the
+ * outcome to a toast.
  */
 async function save(
   pick: () => Promise<string[]>,
   media: SaveMedia,
   fromFeed: boolean,
 ): Promise<void> {
-  if (saving) {
+  if (progress) {
     toast("Already saving posts for offline reading");
     return;
   }
-  saving = true;
+  setProgress({ ids: [], done: 0, started: Date.now(), stopping: false });
   // Before anything is awaited: the extension asks for permission in the click.
   const access = media.images ? mediaAccess() : Promise.resolve(null);
   const sort = loadCachedPrefs().commentSort;
   let ids: string[] = [];
   let saved = 0;
   let stopped = "";
+  let cancelled = false;
   let textOnly = false;
   try {
     ids = await pick();
     if (ids.length > 1) toast(`Saving ${plural(ids.length, "post")} for offline reading…`);
     const fetcher = await access;
     textOnly = media.images && !fetcher && Boolean(readerHost().media);
+    updateProgress({ ids, started: Date.now() });
     for (const [index, id] of ids.entries()) {
       if (index) await pause();
+      if (stopPressed()) {
+        cancelled = true;
+        break;
+      }
       try {
         const page = await fetchPostToSave(id, sort, COMMENT_LIMIT);
         const files = fetcher ? await fetchFiles(fetcher, page) : [];
@@ -218,9 +254,14 @@ async function save(
           break;
         }
       }
+      updateProgress({ done: index + 1 });
     }
   } finally {
-    saving = false;
+    setProgress(null);
+  }
+  if (cancelled) {
+    toast(`Stopped after saving ${saved} of ${plural(ids.length, "post")}`);
+    return;
   }
   if (!ids.length) {
     toast("Nothing new to save in this feed");

@@ -428,6 +428,24 @@ video {
   color: var(--primary);
 }
 
+/* Saved for offline reading, being saved, or waiting to be. */
+.tag.offline {
+  color: var(--primary);
+}
+
+.tag.queued {
+  color: var(--text-3);
+}
+
+.tag-spinner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 800ms linear infinite;
+}
+
 /* Skeleton shimmer */
 .skel {
   background: linear-gradient(

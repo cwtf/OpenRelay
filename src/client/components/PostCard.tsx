@@ -23,6 +23,9 @@ import { sharePost } from '../lib/platform';
 import { toggleSaved, useSaved } from '../lib/saved';
 import { site } from '../lib/api';
 import { isLemmyItem } from '../lib/hybrid';
+import { useOfflineState } from '../lib/offline';
+
+type OfflineState = ReturnType<typeof useOfflineState>;
 
 const useIsRead = (id: string): boolean => {
   useSyncExternalStore(readPosts.subscribe, readPosts.getVersion);
@@ -35,6 +38,8 @@ type PostCardProps = {
   showThumbnails: boolean;
   showSub: boolean;
   onHide?: (id: string) => void;
+  /** Tag posts saved for offline reading (and being saved); not on the saved list itself. */
+  offlineTag?: boolean;
 };
 
 const Stats = ({ post, onMore }: { post: PostSummary; onMore: () => void }) => {
@@ -84,18 +89,20 @@ const PostRow = ({
   post,
   showSub,
   thumb,
+  offline,
   onMore,
 }: {
   post: PostSummary;
   showSub: boolean;
   thumb: boolean;
+  offline: OfflineState;
   onMore: () => void;
 }) => (
   <>
     <div className="row">
       <div className="row-main">
         <h3 className="post-title">{post.title}</h3>
-        <PostFlags post={post} />
+        <PostFlags post={post} offline={offline} />
         <PostMeta post={post} showSub={showSub} />
         <div className="list-stats">
           <VoteLinks
@@ -193,9 +200,11 @@ const Crosspost = ({ original }: { original: PostSummary }) => {
 };
 
 export const PostCard = memo(
-  ({ post, layout, showThumbnails, showSub, onHide }: PostCardProps) => {
+  ({ post, layout, showThumbnails, showSub, onHide, offlineTag = true }: PostCardProps) => {
     const nav = useNav();
     const read = useIsRead(post.id);
+    const offlineState = useOfflineState(post.id);
+    const offline = offlineTag ? offlineState : null;
     const selected = useIsSelectedPost(post.id);
     const stateClass = `${read ? ' is-read' : ''}${selected ? ' is-selected' : ''}`;
     const more = () => openPostActions(nav, post, onHide);
@@ -252,7 +261,7 @@ export const PostCard = memo(
           <div className="card-body">
             <PostMeta post={post} showSub={showSub} />
             <h3 className="post-title">{post.title}</h3>
-            <PostFlags post={post} />
+            <PostFlags post={post} offline={offline} />
             {post.media.kind === 'self' && post.excerpt ? (
               <p className="post-excerpt">{post.excerpt}</p>
             ) : null}
@@ -279,7 +288,7 @@ export const PostCard = memo(
         data-anim-key={post.id}
       >
         {hit}
-        <PostRow post={post} showSub={showSub} thumb={thumb} onMore={more} />
+        <PostRow post={post} showSub={showSub} thumb={thumb} offline={offline} onMore={more} />
         {crosspost}
       </article>
       </SwipeActions>

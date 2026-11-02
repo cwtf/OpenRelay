@@ -17,6 +17,7 @@ import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
 import { age, compact, duration, fullDate } from '../lib/format';
 import { openUrl } from '../lib/platform';
+import type { SaveState } from '../lib/saveProgress';
 import { Icon, type IconName } from './Icon';
 
 // ------------------------------------------------------------------ flair
@@ -83,17 +84,41 @@ export const PostMeta = ({
   );
 };
 
-export const PostFlags = ({ post }: { post: PostSummary }) => {
+/** A feed card's offline state, from `useOfflineState`. */
+const OfflineTag = ({ state }: { state: SaveState | 'offline' }) =>
+  state === 'offline' ? (
+    <span className="tag offline">
+      <Icon name="check" size={11} /> Offline
+    </span>
+  ) : state === 'saving' ? (
+    <span className="tag offline">
+      <span className="tag-spinner" aria-hidden /> Saving
+    </span>
+  ) : state === 'queued' ? (
+    <span className="tag queued">
+      <Icon name="clock" size={11} /> Queued
+    </span>
+  ) : null;
+
+export const PostFlags = ({
+  post,
+  offline = null,
+}: {
+  post: PostSummary;
+  offline?: SaveState | 'offline';
+}) => {
   const hasAny =
     post.stickied ||
     post.nsfw ||
     post.spoiler ||
     post.locked ||
     post.flair ||
-    post.crosspost;
+    post.crosspost ||
+    offline;
   if (!hasAny) return null;
   return (
     <div className="post-flags">
+      <OfflineTag state={offline} />
       {post.stickied ? (
         <span className="tag pinned">
           <Icon name="pin" size={11} /> Pinned

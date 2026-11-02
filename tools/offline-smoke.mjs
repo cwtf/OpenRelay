@@ -278,6 +278,12 @@ try {
   // Save from the card's menu; the request asks for one page of comments.
   await save(app, 0);
   assert.match(commentLoads.at(-1), /limit=200/);
+  // Its card is tagged, and no other.
+  const tags = app.locator(".screen.is-feed .tag.offline");
+  await tags.first().waitFor();
+  assert.equal(await tags.count(), 1);
+  assert.equal((await tags.textContent()).trim(), "Offline");
+  await page.screenshot({ path: resolve(out, "offline-tag.png") });
   // The menu now offers to update or remove the copy.
   await app.getByRole("button", { name: "More actions" }).first().click();
   await app.getByRole("button", { name: /Update offline copy/ }).waitFor();
