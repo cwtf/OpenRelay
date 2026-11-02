@@ -157,6 +157,32 @@
   object-fit: contain;
 }
 
+.md .md-video {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0.4em 0;
+  padding: 6px 14px 6px 6px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.md .md-video:active {
+  background: var(--primary-soft);
+}
+
+.md .md-video-play {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
 .md .md-table-wrap {
   overflow-x: auto;
   margin: 0 0 0.6em;

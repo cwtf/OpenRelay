@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isInlineImage, normaliseHref, resolveLink } from './links.ts';
+import {
+  commentVideoId,
+  commentVideoStream,
+  isInlineImage,
+  normaliseHref,
+  resolveLink,
+} from './links.ts';
 
 void test('opens Reddit post permalinks in the reader', () => {
   assert.deepEqual(
@@ -56,4 +62,22 @@ void test('detects inline-able image links', () => {
   assert.ok(isInlineImage('https://i.redd.it/xyz.png'));
   assert.ok(!isInlineImage('https://example.com/cat.png'));
   assert.ok(!isInlineImage('https://i.redd.it/xyz.png" onerror="x'));
+});
+
+void test('finds the video a comment links to', () => {
+  const id = commentVideoId(
+    'https://reddit.com/link/19rzvvsutpha9/video/tuq5z64bd2zh1/player'
+  );
+  assert.equal(id, 'tuq5z64bd2zh1');
+  assert.equal(
+    commentVideoId('https://www.reddit.com/link/abc/video/def/player/'),
+    'def'
+  );
+  assert.equal(
+    commentVideoStream('tuq5z64bd2zh1'),
+    'https://v.redd.it/tuq5z64bd2zh1/HLSPlaylist.m3u8'
+  );
+  assert.equal(commentVideoId('https://example.com/link/abc/video/def/player'), null);
+  assert.equal(commentVideoId('https://reddit.com/link/abc/video/../player'), null);
+  assert.equal(commentVideoId('http://reddit.com/link/abc/video/def/player'), null);
 });

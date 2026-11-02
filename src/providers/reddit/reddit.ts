@@ -218,6 +218,8 @@ function removal(category: unknown, text: unknown): { removed?: Removal } {
 /**
  * Media a comment body refers to by ID (`![gif](giphy|<id>)`, `![img](<id>)`),
  * from the comment's `media_metadata`. Only entries the body uses are kept.
+ * A video is linked instead (`reddit.com/link/<post>/video/<id>/player`), and
+ * keeps its stream as both `url` and `hls`.
  */
 function inlineMedia(c: Raw): { media?: Record<string, InlineMedia> } {
   const meta = c.media_metadata;
@@ -225,6 +227,12 @@ function inlineMedia(c: Raw): { media?: Record<string, InlineMedia> } {
   if (!meta || typeof meta !== "object") return {};
   const media: Record<string, InlineMedia> = {};
   for (const [id, entry] of Object.entries(meta as Raw)) {
+    if (entry?.e === "RedditVideo") {
+      const hls = safeUrl(entry.hlsUrl);
+      if (hls && body.includes(`/video/${id}/`))
+        media[id] = { url: hls, hls, width: num(entry.x), height: num(entry.y) };
+      continue;
+    }
     if (!body.includes(`(${id}`)) continue;
     if (entry?.e !== "Image" && entry?.e !== "AnimatedImage") continue;
     const url = safeUrl(entry.s?.gif ?? entry.s?.u);

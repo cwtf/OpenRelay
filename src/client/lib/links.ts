@@ -44,3 +44,17 @@ const IMAGE_URL =
   /^https:\/\/(i\.redd\.it|preview\.redd\.it|i\.imgur\.com)\/[^\s]+\.(jpe?g|png|gif|webp)(\?[^\s]*)?$/i;
 
 export const isInlineImage = (href: string): boolean => IMAGE_URL.test(href);
+
+const COMMENT_VIDEO_URL =
+  /^https:\/\/(?:www\.)?reddit\.com\/link\/[a-z0-9]+\/video\/([a-z0-9]+)\/player\/?$/i;
+
+/**
+ * The media ID of a video posted in a comment, which the body only links to
+ * (`reddit.com/link/<id>/video/<media id>/player`).
+ */
+export const commentVideoId = (href: string): string | null =>
+  COMMENT_VIDEO_URL.exec(href)?.[1] ?? null;
+
+/** Its stream, which v.redd.it serves without a session and with CORS. */
+export const commentVideoStream = (id: string): string =>
+  `https://v.redd.it/${id}/HLSPlaylist.m3u8`;

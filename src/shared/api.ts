@@ -43,6 +43,8 @@ export type ImageRef = {
 export type InlineMedia = ImageRef & {
   /** Silent looping MP4 of an animated image. */
   mp4?: string;
+  /** Stream of a video posted in a comment; `url` is then its player page. */
+  hls?: string;
 };
 
 export type Flair = {

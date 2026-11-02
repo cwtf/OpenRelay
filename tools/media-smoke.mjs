@@ -71,6 +71,20 @@ const gifComment = {
     },
   },
 };
+// A video posted in a comment: the body only links to its player page, and
+// the reader plays its v.redd.it stream (which 404s here).
+const videoComment = {
+  kind: "t1",
+  data: {
+    id: "v1", name: "t1_v1", parent_id: "t3_tiny", author: "u", score: 1, created_utc: 1700000000,
+    body: "https://reddit.com/link/tiny/video/cv1/player\n\nAnother angle",
+  },
+};
+const streams = [];
+await context.route(/^https:\/\/v\.redd\.it\//, (route) => {
+  streams.push(route.request().url());
+  return route.fulfill({ status: 404, body: "" });
+});
 let releaseMp4;
 const mp4Held = new Promise((resolve) => (releaseMp4 = resolve));
 const giphyReferrers = [];
@@ -95,7 +109,7 @@ await context.route(/^https:\/\/www\.reddit\.com\//, async (route) => {
           : url.pathname.startsWith("/comments/")
             ? [
                 { data: { children: [post(url.pathname.split("/")[2].replace(".json", ""))] } },
-                { data: { children: url.pathname.includes("/tiny") ? [gifComment] : [] } },
+                { data: { children: url.pathname.includes("/tiny") ? [gifComment, videoComment] : [] } },
               ]
             : { data: { children: [] } },
       ),
@@ -238,11 +252,24 @@ try {
   assert.deepEqual(giphyReferrers.filter(Boolean), [], "Giphy gets no referrer");
   releaseMp4();
   await post.locator('[data-cid="t1_g1"] a.md-link', { hasText: "gif" }).nth(1).waitFor();
+
+  // A comment's video shows as a tile, not its player link, and plays its stream.
+  const clip = post.locator('[data-cid="t1_v1"]');
+  await clip.locator(".md-video").waitFor();
+  assert.equal(await clip.locator("a.md-link").count(), 0);
+  await page.screenshot({ path: resolve(out, "comment-video.png") });
+  await clip.locator(".md-video").click();
+  await app.getByText("This video can't be played here.").waitFor();
+  assert.ok(streams.includes("https://v.redd.it/cv1/HLSPlaylist.m3u8"), "the stream was requested");
+  await app.getByRole("button", { name: "Watch on Reddit" }).waitFor();
+  await app.locator("body").press("Escape");
+  await app.locator(".viewer").waitFor({ state: "detached" });
+  assert.equal(await clip.locator(".md-video").count(), 1, "tapping the tile didn't collapse the comment");
   await back(post);
 
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link.",
+    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link; a comment's video shows as a tile that plays its v.redd.it stream.",
   );
 } finally {
   await context.close();

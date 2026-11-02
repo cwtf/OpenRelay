@@ -11,7 +11,13 @@ import {
   type ReactNode,
 } from 'react';
 import type { InlineMedia } from '../../shared/api';
-import { isInlineImage, normaliseHref } from './links';
+import {
+  commentVideoId,
+  commentVideoStream,
+  isInlineImage,
+  normaliseHref,
+} from './links';
+import { Icon } from '../components/Icon';
 import { site } from './api';
 import { savableMedia, type SavedMedia } from './savedMedia';
 import { decodeEntities, parseBlocks, type Block } from './markdownParser';
@@ -250,6 +256,41 @@ const InlineImage = ({
   );
 };
 
+/**
+ * A video posted in a comment, which the body only links to. Tapping it plays
+ * its stream in the viewer; Reddit's `media_metadata` adds its size and
+ * stream when it lists the video.
+ */
+const CommentVideo = ({ url, id }: { url: string; id: string }) => {
+  const { onImage, onLink } = useContext(MarkdownContext);
+  const listed = useContext(MediaContext)?.[id];
+  const video: InlineMedia = {
+    url,
+    hls: listed?.hls ?? commentVideoStream(id),
+    width: listed?.width ?? 0,
+    height: listed?.height ?? 0,
+  };
+  return (
+    <button
+      type="button"
+      className="md-video"
+      onClick={(event) => {
+        event.stopPropagation();
+        onImage(url, video);
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onLink(url);
+      }}
+    >
+      <span className="md-video-play">
+        <Icon name="play" size={18} />
+      </span>
+      Video
+    </button>
+  );
+};
+
 /** `![alt](<id>)`: an image the body refers to by ID, such as a Giphy GIF. */
 const MediaRef = ({ target, alt }: { target: string; alt: string }) => {
   const media = useContext(MediaContext);
@@ -357,6 +398,15 @@ const RULES: InlineRule[] = [
     render: (m, key) => {
       const url = trimUrl(m[0]);
       const rest = m[0].slice(url.length);
+      const video = commentVideoId(url);
+      if (video) {
+        return (
+          <span key={key}>
+            <CommentVideo url={url} id={video} />
+            {rest}
+          </span>
+        );
+      }
       if (isInlineImage(url)) {
         return (
           <span key={key}>

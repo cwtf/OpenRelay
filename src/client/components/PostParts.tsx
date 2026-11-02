@@ -114,9 +114,20 @@ export const PostFlags = ({ post }: { post: PostSummary }) => {
 
 // ------------------------------------------------------------------ viewer helpers
 
-/** Viewer item for an image tapped in Markdown; a GIF with an MP4 plays that. */
+/**
+ * Viewer item for an image tapped in Markdown; a GIF with an MP4 plays that,
+ * and a comment's video its stream.
+ */
 export const inlineViewerItem = (url: string, media?: InlineMedia): ViewerItem =>
-  media?.mp4
+  media?.hls
+    ? {
+        kind: 'video',
+        hls: media.hls,
+        width: media.width,
+        height: media.height,
+        isGif: false,
+      }
+    : media?.mp4
     ? {
         kind: 'video',
         mp4: media.mp4,

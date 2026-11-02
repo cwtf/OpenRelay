@@ -276,6 +276,27 @@ test("keeps the media a comment body refers to by ID", () => {
   const plain = normalizeComments([{ kind: "t1", data: { id: "c2", body: "hi" } }]);
   assert.equal("media" in plain.comments[0]!, false);
 });
+test("keeps the stream of a video a comment links to", () => {
+  const hls = "https://v.redd.it/link/p1/asset/v1/HLSPlaylist.m3u8?a=1&amp;v=1";
+  const [comment] = normalizeComments([
+    {
+      kind: "t1",
+      data: {
+        id: "c1",
+        body: "https://reddit.com/link/p1/video/v1/player\n\nAnother angle",
+        media_metadata: {
+          v1: { status: "valid", e: "RedditVideo", hlsUrl: hls, x: 1280, y: 720, id: "v1" },
+          v2: { e: "RedditVideo", hlsUrl: "https://v.redd.it/v2/HLSPlaylist.m3u8" },
+          v3: { e: "RedditVideo", hlsUrl: "javascript:alert(1)" },
+        },
+      },
+    },
+  ]).comments;
+  const stream = hls.replace("&amp;", "&");
+  assert.deepEqual(comment!.media, {
+    v1: { url: stream, hls: stream, width: 1280, height: 720 },
+  });
+});
 test("normalizes subscribed communities and skips user profiles", () => {
   assert.deepEqual(
     normalizeCommunity({
