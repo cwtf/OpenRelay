@@ -344,9 +344,67 @@ test("saves, unsaves, edits and deletes with their own parameters", async () => 
     uh: "abc123modhash",
     api_type: "json",
   });
+  // The answer has no comment, so the edited one is read back.
+  assert.equal(new URL(calls[4]!.url).pathname, "/api/info.json");
   await apiAction(fetchFn, origin, "del", { id: "t3_abc" });
-  assert.equal(new URL(calls[4]!.url).pathname, "/api/del");
-  assert.deepEqual(sent(calls[4]!), { id: "t3_abc", uh: "abc123modhash", api_type: "json" });
+  assert.equal(new URL(calls[5]!.url).pathname, "/api/del");
+  assert.deepEqual(sent(calls[5]!), { id: "t3_abc", uh: "abc123modhash", api_type: "json" });
+});
+
+const myComment = (id: string, parent: string, created: number) => ({
+  kind: "t1",
+  data: {
+    id, name: `t1_${id}`, parent_id: parent, author: "SylviaJarvis",
+    body: "![gif](giphy|abc|downsized)", score: 1, created_utc: created, likes: true,
+    permalink: `/r/test/comments/p1/x/${id}/`,
+  },
+});
+
+test("finds a reply Reddit's answer leaves out among the account's newest comments", async () => {
+  resetWrites();
+  const now = Math.floor(Date.now() / 1000);
+  const { calls, fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42", name: "SylviaJarvis" } })
+      : url.pathname === "/user/SylviaJarvis/comments.json"
+        ? json({
+            data: {
+              children: [
+                myComment("other1", "t1_zzz", now),
+                myComment("new9", "t1_abc", now),
+                myComment("old1", "t1_abc", now - 3600),
+              ],
+            },
+          })
+        : json({ json: { errors: [], data: {} } }),
+  );
+  const result = await apiAction(fetchFn, origin, "comment", {
+    parent: "t1_abc",
+    text: "![gif](giphy|abc)",
+  });
+  const listing = new URL(calls[2]!.url);
+  assert.equal(listing.pathname, "/user/SylviaJarvis/comments.json");
+  assert.equal(listing.searchParams.get("sort"), "new");
+  assert.equal(calls[2]!.init?.method, undefined); // A read, not a write.
+  assert.equal(result.comment?.id, "t1_new9");
+  assert.equal(result.comment?.parentId, "t1_abc");
+  assert.equal(result.comment?.author, "SylviaJarvis");
+});
+
+test("takes no earlier reply to the same parent for the one just posted", async () => {
+  resetWrites();
+  const { fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42", name: "SylviaJarvis" } })
+      : url.pathname === "/user/SylviaJarvis/comments.json"
+        ? json({ data: { children: [myComment("old1", "t1_abc", Date.now() / 1000 - 3600)] } })
+        : json({ json: { errors: [], data: {} } }),
+  );
+  const result = await apiAction(fetchFn, origin, "comment", {
+    parent: "t1_abc",
+    text: "![gif](giphy|abc)",
+  });
+  assert.equal(result.comment, undefined);
 });
 
 const IMAGE = { name: "image.png", type: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };

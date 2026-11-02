@@ -223,6 +223,58 @@ const fullName = (value: unknown): string | undefined => {
   return /^t1_[a-z0-9]+$/i.test(id) ? id : undefined;
 };
 
+/** Comments from a Reddit listing (a GET with the session), or none on failure. */
+async function readComments(
+  fetchFn: Fetch,
+  origin: string,
+  path: string,
+  query: Params,
+): Promise<CommentNode[]> {
+  try {
+    const url = new URL(path, origin);
+    url.search = new URLSearchParams({ ...query, raw_json: "1" }).toString();
+    const response = await fetchFn(url, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+    const listing = response.ok ? await response.json().catch(() => null) : null;
+    return normalizeComments(listing?.data?.children ?? []).comments;
+  } catch {
+    return [];
+  }
+}
+
+/** One comment by its full name, from `/api/info`. */
+const commentInfo = async (fetchFn: Fetch, origin: string, name: string) =>
+  (await readComments(fetchFn, origin, "/api/info.json", { id: name })).find(
+    (comment) => comment.id === name,
+  );
+
+/**
+ * The reply just posted to `parent`, from the account's newest comments,
+ * for when Reddit's answer doesn't say which comment it created (as with a
+ * reply sent as richtext). Only one created since `since` (less a minute
+ * for clock skew) counts, so an earlier reply to the same parent isn't
+ * taken for it.
+ */
+async function newestReply(
+  fetchFn: Fetch,
+  origin: string,
+  parent: string,
+  since: number,
+): Promise<CommentNode | undefined> {
+  const me = await session?.catch(() => null);
+  if (!me?.name) return undefined;
+  const comments = await readComments(fetchFn, origin, `/user/${me.name}/comments.json`, {
+    sort: "new",
+    limit: "10",
+  });
+  return comments.find(
+    (comment) => comment.parentId === parent && comment.createdAt >= since - 60000,
+  );
+}
+
 /**
  * The comment Reddit created for a reply. Reddit may answer `/api/comment`
  * with the full comment, or with a short form (`id` already a full name,
@@ -241,22 +293,8 @@ async function postedComment(
     return normalizeComments([{ kind: "t1", data: created }]).comments[0];
   const name = fullName(created.name) ?? fullName(created.id);
   if (!name) return undefined;
-  try {
-    const info = new URL("/api/info.json", origin);
-    info.search = new URLSearchParams({ id: name, raw_json: "1" }).toString();
-    const response = await fetchFn(info, {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(15000),
-    });
-    const listing = response.ok ? await response.json().catch(() => null) : null;
-    const found = normalizeComments(listing?.data?.children ?? []).comments.find(
-      (comment) => comment.id === name,
-    );
-    if (found) return found;
-  } catch {
-    // Fall back to the short form below.
-  }
+  const found = await commentInfo(fetchFn, origin, name);
+  if (found) return found;
   const me = await session?.catch(() => null);
   return {
     id: name,
@@ -294,6 +332,7 @@ export async function apiAction(
     (name === "comment" || name === "edit") && hasMediaRef(checked.text ?? "")
       ? toRichtext(checked.text!)
       : null;
+  const sentAt = Date.now();
   const body = await post(fetchFn, origin, action.path, (me) => {
     const params = action.params(args as Args, me);
     if (rtjson === null) return params;
@@ -305,10 +344,18 @@ export async function apiAction(
   const id = String(data?.name ?? created?.name ?? fullName(created?.id) ?? "");
   const url = safeUrl(data?.url);
   // A posted reply comes back as the new comment, so it can be shown at once.
-  const comment =
+  let comment =
     data?.things?.[0]?.kind === "t1"
       ? await postedComment(fetchFn, origin, created, (args as Args).parent)
       : undefined;
+  // An answer without it (Reddit's to a reply or edit with a GIF or image)
+  // leaves the comment to be found: an edited one by its ID, a new reply to
+  // a post or comment among the account's newest comments.
+  const target = checked.thing_id ?? "";
+  if (!comment && name === "edit" && target.startsWith("t1_"))
+    comment = await commentInfo(fetchFn, origin, target);
+  if (!comment && name === "comment" && /^t[13]_/.test(target))
+    comment = await newestReply(fetchFn, origin, target, sentAt);
   return {
     ...(/^t\d_[a-z0-9]+$/i.test(id) ? { id } : {}),
     ...(url ? { url } : {}),
