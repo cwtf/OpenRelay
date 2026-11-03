@@ -24,6 +24,7 @@ import { runAction, searchCommunities, site } from "../lib/api";
 import { compact as compactNumber } from "../lib/format";
 import { promptLogin, toast } from "../lib/platform";
 import { offlineAvailable, offlineFeed, useSaveProgress } from "../lib/offline";
+import { useSavedMedia } from "../lib/savedMediaStore";
 import {
   addInstance,
   currentSource,
@@ -838,6 +839,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
   const picture = useFeedPicture(current, about);
   const account = useAccount();
   const saving = useSaveProgress();
+  const savedMedia = useSavedMedia();
   const [closing, setClosing] = useState(false);
   const panel = useRef<HTMLElement>(null);
   const drag = useRef<{ x: number; dx: number } | null>(null);
@@ -1031,6 +1033,17 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
               {item("book", "Saved for offline", nav.openOffline)}
             </>
           ) : null}
+          <div className="drawer-sep" />
+          {item(
+            "star",
+            "Saved GIFs & images",
+            nav.openSavedMedia,
+            savedMedia.length ? (
+              <span className="drawer-num" aria-label={`${savedMedia.length} saved`}>
+                {savedMedia.length}
+              </span>
+            ) : null,
+          )}
           <div className="drawer-sep" />
           {item("tune", "Settings", nav.openSettings)}
         </div>

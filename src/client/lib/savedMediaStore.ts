@@ -62,8 +62,13 @@ export const updateSaved = (item: SavedMedia): void => {
   store(list.map((other, i) => (i === index ? { ...other, asset: item.asset! } : other)));
 };
 
-export const forgetSaved = (item: SavedMedia): void =>
-  store(withoutSaved(savedMedia(), savedKey(item)));
+export const forgetSaved = (...items: SavedMedia[]): void =>
+  store(withoutSaved(savedMedia(), ...items.map(savedKey)));
+
+export const forgetAllSaved = (): void => store([]);
+
+/** Puts a saved item first, where the composer lists it first. */
+export const moveSavedToFront = (item: SavedMedia): void => store(withSaved(savedMedia(), item));
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);

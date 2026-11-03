@@ -138,10 +138,10 @@ export function parseSavedMedia(value: unknown): SavedMedia[] {
 export const withSaved = (list: SavedMedia[], item: SavedMedia): SavedMedia[] =>
   [item, ...list.filter((other) => savedKey(other) !== savedKey(item))].slice(0, SAVED_MEDIA_MAX);
 
-export const withoutSaved = (list: SavedMedia[], key: string): SavedMedia[] =>
-  list.filter((item) => savedKey(item) !== key);
+export const withoutSaved = (list: SavedMedia[], ...keys: string[]): SavedMedia[] =>
+  list.filter((item) => !keys.includes(savedKey(item)));
 
-const isAnimated = (item: SavedMedia): boolean =>
+export const isAnimated = (item: SavedMedia): boolean =>
   !!item.giphy || !!item.mp4 || /\.gif(?:\?|$)/i.test(item.url);
 
 /**
@@ -164,6 +164,17 @@ const onReddit = (url: string): boolean => {
     return false;
   }
 };
+
+/** Where a saved item is from, as the manage screen names it: Giphy, Reddit or the image's host. */
+export function savedSource(item: SavedMedia): string {
+  if (item.giphy) return "Giphy";
+  if (onReddit(item.url)) return "Reddit";
+  try {
+    return new URL(item.url).hostname;
+  } catch {
+    return "the web";
+  }
+}
 
 /** A saved item as a plain link, which any reply takes. */
 export const linkTo = (item: SavedMedia): string =>
@@ -190,6 +201,15 @@ export function reuseOf(
     return { markdown: `![${isAnimated(item) ? "gif" : "img"}](${item.asset})`, ref: item.asset };
   if (!onReddit(item.url)) return { markdown: linkTo(item) };
   return { upload: item.url };
+}
+
+/**
+ * How a Reddit reply takes a saved item where the community takes its kind
+ * (see `reuseOf`): back by its ID, uploaded again, or only as a link.
+ */
+export function redditReuse(item: SavedMedia): "id" | "upload" | "link" {
+  const way = reuseOf(item, "Reddit");
+  return "upload" in way ? "upload" : way.ref ? "id" : "link";
 }
 
 /**

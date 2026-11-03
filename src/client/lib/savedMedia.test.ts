@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import {
   SAVED_MEDIA_MAX,
   allowedIn,
+  giphyGif,
+  isAnimated,
+  redditReuse,
+  savedSource,
   parseSavedMedia,
   reuseOf,
   savableMedia,
@@ -120,6 +124,8 @@ test("withSaved puts the item first once and keeps the newest", () => {
   assert.equal(next[0], b);
   assert.equal(next.at(-1)!.url, `https://i.redd.it/${SAVED_MEDIA_MAX - 2}.png`);
   assert.deepEqual(withoutSaved([a, b], savedKey(a)), [b]);
+  assert.deepEqual(withoutSaved([a, b], savedKey(a), savedKey(b)), []);
+  assert.deepEqual(withoutSaved([a, b]), [a, b]);
   assert.equal(savedKey(image("https://x/y", { giphy: "g1" })), "giphy:g1");
 });
 
@@ -206,4 +212,20 @@ test("withLinks swaps only the saved items' IDs for their links", () => {
   assert.equal(withLinks("![img](up1)", {}), "![img](up1)");
   // An inherited key is no saved item.
   assert.equal(withLinks("![img](constructor)", {}), "![img](constructor)");
+});
+
+test("savedSource, isAnimated and redditReuse describe an item for the manage screen", () => {
+  const gif = image(giphyGif("g1"), { giphy: "g1" });
+  const upload = image("https://i.redd.it/abc12.png", { asset: "abc12" });
+  const reddit = image("https://i.redd.it/not-an-upload.png");
+  const lemmy = image("https://lemmy.world/pictrs/image/x.gif");
+  assert.deepEqual(
+    [gif, upload, reddit, lemmy].map((item) => [savedSource(item), isAnimated(item), redditReuse(item)]),
+    [
+      ["Giphy", true, "id"],
+      ["Reddit", false, "id"],
+      ["Reddit", false, "upload"],
+      ["lemmy.world", true, "link"],
+    ],
+  );
 });

@@ -577,8 +577,42 @@ try {
   await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("[GIF]("));
   assert.equal(await box.inputValue(), "[GIF](https://i.giphy.com/media/fixturegif/giphy.gif)\n\n");
   await box.fill("");
-  await app.getByRole("button", { name: "Cancel" }).click();
+  // Manage, in the composer's Saved panel, opens the saved list in the
+  // composer's order (newest first): filter, reorder, remove.
+  await app.getByRole("button", { name: "Saved GIFs and images" }).click();
+  await app.getByRole("button", { name: "Manage" }).click();
   await app.locator(".sheet").waitFor({ state: "detached" });
+  const tiles = app.locator(".saved-tile");
+  const tileImages = () => tiles.evaluateAll((els) => els.map((el) => el.querySelector("img")?.src ?? "GIF"));
+  await tiles.first().waitFor();
+  const giphy = "https://i.giphy.com/media/fixturegif/giphy.gif";
+  assert.deepEqual(await tileImages(), [giphy, "https://i.redd.it/upload.png", linkedUpload, linkedOther]);
+  await app.getByRole("button", { name: "GIFs · 1" }).click();
+  assert.equal(await tiles.count(), 1);
+  await app.getByRole("button", { name: "All · 4" }).click();
+  await tiles.last().click();
+  await app.locator(".sheet-title", { hasText: "Image from Reddit" }).waitFor();
+  await app.getByRole("button", { name: "Move to front" }).click();
+  await app.locator(".sheet").waitFor({ state: "detached" });
+  assert.deepEqual(await tileImages(), [linkedOther, giphy, "https://i.redd.it/upload.png", linkedUpload]);
+  await app.getByRole("button", { name: "Select", exact: true }).click();
+  await tiles.nth(1).click();
+  await tiles.nth(3).click();
+  await app.getByText("2 selected").waitFor();
+  await app.getByRole("button", { name: "Remove selected from saved" }).click();
+  await app.getByRole("button", { name: "Remove", exact: true }).click();
+  await app.locator(".sheet").waitFor({ state: "detached" });
+  await app.getByText("2 saved").waitFor();
+  assert.deepEqual(await tileImages(), [linkedOther, "https://i.redd.it/upload.png"]);
+  assert.deepEqual(
+    (await app.evaluate(async () => (await chrome.storage.local.get("openrelay:saved-media"))["openrelay:saved-media"])).map(
+      (item) => item.url,
+    ),
+    [linkedOther, "https://i.redd.it/upload.png"],
+  );
+  await page.screenshot({ path: resolve(out, "saved-media.png") });
+  await app.locator(".screen").last().getByRole("button", { name: "Back" }).click();
+  await app.locator(".saved-grid").waitFor({ state: "detached" });
   // Relay's swipe actions: drag a comment left to reveal its actions.
   const swipeLeft = async (locator, stepDelay = 0) => {
     const box = await locator.boundingBox();
@@ -733,11 +767,13 @@ try {
       "User",
       "Save feed for offline",
       "Saved for offline",
+      "Saved GIFs & images",
       "Settings",
     ],
   );
   assert.equal(await app.locator(".drawer .sub-row, .drawer .drawer-search").count(), 0);
   assert.equal(await app.locator(".drawer-count").textContent(), "3");
+  assert.equal(await app.locator(".drawer-num").textContent(), "2");
   assert.equal(
     await app.locator(".drawer-head img.avatar").getAttribute("src"),
     "https://www.reddit.com/img/test.png",
@@ -998,7 +1034,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, sent again as a link when Reddit refuses the ID, another linked one re-uploaded), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, sent again as a link when Reddit refuses the ID, another linked one re-uploaded), the saved list from the composer's Manage (filter, move to front, remove several), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

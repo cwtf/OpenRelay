@@ -38,6 +38,7 @@ import { FeedScreen } from "../screens/FeedScreen";
 import { PostScreen } from "../screens/PostScreen";
 import { SearchScreen } from "../screens/SearchScreen";
 import { OfflineScreen } from "../screens/OfflineScreen";
+import { SavedMediaScreen } from "../screens/SavedMediaScreen";
 import {
   ComposeScreen,
   FriendsScreen,
@@ -83,6 +84,7 @@ type Route =
   | { kind: "moderator" }
   | { kind: "friends" }
   | { kind: "offline" }
+  | { kind: "saved-media" }
   | { kind: "submit"; sub?: string | undefined; post?: "self" | "link" | undefined }
   | { kind: "compose"; to?: string | undefined; subject?: string | undefined };
 type Entry = {
@@ -608,6 +610,7 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openModerator: () => push({ kind: "moderator" }),
       openFriends: () => push({ kind: "friends" }),
       openOffline: () => push({ kind: "offline" }),
+      openSavedMedia: () => push({ kind: "saved-media" }),
       openSubmit: (sub, post) => push({ kind: "submit", sub, post }),
       openCompose: (draft) => push({ kind: "compose", ...draft }),
       openMedia: (spec) => setViewer(spec),
@@ -731,6 +734,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
                 <FriendsScreen />
               ) : entry.route.kind === "offline" ? (
                 <OfflineScreen />
+              ) : entry.route.kind === "saved-media" ? (
+                <SavedMediaScreen />
               ) : entry.route.kind === "submit" ? (
                 <SubmitScreen sub={entry.route.sub} kind={entry.route.post} />
               ) : (

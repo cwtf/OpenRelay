@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { IMAGE_TYPES } from "../../providers/upload";
 import type { CommentNode, InlineMedia } from "../../shared/api";
 import { usePrefs } from "../app/prefs";
+import { useNav } from "../app/nav";
 import { useAccount } from "../lib/account";
 import { isLemmyName } from "../lib/hybrid";
 import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
@@ -122,6 +123,7 @@ export const ReplySheet = ({
   const latestText = useRef(text);
   latestText.current = text;
   const { prefs } = usePrefs();
+  const nav = useNav();
   const saved = useSavedMedia();
   const [showSaved, setShowSaved] = useState(false);
   const message = parentId.startsWith("t4_") && !editing;
@@ -337,6 +339,21 @@ export const ReplySheet = ({
             )}
             {showSaved && !preview ? (
               <div className="reply-saved" role="group" aria-label="Saved GIFs and images">
+                {saved.length ? (
+                  <div className="reply-saved-head">
+                    <span>Saved · {saved.length}</span>
+                    <button
+                      type="button"
+                      className="btn is-text"
+                      onClick={() => {
+                        close();
+                        nav.openSavedMedia();
+                      }}
+                    >
+                      Manage
+                    </button>
+                  </div>
+                ) : null}
                 {saved.length ? (
                   saved.map((item) => (
                     <div className="reply-saved-item" key={savedKey(item)}>

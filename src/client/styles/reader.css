@@ -3924,6 +3924,170 @@ button.appbar-title {
   cursor: pointer;
 }
 
+/* The composer's Saved panel heading, with Manage. */
+.reply-saved-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Saved GIFs & images: the composer's list, to look through and prune. */
+.saved-filters {
+  padding: 10px 12px;
+}
+
+.saved-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 3px;
+  padding: 0 3px 16px;
+}
+
+.saved-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    transform var(--dur-item-fade) var(--ease-emph),
+    border-radius var(--dur-item-fade) var(--ease-emph);
+}
+
+.saved-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.saved-tile-text {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.saved-tile.is-selected {
+  transform: scale(0.9);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 3px var(--primary);
+}
+
+.saved-tile.is-selected img {
+  opacity: 0.85;
+}
+
+.saved-tile-check {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 0.85);
+  background: rgb(0 0 0 / 0.3);
+}
+
+.saved-tile.is-selected .saved-tile-check {
+  border: 0;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.saved-tile-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.66);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.saved-tile-link {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.66);
+  color: #fff;
+}
+
+.appbar.is-selecting {
+  background: var(--primary-soft);
+  color: var(--on-primary-soft);
+}
+
+.appbar.is-selecting .icon-btn {
+  color: inherit;
+}
+
+.saved-sheet-preview {
+  display: grid;
+  place-items: center;
+  height: 200px;
+  margin: 4px 16px 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.saved-sheet-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.saved-sheet-meta {
+  margin: 10px 20px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.saved-sheet-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 10px 16px 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.saved-sheet-note .icon {
+  flex: none;
+}
+
+/* A drawer item's plain count, like the saved list's size. */
+.drawer-num {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .format-bar {
   display: flex;
   gap: 2px;

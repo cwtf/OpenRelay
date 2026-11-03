@@ -52,6 +52,8 @@ export type Nav = {
   openFriends: () => void;
   /** Posts saved for offline reading. */
   openOffline: () => void;
+  /** GIFs and images saved for replies. */
+  openSavedMedia: () => void;
   openSubmit: (sub?: string, kind?: "self" | "link") => void;
   openCompose: (draft?: { to?: string; subject?: string }) => void;
   back: () => void;
