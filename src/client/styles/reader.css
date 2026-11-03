@@ -4019,7 +4019,7 @@ button.appbar-title {
   letter-spacing: 0.04em;
 }
 
-.saved-tile-link {
+.saved-tile-hidden {
   position: absolute;
   right: 6px;
   top: 6px;

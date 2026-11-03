@@ -16,7 +16,7 @@ import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
 import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
-import { linkTo, reuseOf, savedKey, withLinks, type SavedMedia } from "../lib/savedMedia";
+import { linkTo, redditTakes, reuseOf, savedKey, withLinks, type SavedMedia } from "../lib/savedMedia";
 import { forgetSaved, savedMediaFile, useSavedMedia } from "../lib/savedMediaStore";
 import { readJson, writeJson } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
@@ -133,6 +133,8 @@ export const ReplySheet = ({
   const canUpload =
     canAttach && (!allowed || allowed.includes("static") || allowed.includes("animated"));
   const reuseSite = site.name === "Lemmy" ? "Lemmy" : "Reddit";
+  // Reddit won't show an image it doesn't host, so those aren't offered there.
+  const offered = reuseSite === "Lemmy" ? saved : saved.filter(redditTakes);
 
   useEffect(() => () => uploadUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
@@ -339,9 +341,9 @@ export const ReplySheet = ({
             )}
             {showSaved && !preview ? (
               <div className="reply-saved" role="group" aria-label="Saved GIFs and images">
-                {saved.length ? (
+                {offered.length ? (
                   <div className="reply-saved-head">
-                    <span>Saved · {saved.length}</span>
+                    <span>Saved · {offered.length}</span>
                     <button
                       type="button"
                       className="btn is-text"
@@ -354,8 +356,8 @@ export const ReplySheet = ({
                     </button>
                   </div>
                 ) : null}
-                {saved.length ? (
-                  saved.map((item) => (
+                {offered.length ? (
+                  offered.map((item) => (
                     <div className="reply-saved-item" key={savedKey(item)}>
                       <button
                         type="button"
@@ -411,7 +413,7 @@ export const ReplySheet = ({
                   <Icon name={option.icon} size={20} />
                 </button>
               ))}
-              {canAttach && saved.length ? (
+              {canAttach && offered.length ? (
                 <button
                   type="button"
                   className="icon-btn"

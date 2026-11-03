@@ -319,12 +319,19 @@ export const linkTo = (item: SavedMedia): string =>
   `[${isAnimated(item) ? "GIF" : "Image"}](${item.url})`;
 
 /**
+ * Whether a Reddit reply offers the item at all. Reddit shows only images it
+ * hosts, and refuses a browser session's uploads, so an image from anywhere
+ * else (a Lemmy instance, Imgur) is left out.
+ */
+export const redditTakes = (item: SavedMedia): boolean =>
+  !!item.giphy || !!item.asset || onReddit(item.url);
+
+/**
  * How a saved item goes into a reply: Markdown to insert as it is, or an
  * image to fetch and upload first. Reddit takes a Giphy GIF or an image
- * uploaded to a comment back by its ID, and shows other images only once
- * they're uploaded to it, which it refuses a browser session; so an image
- * from anywhere else (a Lemmy instance, Imgur) goes in as a link, and so
- * does anything the community doesn't take in comments (`allowed`, see
+ * uploaded to a comment back by its ID, uploads its other images again
+ * (only those it hosts are offered, see `redditTakes`), and links to
+ * anything the community doesn't take in comments (`allowed`, see
  * `allowedIn`). Lemmy shows any image URL.
  */
 export function reuseOf(
@@ -337,17 +344,16 @@ export function reuseOf(
   if (item.giphy) return { markdown: `![gif](giphy|${item.giphy})`, ref: `giphy|${item.giphy}` };
   if (item.asset)
     return { markdown: `![${isAnimated(item) ? "gif" : "img"}](${item.asset})`, ref: item.asset };
-  if (!onReddit(item.url)) return { markdown: linkTo(item) };
   return { upload: item.url };
 }
 
 /**
  * How a Reddit reply takes a saved item where the community takes its kind
- * (see `reuseOf`): back by its ID, uploaded again, or only as a link.
+ * (see `reuseOf`): back by its ID, uploaded again, or not at all.
  */
-export function redditReuse(item: SavedMedia): "id" | "upload" | "link" {
-  const way = reuseOf(item, "Reddit");
-  return "upload" in way ? "upload" : way.ref ? "id" : "link";
+export function redditReuse(item: SavedMedia): "id" | "upload" | "none" {
+  if (!redditTakes(item)) return "none";
+  return "upload" in reuseOf(item, "Reddit") ? "upload" : "id";
 }
 
 /**

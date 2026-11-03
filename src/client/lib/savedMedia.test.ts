@@ -7,6 +7,7 @@ import {
   giphyGif,
   isAnimated,
   redditReuse,
+  redditTakes,
   savedSource,
   parseSavedMedia,
   reuseOf,
@@ -173,7 +174,7 @@ test("allowedIn follows the subreddit's allowed comment media", () => {
   assert.equal(allowedIn(still, []), false);
 });
 
-test("reuseOf: Giphy GIFs and uploads by ID on Reddit, others linked; any image URL on Lemmy", () => {
+test("reuseOf: Giphy GIFs and uploads by ID on Reddit, Reddit-hosted ones uploaded; any image URL on Lemmy", () => {
   const gif = image("https://i.giphy.com/media/g1/giphy.gif", { giphy: "g1" });
   const still = image("https://i.redd.it/a.png");
   const uploaded = image("https://preview.redd.it/up1.png?width=100", { asset: "up1" });
@@ -185,11 +186,13 @@ test("reuseOf: Giphy GIFs and uploads by ID on Reddit, others linked; any image 
   assert.deepEqual(reuseOf(still, "Reddit"), { upload: "https://i.redd.it/a.png" });
   assert.deepEqual(reuseOf(gif, "Lemmy"), { markdown: "![](https://i.giphy.com/media/g1/giphy.gif)" });
   assert.deepEqual(reuseOf(still, "Lemmy"), { markdown: "![](https://i.redd.it/a.png)" });
-  // Reddit refuses a browser session's upload, so an image it doesn't host is linked.
+  // Reddit doesn't offer an image it doesn't host; Lemmy shows it.
   const lemmy = image("https://lemmy.world/pictrs/image/abc.jpeg");
-  const lemmyGif = image("https://lemmy.world/pictrs/image/def.gif");
-  assert.deepEqual(reuseOf(lemmy, "Reddit"), { markdown: "[Image](https://lemmy.world/pictrs/image/abc.jpeg)" });
-  assert.deepEqual(reuseOf(lemmyGif, "Reddit"), { markdown: "[GIF](https://lemmy.world/pictrs/image/def.gif)" });
+  assert.equal(redditTakes(lemmy), false);
+  assert.equal(redditTakes(image("https://i.imgur.com/c.png")), false);
+  assert.equal(redditTakes(still), true);
+  assert.equal(redditTakes(gif), true);
+  assert.equal(redditTakes(image("https://lemmy.world/pictrs/image/d.png", { asset: "d1" })), true);
   assert.deepEqual(reuseOf(lemmy, "Lemmy"), { markdown: "![](https://lemmy.world/pictrs/image/abc.jpeg)" });
   assert.deepEqual(reuseOf(image("https://external-preview.redd.it/b.png"), "Reddit"), {
     upload: "https://external-preview.redd.it/b.png",
@@ -229,7 +232,7 @@ test("savedSource, isAnimated and redditReuse describe an item for the manage sc
       ["Giphy", true, "id"],
       ["Reddit", false, "id"],
       ["Reddit", false, "upload"],
-      ["lemmy.world", true, "link"],
+      ["lemmy.world", true, "none"],
     ],
   );
 });
