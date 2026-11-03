@@ -2,8 +2,9 @@
 // parent's text, the editor, a Markdown format bar, a preview, and Send.
 // The reply is posted with the viewer's Reddit session; drafts are kept per
 // parent until sent. Images and GIFs are uploaded as soon as they're picked
-// (or pasted), and the editor gets the Markdown that embeds them. GIFs and
-// images saved from comments (the viewer's Save) can be picked again.
+// (or pasted), and the editor gets the Markdown that embeds them; not on
+// Reddit for now. GIFs and images saved from comments (the viewer's Save)
+// can be picked again.
 
 import { useEffect, useRef, useState } from "react";
 import { IMAGE_TYPES } from "../../providers/upload";
@@ -130,9 +131,13 @@ export const ReplySheet = ({
   const message = parentId.startsWith("t4_") && !editing;
   const allowed = useCommentMedia(message ? undefined : community);
   const canAttach = site.features.images[message ? "messages" : "comments"];
-  // A community that takes neither still nor animated images.
+  // Uploading (the picker and pasting) is off on Reddit for now; saved GIFs
+  // can still be picked. Also off in a community that takes neither still
+  // nor animated images.
   const canUpload =
-    canAttach && (!allowed || allowed.includes("static") || allowed.includes("animated"));
+    canAttach &&
+    site.name !== "Reddit" &&
+    (!allowed || allowed.includes("static") || allowed.includes("animated"));
   const reuseSite = site.name === "Lemmy" ? "Lemmy" : "Reddit";
   // Reddit won't show an image it doesn't host, so those aren't offered there.
   const offered = reuseSite === "Lemmy" ? saved : saved.filter(redditTakes);
