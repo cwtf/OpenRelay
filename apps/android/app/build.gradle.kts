@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.cwtf.openrelay"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.3.4"
+        versionCode = 8
+        versionName = "0.3.5"
     }
 
     signingConfigs {
