@@ -787,11 +787,12 @@
   background: var(--bg);
 }
 
-/* Feed rows are Relay's rounded rows: unread posts and messages on a grey
-   card, read ones straight on the page, the item open in the right-hand pane
-   on a blue one. Comments (Profile, Moderator) have no read state, so they
-   keep their card. A profile post's card is its listing wrapper, which also
-   holds its moderation block. */
+/* Feed rows are Relay's rounded rows: unread posts on a grey card, read ones
+   straight on the page, the item open in the right-hand pane on a blue one.
+   Comments (Profile, Moderator) and inbox messages always keep their card, as
+   Profile does; a message shows it is unread by its blue label and dot. A
+   profile post's card is its listing wrapper, which also holds its
+   moderation block. */
 .feed[data-layout='compact'] > .swipe:has(> .swipe-content > :is(.post, .list-card)),
 .feed[data-layout='list'] > .swipe:has(> .swipe-content > :is(.post, .list-card)),
 .feed[data-layout='compact'] > .listing-post,
@@ -827,8 +828,8 @@
   box-shadow: none;
 }
 
-.feed[data-layout='compact'] > .swipe > .swipe-content > :is(.post.is-read, .message-card:not(.is-unread)),
-.feed[data-layout='list'] > .swipe > .swipe-content > :is(.post.is-read, .message-card:not(.is-unread)),
+.feed[data-layout='compact'] > .swipe > .swipe-content > .post.is-read,
+.feed[data-layout='list'] > .swipe > .swipe-content > .post.is-read,
 .feed[data-layout='compact'] > .listing-post:has(.post.is-read),
 .feed[data-layout='list'] > .listing-post:has(.post.is-read) {
   background: transparent;
