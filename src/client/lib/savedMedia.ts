@@ -3,6 +3,7 @@
  * Only references are kept (a Giphy ID, or the image's URL), never the files.
  */
 import type { InlineMedia, PostMedia } from "../../shared/api";
+import { decodeEntities, parseBlocks, type Block } from "./markdownParser.ts";
 
 export type SavedMedia = {
   /** Giphy's ID for a Giphy GIF, which Reddit takes back as `giphy|<id>`. */
@@ -66,6 +67,76 @@ export function savableMedia(
   // Reddit's image hosts under it.
   const id = media && ASSET_ID.test(target) ? target : REDDIT_IMAGE.exec(url)?.[1];
   return { ...(id ? { asset: id } : {}), url, ...mp4, ...size, savedAt };
+}
+
+/** The text of every block the renderer runs inline rules on (not code). */
+const inlineText = (blocks: Block[]): string[] =>
+  blocks.flatMap((block): string[] => {
+    switch (block.t) {
+      case "p":
+      case "h":
+        return [block.text];
+      case "quote":
+      case "spoiler":
+        return inlineText(block.children);
+      case "list":
+        return block.items.flatMap(inlineText);
+      case "table":
+        return [...block.head, ...block.rows.flat()];
+      default:
+        return [];
+    }
+  });
+
+const CODE_SPAN = /(`+)([\s\S]*?[^`])\1(?!`)/g;
+/** `![alt](target)`, a plain `[text](link)` (skipped), or a bare URL. */
+const BODY_MEDIA =
+  /!\[[^\]]*\]\(([^)\s]+)[^)]*\)|\[(?:\\.|[^[\]\\]|\[[^\]]*\])*\]\([^)]*\)|https?:\/\/[^\s<>[\]]+/g;
+
+export type BodyImages = {
+  /** Whether `![alt](<url>)` shows the URL as an image. */
+  isEmbedded: (url: string) => boolean;
+  /** Whether a bare link shows as an image. */
+  isInline: (url: string) => boolean;
+  /** Load GIFs from Giphy: shows a Giphy GIF Reddit doesn't list. */
+  giphyGifs: boolean;
+};
+
+/**
+ * What a comment's body shows that can be saved, in order, as `markdown.tsx`
+ * embeds it: an `![alt](<id>)` that `media` lists (or a Giphy GIF, with
+ * `giphyGifs`), and image links, outside code. Each item once.
+ */
+export function bodyMedia(
+  source: string,
+  media: Record<string, InlineMedia> | undefined,
+  images: BodyImages,
+  savedAt: number,
+): SavedMedia[] {
+  const found = new Map<string, SavedMedia>();
+  const add = (item: SavedMedia | null) => {
+    if (item && !found.has(savedKey(item))) found.set(savedKey(item), item);
+  };
+  for (const text of inlineText(parseBlocks(decodeEntities(source)))) {
+    for (const match of text.replace(CODE_SPAN, " ").matchAll(BODY_MEDIA)) {
+      const target = match[1];
+      if (target !== undefined) {
+        if (/^emote\|/.test(target)) continue;
+        if (images.isEmbedded(target)) {
+          add(savableMedia(target, target, undefined, savedAt));
+          continue;
+        }
+        const listed = media?.[target] ?? media?.[target.split("|").slice(0, 2).join("|")];
+        if (listed) add(savableMedia(target, listed.url, listed, savedAt));
+        else if (images.giphyGifs && /^giphy\|/.test(target))
+          add(savableMedia(target, "", undefined, savedAt));
+      } else if (!match[0].startsWith("[")) {
+        const url = match[0].replace(/[.,;:!?'"*_~)]+$/, "");
+        if (images.isInline(url)) add(savableMedia(url, url, undefined, savedAt));
+      }
+    }
+  }
+  return [...found.values()];
 }
 
 /** A post's link that is the image file itself (i.redd.it, Imgur, a Lemmy instance's pictrs). */

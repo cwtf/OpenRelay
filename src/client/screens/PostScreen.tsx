@@ -30,6 +30,7 @@ import {
   wantsThumb,
 } from "../components/PostParts";
 import { ReplySheet } from "../components/ReplySheet";
+import { SaveBodyMediaSheet } from "./SavedMediaScreen";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
 import { currentAccount } from "../lib/account";
@@ -56,8 +57,14 @@ import {
   type LayoutSnapshot,
 } from "../lib/itemAnimator";
 import { compact, fullDate, plural, sortLabel } from "../lib/format";
-import { Markdown, MarkdownContext, decodeEntities } from "../lib/markdown";
-import type { SavedMedia } from "../lib/savedMedia";
+import {
+  Markdown,
+  MarkdownContext,
+  decodeEntities,
+  savableInBody,
+} from "../lib/markdown";
+import { isAnimated, type SavedMedia } from "../lib/savedMedia";
+import { isSaved, toggleSaved } from "../lib/savedMediaStore";
 import {
   openUrl,
   copyText,
@@ -745,6 +752,19 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       const snippet = decodeEntities(node.body)
         .replace(/\s+/g, " ")
         .slice(0, 220);
+      const media = savableInBody(node.body, node.media, prefs.giphyGifs);
+      const gifs = media.filter(isAnimated).length;
+      const kinds =
+        media.length === 1
+          ? gifs
+            ? "GIF"
+            : "image"
+          : !gifs
+            ? "images"
+            : gifs === media.length
+              ? "GIFs"
+              : "GIFs and images";
+      const saved = media.length === 1 && isSaved(media[0]!);
       nav.openSheet((onClosed) => (
         <Sheet
           title={`${node.author} · ${compact(node.score)} points`}
@@ -781,6 +801,26 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                       captureLayout();
                       setCollapsed((current) => new Set(current).add(root.id));
                       requestAnimationFrame(() => scrollToComment(root.id));
+                    })}
+                  />
+                ) : null}
+                {media.length ? (
+                  <SheetItem
+                    icon={saved ? "starFilled" : "star"}
+                    label={
+                      saved
+                        ? `Remove ${kinds} from saved`
+                        : `Save ${kinds} for replies`
+                    }
+                    onClick={run(() => {
+                      if (media.length > 1) {
+                        nav.openSheet((onClosed) => (
+                          <SaveBodyMediaSheet items={media} onClosed={onClosed} />
+                        ));
+                        return;
+                      }
+                      const now = toggleSaved({ ...media[0]!, savedAt: Date.now() });
+                      toast(now ? "Saved for replies" : "Removed from saved");
                     })}
                   />
                 ) : null}
@@ -831,7 +871,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     },
     // openReply/scrollToComment/removeComment are stable enough for sheet lifetimes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tree, post, nav, archiveOnly],
+    [tree, post, nav, archiveOnly, prefs.giphyGifs],
   );
 
   const openSortSheet = () =>
@@ -866,6 +906,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       highlight,
       autoplayGifs: prefs.autoplayGifs,
       giphyGifs: prefs.giphyGifs,
+      saveImages: true,
     }),
     [nav, highlight, prefs.autoplayGifs, prefs.giphyGifs],
   );

@@ -19,7 +19,9 @@ import {
 } from './links';
 import { Icon } from '../components/Icon';
 import { site } from './api';
-import { savableMedia, type SavedMedia } from './savedMedia';
+import { toast } from './platform';
+import { bodyMedia, savableMedia, type SavedMedia } from './savedMedia';
+import { isSaved, toggleSaved, useSavedMedia } from './savedMediaStore';
 import { decodeEntities, parseBlocks, type Block } from './markdownParser';
 
 export { decodeEntities };
@@ -40,6 +42,8 @@ export type MarkdownActions = {
   /** The Autoplay GIFs and Load GIFs from Giphy preferences. */
   autoplayGifs: boolean;
   giphyGifs: boolean;
+  /** Shows a star on each image that can be saved for replies. */
+  saveImages?: boolean;
 };
 
 const noop = () => undefined;
@@ -198,6 +202,37 @@ const InlineVideo = ({
   );
 };
 
+/**
+ * Whether an image of this size, as shown (see `mediaSize`), has room for its
+ * star without covering it; smaller ones are saved from the More sheet.
+ */
+const roomForStar = (width: number, height: number): boolean => {
+  const scale = Math.min(1, 360 / width, 320 / height);
+  return width * scale >= 72 && height * scale >= 72;
+};
+
+/** Keeps an image or GIF for replies, as the viewer's star does. */
+const SaveStar = ({ item }: { item: SavedMedia }) => {
+  useSavedMedia();
+  const saved = isSaved(item);
+  return (
+    <button
+      type="button"
+      className={`md-image-save${saved ? ' is-saved' : ''}`}
+      aria-label={saved ? 'Remove from saved GIFs and images' : 'Save for replies'}
+      aria-pressed={saved}
+      title={saved ? 'Saved for replies' : 'Save for replies'}
+      onClick={(event) => {
+        event.stopPropagation();
+        const now = toggleSaved({ ...item, savedAt: Date.now() });
+        toast(now ? 'Saved for replies' : 'Removed from saved');
+      }}
+    >
+      <Icon name={saved ? 'starFilled' : 'star'} size={16} />
+    </button>
+  );
+};
+
 const InlineImage = ({
   url,
   alt,
@@ -210,49 +245,66 @@ const InlineImage = ({
   /** What the body refers to: the image's ID (`giphy|<id>`) or its URL. */
   target?: string;
 }) => {
-  const { onImage, onLink } = useContext(MarkdownContext);
+  const { onImage, onLink, saveImages } = useContext(MarkdownContext);
   const [failed, setFailed] = useState(false);
   const [size, setSize] = useState<{ width: number; height: number }>();
+  // Shown once the image has loaded, when it's big enough.
+  const [star, setStar] = useState(false);
   if (failed) {
     return <Link href={url}>{alt || url}</Link>;
   }
+  const shown = media && size ? { ...media, ...size } : media;
+  const save = savableMedia(target, url, shown, Date.now()) ?? undefined;
   return (
-    <button
-      type="button"
-      className="md-image"
-      onClick={(event) => {
-        event.stopPropagation();
-        const shown = media && size ? { ...media, ...size } : media;
-        onImage(
-          url,
-          shown,
-          savableMedia(target, url, shown, Date.now()) ?? undefined
-        );
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onLink(url);
-      }}
-    >
-      {media?.mp4 ? (
-        <InlineVideo
-          media={media}
-          label={alt}
-          onSize={(width, height) => setSize({ width, height })}
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <img
-          src={url}
-          alt={alt}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          style={media ? mediaSize(media) : undefined}
-          onError={() => setFailed(true)}
-        />
-      )}
-    </button>
+    <span className="md-media">
+      <button
+        type="button"
+        className="md-image"
+        onClick={(event) => {
+          event.stopPropagation();
+          onImage(
+            url,
+            shown,
+            savableMedia(target, url, shown, Date.now()) ?? undefined
+          );
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onLink(url);
+        }}
+      >
+        {media?.mp4 ? (
+          <InlineVideo
+            media={media}
+            label={alt}
+            onSize={(width, height) => {
+              setSize({ width, height });
+              setStar(roomForStar(width, height));
+            }}
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <img
+            src={url}
+            alt={alt}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            style={media ? mediaSize(media) : undefined}
+            onLoad={(event) =>
+              setStar(
+                roomForStar(
+                  event.currentTarget.naturalWidth,
+                  event.currentTarget.naturalHeight
+                )
+              )
+            }
+            onError={() => setFailed(true)}
+          />
+        )}
+      </button>
+      {saveImages && star && save ? <SaveStar item={save} /> : null}
+    </span>
   );
 };
 
@@ -331,6 +383,19 @@ const PICTRS_IMAGE =
   /^https:\/\/[a-z0-9.-]+(?::\d+)?\/pictrs\/image\/[\w-]+\.(jpe?g|png|gif|webp|avif)(\?[^\s]*)?$/i;
 const isEmbeddedImage = (url: string): boolean =>
   isInlineImage(url) || (site.name === 'Lemmy' && PICTRS_IMAGE.test(url));
+
+/** What a comment's body shows that can be saved for replies (see `bodyMedia`). */
+export const savableInBody = (
+  source: string,
+  media: Record<string, InlineMedia> | undefined,
+  giphyGifs: boolean
+): SavedMedia[] =>
+  bodyMedia(
+    source,
+    media,
+    { isEmbedded: isEmbeddedImage, isInline: isInlineImage, giphyGifs },
+    Date.now()
+  );
 
 const Highlighted = ({ text }: { text: string }) => {
   const { highlight } = useContext(MarkdownContext);

@@ -19,9 +19,12 @@ import {
 import {
   forgetAllSaved,
   forgetSaved,
+  isSaved,
   moveSavedToFront,
+  toggleSaved,
   useSavedMedia,
 } from "../lib/savedMediaStore";
+import { toast } from "../lib/platform";
 
 type Show = "all" | "gifs" | "images";
 
@@ -171,6 +174,57 @@ const SavedTile = ({
         </span>
       ) : null}
     </button>
+  );
+};
+
+/**
+ * A comment's GIFs and images (its More sheet's Save for replies, when it
+ * has several): tap one to save it, or to remove it again.
+ */
+export const SaveBodyMediaSheet = ({
+  items,
+  onClosed,
+}: {
+  items: SavedMedia[];
+  onClosed: () => void;
+}) => {
+  const { prefs } = usePrefs();
+  useSavedMedia();
+  return (
+    <Sheet title="Save for replies" onClosed={onClosed}>
+      {() => (
+        <div className="saved-grid saved-grid-sheet">
+          {items.map((item) => {
+            const saved = isSaved(item);
+            const kind = kindOf(item);
+            return (
+              <button
+                key={savedKey(item)}
+                type="button"
+                className={`saved-tile${saved ? " is-selected" : ""}`}
+                aria-label={`${kind} from ${savedSource(item)}`}
+                aria-pressed={saved}
+                onClick={() =>
+                  toast(
+                    toggleSaved({ ...item, savedAt: Date.now() })
+                      ? "Saved for replies"
+                      : "Removed from saved",
+                  )
+                }
+              >
+                <Thumb item={item} />
+                <span className="saved-tile-check" aria-hidden>
+                  {saved ? <Icon name="check" size={16} /> : null}
+                </span>
+                {isAnimated(item) && (!item.giphy || prefs.giphyGifs) ? (
+                  <span className="saved-tile-badge">GIF</span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Sheet>
   );
 };
 

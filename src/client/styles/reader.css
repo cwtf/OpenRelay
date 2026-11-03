@@ -4301,3 +4301,9 @@ button.appbar-title {
 .swipe-btn.is-saved.is-active {
   color: var(--collapsed-badge); /* Relay's green */
 }
+
+/* A comment's GIFs and images, to save for replies. */
+.saved-grid-sheet {
+  gap: 6px;
+  padding: 4px 16px 16px;
+}

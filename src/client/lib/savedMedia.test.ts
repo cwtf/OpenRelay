@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   SAVED_MEDIA_MAX,
   allowedIn,
+  bodyMedia,
   giphyGif,
   isAnimated,
   redditReuse,
@@ -269,4 +270,42 @@ test("savedText and parseSavedText round-trip the list, keeping each kept entry"
   const c = image("https://x.example/c.png");
   assert.deepEqual(savedChanges([gif, upload, c], [upload, gif]), { added: 0, removed: 1, reordered: true });
   assert.deepEqual(savedChanges([gif, upload], [gif, upload]), { added: 0, removed: 0, reordered: false });
+});
+
+const images = {
+  isEmbedded: (url: string) => /^https:\/\/i\.redd\.it\/.+\.(png|gif)$/.test(url),
+  isInline: (url: string) => /^https:\/\/i\.imgur\.com\/.+\.png$/.test(url),
+  giphyGifs: false,
+};
+
+test("bodyMedia finds a comment's GIFs and images as the renderer shows them", () => {
+  const media = {
+    "giphy|abc123": { url: "https://external-preview.redd.it/g.gif", width: 200, height: 100 },
+    up1: { url: "https://i.redd.it/up1.png", width: 10, height: 20 },
+  };
+  const body = [
+    "Look ![gif](giphy|abc123|downsized) and ![img](up1).",
+    "",
+    "> quoted https://i.imgur.com/a.png, then [a link](https://i.imgur.com/b.png)",
+    "",
+    "* ![](https://i.redd.it/x.gif) ![gif](giphy|abc123)",
+    "",
+    "`![img](up1)` ![img](missing) ![e](emote|t5_1|123)",
+    "",
+    "```",
+    "https://i.imgur.com/code.png",
+    "```",
+  ].join("\n");
+  assert.deepEqual(
+    bodyMedia(body, media, images, 7).map(savedKey),
+    ["giphy:abc123", "https://i.redd.it/up1.png", "https://i.imgur.com/a.png", "https://i.redd.it/x.gif"],
+  );
+  assert.equal(bodyMedia(body, media, images, 7)[1]?.asset, "up1");
+});
+
+test("bodyMedia takes a Giphy GIF Reddit doesn't list only with Load GIFs from Giphy", () => {
+  const body = "![gif](giphy|zzz9)";
+  assert.deepEqual(bodyMedia(body, undefined, images, 1), []);
+  assert.deepEqual(bodyMedia(body, undefined, { ...images, giphyGifs: true }, 1).map(savedKey), ["giphy:zzz9"]);
+  assert.deepEqual(bodyMedia("no media here", undefined, images, 1), []);
 });
