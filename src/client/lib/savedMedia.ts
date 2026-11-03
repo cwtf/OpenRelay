@@ -294,14 +294,17 @@ export function allowedIn(item: SavedMedia, allowed: readonly string[] | undefin
 }
 
 const REDDIT_HOST = /(?:^|\.)(?:reddit\.com|redd\.it|redditmedia\.com)$/i;
+const IMGUR_HOST = /(?:^|\.)imgur\.com$/i;
 
-const onReddit = (url: string): boolean => {
+const onHost = (url: string, host: RegExp): boolean => {
   try {
-    return REDDIT_HOST.test(new URL(url).hostname);
+    return host.test(new URL(url).hostname);
   } catch {
     return false;
   }
 };
+
+const onReddit = (url: string): boolean => onHost(url, REDDIT_HOST);
 
 /** Where a saved item is from, as the manage screen names it: Giphy, Reddit or the image's host. */
 export function savedSource(item: SavedMedia): string {
@@ -321,18 +324,18 @@ export const linkTo = (item: SavedMedia): string =>
 /**
  * Whether a Reddit reply offers the item at all. Reddit shows only images it
  * hosts, and refuses a browser session's uploads, so an image from anywhere
- * else (a Lemmy instance, Imgur) is left out.
+ * else (a Lemmy instance) is left out, except Imgur's, which goes in as a link.
  */
 export const redditTakes = (item: SavedMedia): boolean =>
-  !!item.giphy || !!item.asset || onReddit(item.url);
+  !!item.giphy || !!item.asset || onReddit(item.url) || onHost(item.url, IMGUR_HOST);
 
 /**
  * How a saved item goes into a reply: Markdown to insert as it is, or an
  * image to fetch and upload first. Reddit takes a Giphy GIF or an image
  * uploaded to a comment back by its ID, uploads its other images again
- * (only those it hosts are offered, see `redditTakes`), and links to
- * anything the community doesn't take in comments (`allowed`, see
- * `allowedIn`). Lemmy shows any image URL.
+ * (only those it hosts are offered, see `redditTakes`), and links to an
+ * Imgur image and to anything the community doesn't take in comments
+ * (`allowed`, see `allowedIn`). Lemmy shows any image URL.
  */
 export function reuseOf(
   item: SavedMedia,
@@ -344,16 +347,18 @@ export function reuseOf(
   if (item.giphy) return { markdown: `![gif](giphy|${item.giphy})`, ref: `giphy|${item.giphy}` };
   if (item.asset)
     return { markdown: `![${isAnimated(item) ? "gif" : "img"}](${item.asset})`, ref: item.asset };
+  if (onHost(item.url, IMGUR_HOST)) return { markdown: linkTo(item) };
   return { upload: item.url };
 }
 
 /**
  * How a Reddit reply takes a saved item where the community takes its kind
- * (see `reuseOf`): back by its ID, uploaded again, or not at all.
+ * (see `reuseOf`): back by its ID, uploaded again, only as a link, or not at all.
  */
-export function redditReuse(item: SavedMedia): "id" | "upload" | "none" {
+export function redditReuse(item: SavedMedia): "id" | "upload" | "link" | "none" {
   if (!redditTakes(item)) return "none";
-  return "upload" in reuseOf(item, "Reddit") ? "upload" : "id";
+  const way = reuseOf(item, "Reddit");
+  return "upload" in way ? "upload" : way.ref ? "id" : "link";
 }
 
 /**

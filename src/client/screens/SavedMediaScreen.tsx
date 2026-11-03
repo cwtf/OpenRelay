@@ -48,6 +48,8 @@ const reuseNote = (item: SavedMedia): string => {
       return `Reddit replies show it inline where the community takes ${kind} in comments, and link to it elsewhere.`;
     case "upload":
       return `Reddit replies upload it again where the community takes ${kind} in comments, and link to it elsewhere.`;
+    case "link":
+      return "Reddit replies link to it: Reddit shows only images it hosts.";
     case "none":
       return "Reddit replies don't offer it: Reddit shows only images it hosts.";
   }
@@ -144,13 +146,15 @@ const SavedTile = ({
 }) => {
   const { prefs } = usePrefs();
   const press = useLongPress(selected === undefined ? onSelect : undefined);
-  const hidden = site.name === "Reddit" && redditReuse(item) === "none";
+  const reddit = site.name === "Reddit" ? redditReuse(item) : null;
+  const hidden = reddit === "none";
+  const link = reddit === "link";
   const kind = kindOf(item);
   return (
     <button
       type="button"
       className={`saved-tile${selected ? " is-selected" : ""}`}
-      aria-label={`${kind} from ${savedSource(item)}${hidden ? ", not offered in Reddit replies" : ""}`}
+      aria-label={`${kind} from ${savedSource(item)}${hidden ? ", not offered in Reddit replies" : link ? ", linked in Reddit replies" : ""}`}
       aria-pressed={selected}
       {...press.handlers}
       onClick={() => {
@@ -169,8 +173,13 @@ const SavedTile = ({
         <span className="saved-tile-badge">GIF</span>
       ) : null}
       {hidden ? (
-        <span className="saved-tile-hidden" title="Not offered in Reddit replies" aria-hidden>
+        <span className="saved-tile-mark" title="Not offered in Reddit replies" aria-hidden>
           <Icon name="block" size={14} />
+        </span>
+      ) : null}
+      {link ? (
+        <span className="saved-tile-mark" title="Linked in Reddit replies" aria-hidden>
+          <Icon name="link" size={14} />
         </span>
       ) : null}
     </button>

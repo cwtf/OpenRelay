@@ -186,10 +186,16 @@ test("reuseOf: Giphy GIFs and uploads by ID on Reddit, Reddit-hosted ones upload
   assert.deepEqual(reuseOf(still, "Reddit"), { upload: "https://i.redd.it/a.png" });
   assert.deepEqual(reuseOf(gif, "Lemmy"), { markdown: "![](https://i.giphy.com/media/g1/giphy.gif)" });
   assert.deepEqual(reuseOf(still, "Lemmy"), { markdown: "![](https://i.redd.it/a.png)" });
-  // Reddit doesn't offer an image it doesn't host; Lemmy shows it.
+  // Reddit doesn't offer an image it doesn't host, but links Imgur's; Lemmy shows them.
   const lemmy = image("https://lemmy.world/pictrs/image/abc.jpeg");
+  const imgur = image("https://i.imgur.com/c.png");
+  const imgurGif = image("https://i.imgur.com/e.gif");
   assert.equal(redditTakes(lemmy), false);
-  assert.equal(redditTakes(image("https://i.imgur.com/c.png")), false);
+  assert.equal(redditTakes(imgur), true);
+  assert.equal(redditTakes(image("https://notimgur.com/c.png")), false);
+  assert.deepEqual(reuseOf(imgur, "Reddit"), { markdown: "[Image](https://i.imgur.com/c.png)" });
+  assert.deepEqual(reuseOf(imgurGif, "Reddit"), { markdown: "[GIF](https://i.imgur.com/e.gif)" });
+  assert.deepEqual(reuseOf(imgur, "Lemmy"), { markdown: "![](https://i.imgur.com/c.png)" });
   assert.equal(redditTakes(still), true);
   assert.equal(redditTakes(gif), true);
   assert.equal(redditTakes(image("https://lemmy.world/pictrs/image/d.png", { asset: "d1" })), true);
@@ -226,13 +232,15 @@ test("savedSource, isAnimated and redditReuse describe an item for the manage sc
   const upload = image("https://i.redd.it/abc12.png", { asset: "abc12" });
   const reddit = image("https://i.redd.it/not-an-upload.png");
   const lemmy = image("https://lemmy.world/pictrs/image/x.gif");
+  const imgur = image("https://i.imgur.com/y.png");
   assert.deepEqual(
-    [gif, upload, reddit, lemmy].map((item) => [savedSource(item), isAnimated(item), redditReuse(item)]),
+    [gif, upload, reddit, lemmy, imgur].map((item) => [savedSource(item), isAnimated(item), redditReuse(item)]),
     [
       ["Giphy", true, "id"],
       ["Reddit", false, "id"],
       ["Reddit", false, "upload"],
       ["lemmy.world", true, "none"],
+      ["i.imgur.com", false, "link"],
     ],
   );
 });
