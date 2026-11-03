@@ -174,33 +174,23 @@ export const linkTo = (item: SavedMedia): string =>
  * image to fetch and upload first. Reddit takes a Giphy GIF or an image
  * uploaded to a comment back by its ID, and shows other images only once
  * they're uploaded to it, which it refuses a browser session; so an image
- * from anywhere else (a Lemmy instance, Imgur) goes in as a link. Lemmy
- * shows any image URL.
+ * from anywhere else (a Lemmy instance, Imgur) goes in as a link, and so
+ * does anything the community doesn't take in comments (`allowed`, see
+ * `allowedIn`). Lemmy shows any image URL.
  */
 export function reuseOf(
   item: SavedMedia,
   site: "Reddit" | "Lemmy",
+  allowed?: readonly string[],
 ): { markdown: string; ref?: string } | { upload: string } {
   if (site === "Lemmy") return { markdown: `![](${item.url})` };
+  if (!allowedIn(item, allowed)) return { markdown: linkTo(item) };
   if (item.giphy) return { markdown: `![gif](giphy|${item.giphy})`, ref: `giphy|${item.giphy}` };
   if (item.asset)
     return { markdown: `![${isAnimated(item) ? "gif" : "img"}](${item.asset})`, ref: item.asset };
   if (!onReddit(item.url)) return { markdown: linkTo(item) };
   return { upload: item.url };
 }
-
-/**
- * Whether a saved item can go into a reply here: a link always can,
- * anything shown inline only where the community takes it (`allowedIn`).
- */
-export const usableIn = (
-  item: SavedMedia,
-  site: "Reddit" | "Lemmy",
-  allowed: readonly string[] | undefined,
-): boolean => {
-  const way = reuseOf(item, site);
-  return ("markdown" in way && !way.markdown.startsWith("!")) || allowedIn(item, allowed);
-};
 
 /**
  * The reply with each saved item it refers to by ID (`links`, by that ID)

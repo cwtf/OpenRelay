@@ -523,7 +523,7 @@ try {
       await chrome.developerPrivate.addHostPermission(id, `https://${host}/*`);
   }, new URL(app.url()).host);
   await extensions.close();
-  // r/test takes images but not Giphy GIFs, so only the images are offered.
+  // r/test takes images but not Giphy GIFs: everything saved is offered, the GIF as a link.
   const uploaded = uploads.length;
   const written = writes.length;
   box = await openReply();
@@ -531,7 +531,7 @@ try {
     await app.getByRole("button", { name: "Saved GIFs and images" }).click();
     const saved = app.locator(".reply-saved-pick");
     await saved.first().waitFor();
-    assert.equal(await saved.count(), 3);
+    assert.equal(await saved.count(), 4);
     await saved.locator(`img[src="${src}"]`).click();
   };
   // One uploaded to a comment goes back by Reddit's asset ID, with nothing
@@ -570,6 +570,12 @@ try {
   assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
   assert.equal(uploads.length, uploaded + 1);
   assert.equal(writes.at(-1).path, "/api/media/asset.json");
+  // The Giphy GIF r/test doesn't take goes in as a link.
+  await box.fill("");
+  await app.getByRole("button", { name: "Saved GIFs and images" }).click();
+  await app.getByRole("button", { name: "Add this GIF" }).click();
+  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("[GIF]("));
+  assert.equal(await box.inputValue(), "[GIF](https://i.giphy.com/media/fixturegif/giphy.gif)\n\n");
   await box.fill("");
   await app.getByRole("button", { name: "Cancel" }).click();
   await app.locator(".sheet").waitFor({ state: "detached" });

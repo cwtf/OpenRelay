@@ -7,7 +7,6 @@ import {
   reuseOf,
   savableMedia,
   savablePostMedia,
-  usableIn,
   linkTo,
   withLinks,
   savedKey,
@@ -185,10 +184,14 @@ test("reuseOf: Giphy GIFs and uploads by ID on Reddit, others linked; any image 
   assert.deepEqual(reuseOf(image("https://external-preview.redd.it/b.png"), "Reddit"), {
     upload: "https://external-preview.redd.it/b.png",
   });
-  // A link goes in whatever the subreddit takes in comments.
-  assert.equal(usableIn(lemmy, "Reddit", []), true);
-  assert.equal(usableIn(still, "Reddit", []), false);
-  assert.equal(usableIn(lemmy, "Lemmy", undefined), true);
+  // What the subreddit doesn't take in comments goes in as a link.
+  assert.deepEqual(reuseOf(uploaded, "Reddit", []), { markdown: "[Image](https://preview.redd.it/up1.png?width=100)" });
+  assert.deepEqual(reuseOf(uploadedGif, "Reddit", ["static"]), { markdown: "[GIF](https://i.redd.it/up2.gif)" });
+  assert.deepEqual(reuseOf(gif, "Reddit", ["static", "animated"]), { markdown: "[GIF](https://i.giphy.com/media/g1/giphy.gif)" });
+  assert.deepEqual(reuseOf(still, "Reddit", ["giphy"]), { markdown: "[Image](https://i.redd.it/a.png)" });
+  assert.deepEqual(reuseOf(uploaded, "Reddit", ["static"]), { markdown: "![img](up1)", ref: "up1" });
+  assert.deepEqual(reuseOf(lemmy, "Reddit", []), { markdown: "[Image](https://lemmy.world/pictrs/image/abc.jpeg)" });
+  assert.deepEqual(reuseOf(lemmy, "Lemmy", []), { markdown: "![](https://lemmy.world/pictrs/image/abc.jpeg)" });
 });
 
 test("withLinks swaps only the saved items' IDs for their links", () => {

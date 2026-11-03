@@ -15,7 +15,7 @@ import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
 import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
-import { linkTo, reuseOf, savedKey, usableIn, withLinks, type SavedMedia } from "../lib/savedMedia";
+import { linkTo, reuseOf, savedKey, withLinks, type SavedMedia } from "../lib/savedMedia";
 import { forgetSaved, savedMediaFile, useSavedMedia } from "../lib/savedMediaStore";
 import { readJson, writeJson } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
@@ -131,7 +131,6 @@ export const ReplySheet = ({
   const canUpload =
     canAttach && (!allowed || allowed.includes("static") || allowed.includes("animated"));
   const reuseSite = site.name === "Lemmy" ? "Lemmy" : "Reddit";
-  const usable = saved.filter((item) => usableIn(item, reuseSite, allowed));
 
   useEffect(() => () => uploadUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
@@ -228,7 +227,7 @@ export const ReplySheet = ({
     if (uploading) return;
     const at = cursor();
     setShowSaved(false);
-    const way = reuseOf(item, reuseSite);
+    const way = reuseOf(item, reuseSite, allowed);
     if ("upload" in way) {
       upload(savedMediaFile(way.upload), at);
       return;
@@ -338,8 +337,8 @@ export const ReplySheet = ({
             )}
             {showSaved && !preview ? (
               <div className="reply-saved" role="group" aria-label="Saved GIFs and images">
-                {usable.length ? (
-                  usable.map((item) => (
+                {saved.length ? (
+                  saved.map((item) => (
                     <div className="reply-saved-item" key={savedKey(item)}>
                       <button
                         type="button"
@@ -374,9 +373,7 @@ export const ReplySheet = ({
                   ))
                 ) : (
                   <p className="sub-hint">
-                    {saved.length
-                      ? "Comments here can't have any of your saved GIFs and images."
-                      : "Save GIFs and images from comments with the star in the viewer."}
+                    Save GIFs and images from comments and posts with the star in the viewer.
                   </p>
                 )}
               </div>
