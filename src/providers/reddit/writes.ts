@@ -42,7 +42,26 @@ const readSession = async (fetchFn: Fetch, origin: string): Promise<Session> => 
  * it did nothing, and the same write sent differently can't be a duplicate.
  * A timeout or a 5xx is no refusal: the write may have gone through.
  */
-class Refused extends Error {}
+class Refused extends Error {
+  /** Reddit's error code (`RATELIMIT`, …), when its answer gave one. */
+  code: string;
+  constructor(message: string, code = "") {
+    super(message);
+    this.code = code;
+  }
+}
+
+/**
+ * How long Reddit's rate limit asks to wait ("Take a break for 5 seconds"),
+ * when it is short enough to wait out within a reply: at most 10 seconds.
+ */
+const rateLimitWait = (error: unknown): number | null => {
+  if (!(error instanceof Refused) || error.code !== "RATELIMIT") return null;
+  const seconds = /(\d+)\s*seconds?/i.exec(error.message)?.[1];
+  return seconds && Number(seconds) <= 10 ? (Number(seconds) + 1) * 1000 : null;
+};
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * POST to a Reddit API path, refreshing a stale modhash once. `refused` is
@@ -91,7 +110,10 @@ async function post(
     const body = await response.json().catch(() => ({}));
     const errors = body?.json?.errors;
     if (Array.isArray(errors) && errors.length)
-      throw new Refused(String(errors[0]?.[1] || "Reddit could not complete the request."));
+      throw new Refused(
+        String(errors[0]?.[1] || "Reddit could not complete the request."),
+        String(errors[0]?.[0] ?? ""),
+      );
     return body;
   }
 }
@@ -260,28 +282,38 @@ const commentInfo = async (fetchFn: Fetch, origin: string, name: string) =>
     (comment) => comment.id === name,
   );
 
+/** How long to wait before each further look for a reply Reddit hasn't listed yet. */
+const REPLY_LOOKS = [1500, 3000];
+
 /**
  * The reply just posted to `parent`, from the account's newest comments,
  * for when Reddit's answer doesn't say which comment it created (as with a
  * reply sent as richtext). Only one created since `since` (less a minute
  * for clock skew) counts, so an earlier reply to the same parent isn't
- * taken for it.
+ * taken for it. Reddit can list a new comment a few seconds late, so it
+ * looks again (`REPLY_LOOKS`) before giving up.
  */
 async function newestReply(
   fetchFn: Fetch,
   origin: string,
   parent: string,
   since: number,
+  wait: (ms: number) => Promise<void>,
 ): Promise<CommentNode | undefined> {
   const me = await session?.catch(() => null);
   if (!me?.name) return undefined;
-  const comments = await readComments(fetchFn, origin, `/user/${me.name}/comments.json`, {
-    sort: "new",
-    limit: "10",
-  });
-  return comments.find(
-    (comment) => comment.parentId === parent && comment.createdAt >= since - 60000,
-  );
+  for (let look = 0; ; look++) {
+    const comments = await readComments(fetchFn, origin, `/user/${me.name}/comments.json`, {
+      sort: "new",
+      limit: "10",
+    });
+    const found = comments.find(
+      (comment) => comment.parentId === parent && comment.createdAt >= since - 60000,
+    );
+    const delay = REPLY_LOOKS[look];
+    if (found || delay === undefined) return found;
+    await wait(delay);
+  }
 }
 
 /**
@@ -328,14 +360,17 @@ async function postedComment(
  * Run one allow-listed action; returns only what the reader needs. A reply
  * or edit may carry a `fallback` text (its saved media as links in place of
  * their IDs), sent instead when Reddit refuses the media by ID; `linked`
- * then says so.
+ * then says so, and `reason` is what Reddit said. Sent straight after the
+ * refused reply, the fallback can meet Reddit's limit between comments; when
+ * that asks for a few seconds, it is sent again once they have passed.
  */
 export async function apiAction(
   fetchFn: Fetch,
   origin: string,
   name: unknown,
   args: unknown,
-): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true }> {
+  wait: (ms: number) => Promise<void> = sleep,
+): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true; reason?: string }> {
   if (!isAction(name) || !args || typeof args !== "object") fail();
   const action = ACTIONS[name as string]!;
   const writing = name === "comment" || name === "edit";
@@ -359,16 +394,31 @@ export async function apiAction(
     });
   };
   const sentAt = Date.now();
-  let linked = false;
+  let reason: string | null = null;
   let body: any;
   try {
     body = await send(versions[0]!);
   } catch (error) {
-    // Only the media by ID can differ, so a refusal of plain Markdown stands.
+    // Only the media by ID can differ, so a refusal of plain Markdown, or
+    // Reddit's rate limit, stands.
     const fallback = versions[1];
-    if (!(error instanceof Refused) || !fallback || !hasMediaRef(checked.text ?? "")) throw error;
-    body = await send(fallback);
-    linked = true;
+    if (
+      !(error instanceof Refused) ||
+      error.code === "RATELIMIT" ||
+      !fallback ||
+      !hasMediaRef(checked.text ?? "")
+    )
+      throw error;
+    reason = error.message;
+    try {
+      body = await send(fallback);
+    } catch (limited) {
+      // Refused, so nothing was posted: sending it again can't duplicate it.
+      const ms = rateLimitWait(limited);
+      if (ms === null) throw limited;
+      await wait(ms);
+      body = await send(fallback);
+    }
   }
   const data = body?.json?.data;
   const created = data?.things?.[0]?.data;
@@ -386,12 +436,12 @@ export async function apiAction(
   if (!comment && name === "edit" && target.startsWith("t1_"))
     comment = await commentInfo(fetchFn, origin, target);
   if (!comment && name === "comment" && /^t[13]_/.test(target))
-    comment = await newestReply(fetchFn, origin, target, sentAt);
+    comment = await newestReply(fetchFn, origin, target, sentAt, wait);
   return {
     ...(/^t\d_[a-z0-9]+$/i.test(id) ? { id } : {}),
     ...(url ? { url } : {}),
     ...(comment ? { comment } : {}),
-    ...(linked ? { linked: true as const } : {}),
+    ...(reason !== null ? { linked: true as const, reason } : {}),
   };
 }
 

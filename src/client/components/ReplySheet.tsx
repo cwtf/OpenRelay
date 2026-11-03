@@ -17,7 +17,7 @@ import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
 import { linkTo, redditTakes, reuseOf, savedKey, withLinks, type SavedMedia } from "../lib/savedMedia";
-import { forgetSaved, savedMediaFile, useSavedMedia } from "../lib/savedMediaStore";
+import { forgetSaved, useSavedMedia } from "../lib/savedMediaStore";
 import { readJson, writeJson } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
@@ -90,7 +90,8 @@ type ReplySheetProps = {
   author: string;
   quote: string;
   /** Called with the new comment when Reddit returns it. */
-  onPosted?: (comment: CommentNode) => void;
+  /** The posted comment, or undefined when the site's answer didn't give it. */
+  onPosted?: (comment: CommentNode | undefined) => void;
   /** Edit your own comment or post (`t1_`/`t3_`) instead of replying. */
   editing?: { id: string; text: string };
   onClosed: () => void;
@@ -223,19 +224,12 @@ export const ReplySheet = ({
     upload(Promise.resolve(file), cursor());
   };
 
-  /**
-   * A saved GIF or image: Markdown inserted as it is, or the image fetched and
-   * uploaded again. Called from the click, as fetching may ask for access.
-   */
+  /** A saved GIF or image, inserted as Markdown (see `reuseOf`). */
   const reuse = (item: SavedMedia) => {
     if (uploading) return;
     const at = cursor();
     setShowSaved(false);
     const way = reuseOf(item, reuseSite, allowed);
-    if ("upload" in way) {
-      upload(savedMediaFile(way.upload), at);
-      return;
-    }
     const { ref } = way;
     if (ref) {
       setUploads((current) => ({
@@ -266,12 +260,12 @@ export const ReplySheet = ({
         setText("");
         toast(
           result.linked
-            ? `${editing ? "Edit saved" : "Reply sent"}, with the saved image as a link: ${site.name} wouldn't take it again`
+            ? `${editing ? "Edit saved" : "Reply sent"}, with the saved image as a link: ${site.name} wouldn't take it again${result.reason ? ` ("${result.reason}")` : ""}`
             : editing
               ? "Edit saved"
               : "Reply sent",
         );
-        if (result.comment) onPosted?.(result.comment);
+        onPosted?.(result.comment);
         close();
       })
       .catch((error: unknown) => {

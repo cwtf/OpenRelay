@@ -163,12 +163,13 @@ export type ReaderProvider = {
   fetchWiki(sub: string): Promise<string>;
   /**
    * A validated write, performed by the page with the viewer's session.
-   * `linked`: a reply went in with its `fallback` text (saved media as links).
+   * `linked`: a reply went in with its `fallback` text (saved media as links),
+   * because the site refused the media for `reason`.
    */
   runAction(
     op: string,
     args?: Record<string, unknown>,
-  ): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true }>;
+  ): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true; reason?: string }>;
   /**
    * Uploads an image for a reply, by the page with the viewer's session.
    * `markdown` embeds it; `ref` is the ID or URL that Markdown refers to.

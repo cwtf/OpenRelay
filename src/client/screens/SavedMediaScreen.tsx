@@ -42,14 +42,11 @@ const kindOf = (item: SavedMedia): string => (isAnimated(item) ? "GIF" : "Image"
 /** What a reply on this site does with the item, for its sheet. */
 const reuseNote = (item: SavedMedia): string => {
   if (site.name === "Lemmy") return "Lemmy replies show it inline.";
-  const kind = isAnimated(item) ? "GIFs" : "images";
   switch (redditReuse(item)) {
     case "id":
-      return `Reddit replies show it inline where the community takes ${kind} in comments, and link to it elsewhere.`;
-    case "upload":
-      return `Reddit replies upload it again where the community takes ${kind} in comments, and link to it elsewhere.`;
+      return "Reddit replies show it inline where the community takes Giphy GIFs in comments, and link to it elsewhere.";
     case "link":
-      return "Reddit replies link to it: Reddit shows only images it hosts.";
+      return "Reddit replies link to it: Reddit shows only Giphy GIFs and new uploads inline.";
     case "none":
       return "Reddit replies don't offer it: Reddit shows only images it hosts.";
   }

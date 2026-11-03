@@ -174,43 +174,32 @@ test("allowedIn follows the subreddit's allowed comment media", () => {
   assert.equal(allowedIn(still, []), false);
 });
 
-test("reuseOf: Giphy GIFs and uploads by ID on Reddit, Reddit-hosted ones uploaded; any image URL on Lemmy", () => {
+test("reuseOf: Giphy GIFs by ID on Reddit, other images linked; any image URL on Lemmy", () => {
   const gif = image("https://i.giphy.com/media/g1/giphy.gif", { giphy: "g1" });
   const still = image("https://i.redd.it/a.png");
   const uploaded = image("https://preview.redd.it/up1.png?width=100", { asset: "up1" });
   const uploadedGif = image("https://i.redd.it/up2.gif", { asset: "up2" });
-  assert.deepEqual(reuseOf(gif, "Reddit"), { markdown: "![gif](giphy|g1)", ref: "giphy|g1" });
-  assert.deepEqual(reuseOf(uploaded, "Reddit"), { markdown: "![img](up1)", ref: "up1" });
-  assert.deepEqual(reuseOf(uploadedGif, "Reddit"), { markdown: "![gif](up2)", ref: "up2" });
-  assert.deepEqual(reuseOf(uploaded, "Lemmy"), { markdown: "![](https://preview.redd.it/up1.png?width=100)" });
-  assert.deepEqual(reuseOf(still, "Reddit"), { upload: "https://i.redd.it/a.png" });
-  assert.deepEqual(reuseOf(gif, "Lemmy"), { markdown: "![](https://i.giphy.com/media/g1/giphy.gif)" });
-  assert.deepEqual(reuseOf(still, "Lemmy"), { markdown: "![](https://i.redd.it/a.png)" });
-  // Reddit doesn't offer an image it doesn't host, but links Imgur's; Lemmy shows them.
   const lemmy = image("https://lemmy.world/pictrs/image/abc.jpeg");
   const imgur = image("https://i.imgur.com/c.png");
-  const imgurGif = image("https://i.imgur.com/e.gif");
-  assert.equal(redditTakes(lemmy), false);
-  assert.equal(redditTakes(imgur), true);
-  assert.equal(redditTakes(image("https://notimgur.com/c.png")), false);
+  assert.deepEqual(reuseOf(gif, "Reddit"), { markdown: "![gif](giphy|g1)", ref: "giphy|g1" });
+  // Reddit won't show another account's upload by its ID, so it's linked.
+  assert.deepEqual(reuseOf(uploaded, "Reddit"), { markdown: "[Image](https://preview.redd.it/up1.png?width=100)" });
+  assert.deepEqual(reuseOf(uploadedGif, "Reddit"), { markdown: "[GIF](https://i.redd.it/up2.gif)" });
+  assert.deepEqual(reuseOf(still, "Reddit"), { markdown: "[Image](https://i.redd.it/a.png)" });
   assert.deepEqual(reuseOf(imgur, "Reddit"), { markdown: "[Image](https://i.imgur.com/c.png)" });
-  assert.deepEqual(reuseOf(imgurGif, "Reddit"), { markdown: "[GIF](https://i.imgur.com/e.gif)" });
-  assert.deepEqual(reuseOf(imgur, "Lemmy"), { markdown: "![](https://i.imgur.com/c.png)" });
+  assert.deepEqual(reuseOf(image("https://i.imgur.com/e.gif"), "Reddit"), { markdown: "[GIF](https://i.imgur.com/e.gif)" });
+  // A Giphy GIF the subreddit doesn't take in comments is linked too.
+  assert.deepEqual(reuseOf(gif, "Reddit", ["static", "animated"]), { markdown: "[GIF](https://i.giphy.com/media/g1/giphy.gif)" });
+  assert.deepEqual(reuseOf(gif, "Reddit", ["giphy"]), { markdown: "![gif](giphy|g1)", ref: "giphy|g1" });
+  // Lemmy shows them all.
+  for (const item of [gif, uploaded, still, lemmy, imgur])
+    assert.deepEqual(reuseOf(item, "Lemmy", []), { markdown: `![](${item.url})` });
+  // Reddit doesn't offer an image from anywhere but its hosts, Imgur's and Giphy's.
+  assert.equal(redditTakes(lemmy), false);
+  assert.equal(redditTakes(image("https://notimgur.com/c.png")), false);
+  assert.equal(redditTakes(imgur), true);
   assert.equal(redditTakes(still), true);
   assert.equal(redditTakes(gif), true);
-  assert.equal(redditTakes(image("https://lemmy.world/pictrs/image/d.png", { asset: "d1" })), true);
-  assert.deepEqual(reuseOf(lemmy, "Lemmy"), { markdown: "![](https://lemmy.world/pictrs/image/abc.jpeg)" });
-  assert.deepEqual(reuseOf(image("https://external-preview.redd.it/b.png"), "Reddit"), {
-    upload: "https://external-preview.redd.it/b.png",
-  });
-  // What the subreddit doesn't take in comments goes in as a link.
-  assert.deepEqual(reuseOf(uploaded, "Reddit", []), { markdown: "[Image](https://preview.redd.it/up1.png?width=100)" });
-  assert.deepEqual(reuseOf(uploadedGif, "Reddit", ["static"]), { markdown: "[GIF](https://i.redd.it/up2.gif)" });
-  assert.deepEqual(reuseOf(gif, "Reddit", ["static", "animated"]), { markdown: "[GIF](https://i.giphy.com/media/g1/giphy.gif)" });
-  assert.deepEqual(reuseOf(still, "Reddit", ["giphy"]), { markdown: "[Image](https://i.redd.it/a.png)" });
-  assert.deepEqual(reuseOf(uploaded, "Reddit", ["static"]), { markdown: "![img](up1)", ref: "up1" });
-  assert.deepEqual(reuseOf(lemmy, "Reddit", []), { markdown: "[Image](https://lemmy.world/pictrs/image/abc.jpeg)" });
-  assert.deepEqual(reuseOf(lemmy, "Lemmy", []), { markdown: "![](https://lemmy.world/pictrs/image/abc.jpeg)" });
 });
 
 test("withLinks swaps only the saved items' IDs for their links", () => {
@@ -237,8 +226,8 @@ test("savedSource, isAnimated and redditReuse describe an item for the manage sc
     [gif, upload, reddit, lemmy, imgur].map((item) => [savedSource(item), isAnimated(item), redditReuse(item)]),
     [
       ["Giphy", true, "id"],
-      ["Reddit", false, "id"],
-      ["Reddit", false, "upload"],
+      ["Reddit", false, "link"],
+      ["Reddit", false, "link"],
       ["lemmy.world", true, "none"],
       ["i.imgur.com", false, "link"],
     ],

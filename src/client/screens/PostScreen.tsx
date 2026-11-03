@@ -648,6 +648,11 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
         quote={quote}
         onClosed={onClosed}
         onPosted={(posted) => {
+          // Not found in Reddit's answer or listings: show the thread afresh.
+          if (!posted) {
+            void load(sort, limit, true);
+            return;
+          }
           const comment = {
             ...posted,
             isSubmitter: Boolean(post && posted.author === post.author),
@@ -700,11 +705,13 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
           editing={{ id: node.id, text: decodeEntities(node.body) }}
           onClosed={onClosed}
           onPosted={(updated) =>
-            setTree((current) =>
-              current
-                ? mapTree(current, node.id, (n) => ({ ...n, body: updated.body, edited: true }))
-                : current,
-            )
+            updated
+              ? setTree((current) =>
+                  current
+                    ? mapTree(current, node.id, (n) => ({ ...n, body: updated.body, edited: true }))
+                    : current,
+                )
+              : void load(sort, limit, true)
           }
         />
       )),

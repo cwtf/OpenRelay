@@ -393,18 +393,48 @@ test("finds a reply Reddit's answer leaves out among the account's newest commen
 
 test("takes no earlier reply to the same parent for the one just posted", async () => {
   resetWrites();
-  const { fetchFn } = fakeReddit((url) =>
+  const { calls, fetchFn } = fakeReddit((url) =>
     url.pathname === "/api/me.json"
       ? json({ data: { modhash: "abc123modhash", id: "me42", name: "SylviaJarvis" } })
       : url.pathname === "/user/SylviaJarvis/comments.json"
         ? json({ data: { children: [myComment("old1", "t1_abc", Date.now() / 1000 - 3600)] } })
         : json({ json: { errors: [], data: {} } }),
   );
-  const result = await apiAction(fetchFn, origin, "comment", {
-    parent: "t1_abc",
-    text: "![gif](giphy|abc)",
-  });
+  const waits: number[] = [];
+  const result = await apiAction(
+    fetchFn,
+    origin,
+    "comment",
+    { parent: "t1_abc", text: "![gif](giphy|abc)" },
+    async (ms) => void waits.push(ms),
+  );
   assert.equal(result.comment, undefined);
+  // Looked three times, a little longer apart each time, before giving up.
+  assert.deepEqual(waits, [1500, 3000]);
+  assert.equal(calls.filter((call) => new URL(call.url).pathname.endsWith("/comments.json")).length, 3);
+});
+
+test("looks again for a reply Reddit lists a few seconds late", async () => {
+  resetWrites();
+  const now = Math.floor(Date.now() / 1000);
+  let looks = 0;
+  const { fetchFn } = fakeReddit((url) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash", id: "me42", name: "SylviaJarvis" } })
+      : url.pathname === "/user/SylviaJarvis/comments.json"
+        ? json({ data: { children: looks++ ? [myComment("late1", "t1_abc", now)] : [] } })
+        : json({ json: { errors: [], data: {} } }),
+  );
+  const waits: number[] = [];
+  const result = await apiAction(
+    fetchFn,
+    origin,
+    "comment",
+    { parent: "t1_abc", text: "![gif](giphy|abc)" },
+    async (ms) => void waits.push(ms),
+  );
+  assert.equal(result.comment?.id, "t1_late1");
+  assert.deepEqual(waits, [1500]);
 });
 
 const IMAGE = { name: "image.png", type: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
@@ -513,7 +543,10 @@ test("sends the fallback with links when Reddit refuses a reply's media by ID", 
     text: "Look\n\n![img](asset123)\n\n",
     fallback: "Look\n\n[Image](https://i.redd.it/asset123.png)\n\n",
   };
-  assert.deepEqual(await apiAction(fetchFn, origin, "comment", args), { linked: true });
+  assert.deepEqual(await apiAction(fetchFn, origin, "comment", args), {
+    linked: true,
+    reason: "That media can't be used here.",
+  });
   const comments = calls.filter((call) => new URL(call.url).pathname === "/api/comment");
   assert.equal(comments.length, 2);
   assert.ok(sent(comments[0]!).richtext_json);
@@ -536,6 +569,33 @@ test("sends the fallback with links when Reddit refuses a reply's media by ID", 
     /Take a break/,
   );
   assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 1);
+  // Reddit's rate limit on the reply itself isn't about its media: no fallback.
+  calls.length = 0;
+  await assert.rejects(apiAction(fetchFn, origin, "comment", args), /Take a break/);
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 1);
+  // A fallback Reddit asks to wait a few seconds for is sent again after them.
+  let limited = 1;
+  answer = (body) =>
+    body.richtext_json
+      ? json({ json: { errors: [["BAD_MEDIA", "That media can't be used here.", "richtext_json"]] } })
+      : limited-- > 0
+        ? json({ json: { errors: [["RATELIMIT", "Take a break for 5 seconds before trying again.", "ratelimit"]] } })
+        : json({ json: { errors: [], data: { things: [] } } });
+  const waits: number[] = [];
+  const wait = async (ms: number) => void waits.push(ms);
+  calls.length = 0;
+  assert.equal((await apiAction(fetchFn, origin, "comment", args, wait)).linked, true);
+  assert.deepEqual(waits, [6000]);
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 3);
+  // A longer wait isn't waited out.
+  answer = (body) =>
+    body.richtext_json
+      ? json({ json: { errors: [["BAD_MEDIA", "That media can't be used here.", "richtext_json"]] } })
+      : json({ json: { errors: [["RATELIMIT", "Take a break for 9 minutes before trying again.", "ratelimit"]] } });
+  calls.length = 0;
+  await assert.rejects(apiAction(fetchFn, origin, "comment", args, wait), /9 minutes/);
+  assert.deepEqual(waits, [6000]);
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 2);
   // The fallback is checked like the text, before any request.
   calls.length = 0;
   await assert.rejects(apiAction(fetchFn, origin, "comment", { ...args, fallback: 5 }));

@@ -508,22 +508,8 @@ try {
     await page.keyboard.press("Escape");
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
-  // The extension's prompt for Reddit's image hosts can't be answered here;
-  // grant them as chrome://extensions' Site access does.
-  const extensions = await context.newPage();
-  await extensions.goto("chrome://extensions/");
-  await extensions.evaluate(async (id) => {
-    for (const host of [
-      "i.redd.it",
-      "preview.redd.it",
-      "external-preview.redd.it",
-      "a.thumbs.redditmedia.com",
-      "b.thumbs.redditmedia.com",
-    ])
-      await chrome.developerPrivate.addHostPermission(id, `https://${host}/*`);
-  }, new URL(app.url()).host);
-  await extensions.close();
-  // r/test takes images but not Giphy GIFs: everything saved is offered, the GIF as a link.
+  // r/test takes images but not Giphy GIFs: everything saved is offered, as
+  // links, since Reddit won't show another account's upload by its ID.
   const uploaded = uploads.length;
   const written = writes.length;
   box = await openReply();
@@ -534,42 +520,22 @@ try {
     assert.equal(await saved.count(), 4);
     await saved.locator(`img[src="${src}"]`).click();
   };
-  // One uploaded to a comment goes back by Reddit's asset ID, with nothing
-  // uploaded or sent until the reply is.
-  await pickSaved("https://i.redd.it/upload.png");
-  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
-  assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
+  for (const src of ["https://i.redd.it/upload.png", linkedUpload, linkedOther]) {
+    await box.fill("");
+    await pickSaved(src);
+    await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("[Image]("));
+    assert.equal(await box.inputValue(), `[Image](${src})\n\n`);
+  }
+  // Nothing is fetched or uploaded, and the reply goes as plain Markdown.
   assert.equal(uploads.length, uploaded);
   assert.equal(writes.length, written);
-  await app.getByRole("button", { name: "Preview" }).click();
-  await app.locator('.reply-preview img[src="https://i.redd.it/upload.png"]').waitFor();
-  await app.getByRole("button", { name: "Edit" }).click();
-  // So does one linked from Reddit's image hosts, as Reddit's apps write a
-  // comment's image: the file name is its ID.
-  await box.fill("");
-  await pickSaved(linkedUpload);
-  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
-  assert.equal(await box.inputValue(), "![img](linkedasset1)\n\n");
-  assert.equal(uploads.length, uploaded);
-  assert.equal(writes.length, written);
-  // When Reddit refuses the ID, the reply goes again with the image linked.
   await app.getByRole("button", { name: "Send", exact: true }).click();
-  await app.locator(".toast", { hasText: "with the saved image as a link" }).waitFor();
-  assert.deepEqual(
-    writes.slice(written).map((write) => [write.path, write.body.text ?? "richtext"]),
-    [
-      ["/api/comment", "richtext"],
-      ["/api/comment", `[Image](${linkedUpload})\n\n`],
-    ],
-  );
   await app.locator(".sheet").waitFor({ state: "detached" });
+  assert.deepEqual(
+    writes.slice(written).map((write) => [write.path, write.body.text]),
+    [["/api/comment", `[Image](${linkedOther})\n\n`]],
+  );
   box = await openReply();
-  // Any other linked image is fetched again and uploaded as a new attachment.
-  await pickSaved(linkedOther);
-  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
-  assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
-  assert.equal(uploads.length, uploaded + 1);
-  assert.equal(writes.at(-1).path, "/api/media/asset.json");
   // The Giphy GIF r/test doesn't take goes in as a link.
   await box.fill("");
   await app.getByRole("button", { name: "Saved GIFs and images" }).click();

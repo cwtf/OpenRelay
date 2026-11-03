@@ -623,11 +623,22 @@ async function fetchWiki(sub: string): Promise<string> {
 }
 
 /** A validated write performed by the Reddit tab with the viewer's session. */
+/**
+ * A reply or edit may be sent twice (its media as links) with Reddit's
+ * rate limit waited out in between, so it gets longer than other writes.
+ */
+const WRITE_TIMEOUT = 60000;
+
 const runAction = (
   op: string,
   args: Record<string, unknown> = {},
-): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true }> =>
-  bridge("action", undefined, { op, args });
+): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true; reason?: string }> =>
+  bridge(
+    "action",
+    undefined,
+    { op, args },
+    op === "comment" || op === "edit" ? WRITE_TIMEOUT : undefined,
+  );
 
 /** An image for a reply, uploaded by the Reddit tab: `![img](<asset id>)`. */
 async function uploadImage(file: Blob): Promise<{ markdown: string; ref: string }> {
