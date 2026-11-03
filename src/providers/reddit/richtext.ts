@@ -165,13 +165,12 @@ function inline(text: string, f = 0): Inline[] {
 }
 
 /**
- * Media by ID, a block of its own. Reddit names a Giphy GIF in a comment
- * `giphy|<id>|downsized` (its `media_metadata` key), so a bare one gets that.
+ * Media by ID, a block of its own, as the reply names it. A Giphy GIF stays
+ * a bare `giphy|<id>`, as Reddit's own GIF picker writes most of them: Reddit
+ * answers `giphy|<id>|downsized` with a 500 when Giphy has no downsized copy
+ * of that GIF (it makes one only for a GIF over 2 MB).
  */
-const media = (kind: string, id: string): Rich => ({
-  e: kind,
-  id: /^giphy\|[A-Za-z0-9]+$/.test(id) ? `${id}|downsized` : id,
-});
+const media = (kind: string, id: string): Rich => ({ e: kind, id });
 
 /** A paragraph, split around the media it refers to. */
 function paragraph(text: string): Rich[] {

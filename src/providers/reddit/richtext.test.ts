@@ -12,9 +12,10 @@ test("finds media by ID, not images linked by URL or emotes", () => {
   assert.equal(hasMediaRef("no media"), false);
 });
 
-test("puts media in blocks of their own, a bare Giphy GIF downsized as Reddit names it", () => {
-  assert.deepEqual(doc("![gif](giphy|hMN4LbnxS2tMY29Vc1)"), [
-    { e: "gif", id: "giphy|hMN4LbnxS2tMY29Vc1|downsized" },
+test("puts media in blocks of their own, a Giphy GIF named as the reply names it", () => {
+  // Bare: Reddit fails on `|downsized` for a GIF Giphy has no downsized copy of.
+  assert.deepEqual(doc("![gif](giphy|WRQBXSCnEFJIuxktnw)"), [
+    { e: "gif", id: "giphy|WRQBXSCnEFJIuxktnw" },
   ]);
   assert.deepEqual(doc("Before ![img](asset1) after\n\n![gif](giphy|g1|downsized)"), [
     { e: "par", c: [{ e: "text", t: "Before" }] },
