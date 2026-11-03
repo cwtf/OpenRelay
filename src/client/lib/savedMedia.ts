@@ -141,6 +141,73 @@ export const withSaved = (list: SavedMedia[], item: SavedMedia): SavedMedia[] =>
 export const withoutSaved = (list: SavedMedia[], ...keys: string[]): SavedMedia[] =>
   list.filter((item) => !keys.includes(savedKey(item)));
 
+/** The saved list as text, one key per line (`savedKey`): what Edit as text shows. */
+export const savedText = (list: SavedMedia[]): string => list.map(savedKey).join("\n");
+
+export type SavedTextResult = {
+  /** The list the text describes, at most `SAVED_MEDIA_MAX`. */
+  items: SavedMedia[];
+  /** Lines (from 1) that are neither an https link nor `giphy:<id>`. */
+  errors: number[];
+  /** Lines that repeat an earlier one, with that line: kept once. */
+  repeats: [line: number, first: number][];
+  /** Items past `SAVED_MEDIA_MAX`, left out. */
+  dropped: number;
+};
+
+/**
+ * Edit as text read back: one item per line, in order, as `savedText`
+ * writes them. A line already in `list` keeps its entry (saved date, size,
+ * MP4); a new one is saved `now`, a Reddit-hosted image with the asset ID in
+ * its file name as when saved from a comment. Blank lines are skipped.
+ */
+export function parseSavedText(text: string, list: SavedMedia[], now: number): SavedTextResult {
+  const known = new Map(list.map((item) => [savedKey(item), item]));
+  const first = new Map<string, number>();
+  const items: SavedMedia[] = [];
+  const errors: number[] = [];
+  const repeats: [number, number][] = [];
+  text.split("\n").forEach((raw, index) => {
+    const line = raw.trim();
+    if (!line) return;
+    const giphy = /^giphy:(.+)$/.exec(line)?.[1];
+    const item =
+      known.get(line) ??
+      (giphy !== undefined
+        ? GIPHY_ID.test(giphy)
+          ? { giphy, url: giphyGif(giphy), mp4: giphyMp4(giphy), width: 0, height: 0, savedAt: now }
+          : null
+        : savableMedia(line, line, undefined, now));
+    if (!item) return errors.push(index + 1);
+    const key = savedKey(item);
+    const seen = first.get(key);
+    if (seen !== undefined) return repeats.push([index + 1, seen]);
+    first.set(key, index + 1);
+    items.push(item);
+  });
+  return {
+    items: items.slice(0, SAVED_MEDIA_MAX),
+    errors,
+    repeats,
+    dropped: Math.max(0, items.length - SAVED_MEDIA_MAX),
+  };
+}
+
+/** What saving `after` over `before` changes, for the confirmation. */
+export function savedChanges(
+  before: SavedMedia[],
+  after: SavedMedia[],
+): { added: number; removed: number; reordered: boolean } {
+  const was = before.map(savedKey);
+  const now = after.map(savedKey);
+  const kept = (keys: string[], other: string[]) => keys.filter((key) => other.includes(key)).join("\n");
+  return {
+    added: now.filter((key) => !was.includes(key)).length,
+    removed: was.filter((key) => !now.includes(key)).length,
+    reordered: kept(was, now) !== kept(now, was),
+  };
+}
+
 export const isAnimated = (item: SavedMedia): boolean =>
   !!item.giphy || !!item.mp4 || /\.gif(?:\?|$)/i.test(item.url);
 

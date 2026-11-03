@@ -54,6 +54,8 @@ export type Nav = {
   openOffline: () => void;
   /** GIFs and images saved for replies. */
   openSavedMedia: () => void;
+  /** That list as plain text, one item per line. */
+  openSavedMediaText: () => void;
   openSubmit: (sub?: string, kind?: "self" | "link") => void;
   openCompose: (draft?: { to?: string; subject?: string }) => void;
   back: () => void;

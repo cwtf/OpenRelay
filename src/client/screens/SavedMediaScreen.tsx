@@ -259,8 +259,8 @@ export const SavedMediaScreen = () => {
       title="Saved GIFs & images"
       subtitle={saved.length ? `${saved.length} saved` : "None saved"}
       actions={
-        saved.length ? (
-          <>
+        <>
+          {saved.length ? (
             <button
               type="button"
               className="icon-btn"
@@ -271,6 +271,18 @@ export const SavedMediaScreen = () => {
             >
               <Icon name="checkCircle" />
             </button>
+          ) : null}
+          <button
+            type="button"
+            className="icon-btn"
+            data-ripple
+            aria-label="Edit as text"
+            title="Edit as text"
+            onClick={nav.openSavedMediaText}
+          >
+            <Icon name="edit" />
+          </button>
+          {saved.length ? (
             <button
               type="button"
               className="icon-btn"
@@ -287,8 +299,8 @@ export const SavedMediaScreen = () => {
             >
               <Icon name="trash" />
             </button>
-          </>
-        ) : null
+          ) : null}
+        </>
       }
     />
   );

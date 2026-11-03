@@ -4080,6 +4080,118 @@ button.appbar-title {
   flex: none;
 }
 
+/* Edit as text: the saved list, one item per line. */
+.saved-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.saved-text .saved-sheet-note {
+  margin-top: 12px;
+}
+
+.saved-text .saved-sheet-note code {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.saved-text-field {
+  flex: 1;
+  min-height: 50vh;
+  margin: 6px 16px 0;
+  padding: 12px 14px;
+  resize: none;
+  border: 1px solid var(--outline);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: pre;
+  overflow: auto;
+}
+
+.saved-text-field:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.saved-text-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 16px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.saved-text-problems li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.saved-text-problems li.is-error {
+  color: var(--warn);
+}
+
+.saved-text-problems .icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* Right-aligned, clear of the page's Original Reddit button. */
+.saved-text-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px 10px 16px;
+}
+
+.saved-text-tools .btn {
+  gap: 8px;
+}
+
+.saved-text-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14.5px;
+}
+
+.saved-text-changes li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.saved-text-changes .glyph {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.saved-text-changes .is-added .glyph {
+  background: var(--primary-soft);
+  color: var(--on-primary-soft);
+}
+
+.saved-text-changes .is-removed .glyph {
+  color: var(--admin);
+}
+
 /* A drawer item's plain count, like the saved list's size. */
 .drawer-num {
   flex: none;

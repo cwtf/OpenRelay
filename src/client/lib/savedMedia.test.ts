@@ -12,6 +12,9 @@ import {
   savableMedia,
   savablePostMedia,
   linkTo,
+  parseSavedText,
+  savedChanges,
+  savedText,
   withLinks,
   savedKey,
   withSaved,
@@ -228,4 +231,42 @@ test("savedSource, isAnimated and redditReuse describe an item for the manage sc
       ["lemmy.world", true, "link"],
     ],
   );
+});
+
+test("savedText and parseSavedText round-trip the list, keeping each kept entry", () => {
+  const gif = image(giphyGif("g1"), { giphy: "g1", mp4: "https://i.giphy.com/media/g1/giphy.mp4", width: 4, height: 3 });
+  const upload = image("https://i.redd.it/abc12.png", { asset: "abc12", width: 8, height: 6 });
+  const text = savedText([gif, upload]);
+  assert.equal(text, "giphy:g1\nhttps://i.redd.it/abc12.png");
+  assert.deepEqual(parseSavedText(text, [gif, upload], 99), { items: [gif, upload], errors: [], repeats: [], dropped: 0 });
+
+  const edited = [
+    "https://i.redd.it/abc12.png",
+    "",
+    "  giphy:new2  ",
+    "imgur.com/x.gif",
+    "giphy:bad id",
+    "https://i.redd.it/def34.gif",
+    "https://lemmy.world/pictrs/image/x.webp",
+    "https://i.redd.it/abc12.png",
+  ].join("\n");
+  const result = parseSavedText(edited, [gif, upload], 99);
+  assert.deepEqual(result.items, [
+    upload,
+    { giphy: "new2", url: giphyGif("new2"), mp4: "https://i.giphy.com/media/new2/giphy.mp4", width: 0, height: 0, savedAt: 99 },
+    { asset: "def34", url: "https://i.redd.it/def34.gif", width: 0, height: 0, savedAt: 99 },
+    { url: "https://lemmy.world/pictrs/image/x.webp", width: 0, height: 0, savedAt: 99 },
+  ]);
+  assert.deepEqual(result.errors, [4, 5]);
+  assert.deepEqual(result.repeats, [[8, 1]]);
+
+  const many = Array.from({ length: SAVED_MEDIA_MAX + 2 }, (_, i) => `https://x.example/${i}.png`).join("\n");
+  const capped = parseSavedText(many, [], 1);
+  assert.equal(capped.items.length, SAVED_MEDIA_MAX);
+  assert.equal(capped.dropped, 2);
+
+  assert.deepEqual(savedChanges([gif, upload], result.items), { added: 3, removed: 1, reordered: false });
+  const c = image("https://x.example/c.png");
+  assert.deepEqual(savedChanges([gif, upload, c], [upload, gif]), { added: 0, removed: 1, reordered: true });
+  assert.deepEqual(savedChanges([gif, upload], [gif, upload]), { added: 0, removed: 0, reordered: false });
 });

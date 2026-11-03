@@ -67,6 +67,9 @@ export const forgetSaved = (...items: SavedMedia[]): void =>
 
 export const forgetAllSaved = (): void => store([]);
 
+/** The whole list, as Edit as text saves it (see `parseSavedText`). */
+export const replaceSaved = (list: SavedMedia[]): void => store(list);
+
 /** Puts a saved item first, where the composer lists it first. */
 export const moveSavedToFront = (item: SavedMedia): void => store(withSaved(savedMedia(), item));
 
