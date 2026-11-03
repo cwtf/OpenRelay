@@ -272,7 +272,7 @@ try {
     await app
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
-    ["lemmy.world", "Profile", "Inbox", "New Post", "User", "Save feed for offline", "Saved for offline", "Settings"],
+    ["lemmy.world", "Profile", "Inbox", "New Post", "User", "Save feed for offline", "Saved for offline", "Saved GIFs & images", "Settings"],
   );
   await page.screenshot({ path: resolve(out, "lemmy-drawer.png") });
   await app.locator("body").press("Escape");
