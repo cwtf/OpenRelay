@@ -327,6 +327,13 @@ export const linkTo = (item: SavedMedia): string =>
 export const redditTakes = (item: SavedMedia): boolean => !!item.giphy;
 
 /**
+ * Whether `site`'s pages offer to save the item: on Reddit only what a
+ * Reddit reply takes (`redditTakes`), elsewhere anything.
+ */
+export const savableOn = (item: SavedMedia, site: string): boolean =>
+  site !== "Reddit" || redditTakes(item);
+
+/**
  * How a saved item goes into a reply, as Markdown. Reddit takes a Giphy GIF
  * back by its ID where the community takes Giphy GIFs in comments, and as a
  * link elsewhere (`allowed`, see `allowedIn`); it offers nothing else (see

@@ -17,7 +17,7 @@ import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
 import { age, compact, duration, fullDate } from '../lib/format';
 import { openUrl } from '../lib/platform';
-import { savablePostMedia, type SavedMedia } from '../lib/savedMedia';
+import { savablePostMedia, savableOn, type SavedMedia } from '../lib/savedMedia';
 import type { SaveState } from '../lib/saveProgress';
 import { Icon, type IconName } from './Icon';
 
@@ -176,7 +176,7 @@ export const viewerItemsFor = (post: PostSummary): ViewerItem[] => {
   const savedAt = Date.now();
   return postViewerItems(post).map((item, index) => {
     const save = savablePostMedia(post, index, savedAt);
-    return save ? { ...item, save } : item;
+    return save && savableOn(save, site.name) ? { ...item, save } : item;
   });
 };
 

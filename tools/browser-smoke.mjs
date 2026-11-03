@@ -492,18 +492,33 @@ try {
   const posted = app.locator('[data-cid="t1_mine2"]');
   await posted.locator('img[src="https://i.redd.it/upload.png"]').waitFor();
   await app.locator(".sheet").waitFor({ state: "detached" });
-  // Its images and GIF can be saved from the viewer, to reuse in replies.
+  // On Reddit only its Giphy GIF can be saved from the viewer, to reuse in
+  // replies: Reddit shows another account's image only as a link.
   const linkedUpload = "https://preview.redd.it/linkedasset1.png?width=216&format=png";
   const linkedOther = "https://i.redd.it/not-an-upload.png";
-  for (const src of [linkedOther, linkedUpload, "https://i.redd.it/upload.png", "https://www.reddit.com/img/gif.png"]) {
+  for (const src of [linkedOther, linkedUpload, "https://i.redd.it/upload.png"]) {
     await posted.locator(`img[src="${src}"]`).click();
-    await app.getByRole("button", { name: "Save for replies" }).click();
-    await app.locator(".toast", { hasText: "Saved for replies" }).last().waitFor();
+    await app.locator(".viewer").waitFor();
+    assert.equal(await app.getByRole("button", { name: "Save for replies" }).count(), 0, src);
     await page.keyboard.press("Escape");
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
-  // Reddit replies offer only the Giphy GIF for now: Reddit shows another
-  // account's image only as a link.
+  await posted.locator('img[src="https://www.reddit.com/img/gif.png"]').click();
+  await app.getByRole("button", { name: "Save for replies" }).click();
+  await app.locator(".toast", { hasText: "Saved for replies" }).last().waitFor();
+  await page.keyboard.press("Escape");
+  await app.locator(".viewer").waitFor({ state: "detached" });
+  // Images saved on Lemmy share the list (written here as if saved there).
+  await app.evaluate(async (images) => {
+    const key = "openrelay:saved-media";
+    const list = (await chrome.storage.local.get(key))[key];
+    await chrome.storage.local.set({ [key]: [...list, ...images] });
+  }, [
+    { asset: "fixtureasset1", url: "https://i.redd.it/upload.png", width: 1, height: 1, savedAt: 3 },
+    { asset: "linkedasset1", url: linkedUpload, width: 0, height: 0, savedAt: 2 },
+    { url: linkedOther, width: 0, height: 0, savedAt: 1 },
+  ]);
+  // Reddit replies offer only the Giphy GIF for now.
   box = await openReply();
   await app.getByRole("button", { name: "Saved GIFs and images" }).click();
   await app.locator(".reply-saved-pick").first().waitFor();
@@ -1003,7 +1018,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer, only the GIF offered again, as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, only a comment's GIF saveable from the viewer on Reddit and offered again, as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

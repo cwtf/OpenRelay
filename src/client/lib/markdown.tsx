@@ -20,7 +20,7 @@ import {
 import { Icon } from '../components/Icon';
 import { site } from './api';
 import { toast } from './platform';
-import { bodyMedia, savableMedia, type SavedMedia } from './savedMedia';
+import { bodyMedia, savableMedia, savableOn, type SavedMedia } from './savedMedia';
 import { isSaved, toggleSaved, useSavedMedia } from './savedMediaStore';
 import { decodeEntities, parseBlocks, type Block } from './markdownParser';
 
@@ -254,7 +254,7 @@ const InlineImage = ({
     return <Link href={url}>{alt || url}</Link>;
   }
   const shown = media && size ? { ...media, ...size } : media;
-  const save = savableMedia(target, url, shown, Date.now()) ?? undefined;
+  const save = savableHere(target, url, shown);
   return (
     <span className="md-media">
       <button
@@ -262,11 +262,7 @@ const InlineImage = ({
         className="md-image"
         onClick={(event) => {
           event.stopPropagation();
-          onImage(
-            url,
-            shown,
-            savableMedia(target, url, shown, Date.now()) ?? undefined
-          );
+          onImage(url, shown, savableHere(target, url, shown));
         }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -395,7 +391,17 @@ export const savableInBody = (
     media,
     { isEmbedded: isEmbeddedImage, isInline: isInlineImage, giphyGifs },
     Date.now()
-  );
+  ).filter((item) => savableOn(item, site.name));
+
+/** What an image in a comment would be saved as, if this site offers to. */
+const savableHere = (
+  target: string,
+  url: string,
+  media: InlineMedia | undefined
+): SavedMedia | undefined => {
+  const item = savableMedia(target, url, media, Date.now());
+  return item && savableOn(item, site.name) ? item : undefined;
+};
 
 const Highlighted = ({ text }: { text: string }) => {
   const { highlight } = useContext(MarkdownContext);

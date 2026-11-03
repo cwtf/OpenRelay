@@ -7,6 +7,7 @@ import {
   giphyGif,
   isAnimated,
   redditTakes,
+  savableOn,
   savedSource,
   parseSavedMedia,
   reuseOf,
@@ -186,6 +187,10 @@ test("reuseOf: only Giphy GIFs on Reddit, by ID; any image URL on Lemmy", () => 
   // Reddit replies offer no saved image for now: Reddit shows another account's only as a link.
   for (const item of [still, named, lemmy, imgur]) assert.equal(redditTakes(item), false);
   assert.equal(redditTakes(gif), true);
+  // Nor does Reddit offer to save them; Lemmy does.
+  assert.equal(savableOn(still, "Reddit"), false);
+  assert.equal(savableOn(gif, "Reddit"), true);
+  assert.equal(savableOn(still, "Lemmy"), true);
   // Lemmy shows them all.
   for (const item of [gif, still, named, lemmy, imgur])
     assert.deepEqual(reuseOf(item, "Lemmy", []), { markdown: `![](${item.url})` });

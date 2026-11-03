@@ -146,8 +146,9 @@ try {
     assert.ok(fills, `${name} fills one axis (${box.width}x${box.height})`);
     assert.ok(Math.abs(box.width / box.height - w / h) < 0.02, `${name} keeps its aspect ratio`);
     await page.screenshot({ path: resolve(out, `viewer-${name}.png`) });
-    // A post's image can be saved for replies.
-    await app.getByRole("button", { name: "Save for replies" }).waitFor();
+    // On Reddit a post's image can't be saved for replies: Reddit shows
+    // another account's image only as a link.
+    assert.equal(await app.getByRole("button", { name: "Save for replies" }).count(), 0);
     await app.locator("body").press("Escape");
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
@@ -274,7 +275,7 @@ try {
 
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); post images (not videos) and comment GIFs can be saved for replies; comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link; a comment's video shows as a tile that plays its v.redd.it stream.",
+    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); on Reddit only comment GIFs (not post images or videos) can be saved for replies; comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link; a comment's video shows as a tile that plays its v.redd.it stream.",
   );
 } finally {
   await context.close();
