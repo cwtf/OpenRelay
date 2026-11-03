@@ -16,6 +16,7 @@ import {
   commentVideoStream,
   isInlineImage,
   normaliseHref,
+  unescapeUrl,
 } from './links';
 import { Icon } from '../components/Icon';
 import { site } from './api';
@@ -380,6 +381,14 @@ const PICTRS_IMAGE =
 const isEmbeddedImage = (url: string): boolean =>
   isInlineImage(url) || (site.name === 'Lemmy' && PICTRS_IMAGE.test(url));
 
+/** A link to a picture or a comment's video, shown as the media itself. */
+const linkedMedia = (url: string): ReactNode => {
+  const video = commentVideoId(url);
+  if (video) return <CommentVideo url={url} id={video} />;
+  if (isInlineImage(url)) return <InlineImage url={url} alt="" />;
+  return null;
+};
+
 /** What a comment's body shows that can be saved for replies (see `bodyMedia`). */
 export const savableInBody = (
   source: string,
@@ -458,30 +467,29 @@ const RULES: InlineRule[] = [
   },
   {
     re: /\[((?:\\.|[^[\]\\]|\[[^\]]*\])*)\]\(\s*<?([^\s)>]+(?:\([^\s)]*\)[^\s)>]*)?)>?(?:\s+["'][^"']*["'])?\s*\)/,
-    render: (m, key) => (
-      <Link key={key} href={m[2] ?? ''}>
-        {inline(m[1] || (m[2] ?? ''), key)}
-      </Link>
-    ),
+    render: (m, key) => {
+      // `[<url>](<url>)`, as Reddit's editor writes a pasted link, shows
+      // like the bare URL.
+      const media =
+        /^https?:\/\//i.test(m[1] ?? '') && linkedMedia(unescapeUrl(m[2] ?? ''));
+      if (media) return <span key={key}>{media}</span>;
+      return (
+        <Link key={key} href={m[2] ?? ''}>
+          {inline(m[1] || (m[2] ?? ''), key)}
+        </Link>
+      );
+    },
   },
   {
     re: /https?:\/\/[^\s<>[\]]+/,
     render: (m, key) => {
       const url = trimUrl(m[0]);
       const rest = m[0].slice(url.length);
-      const video = commentVideoId(url);
-      if (video) {
+      const media = linkedMedia(unescapeUrl(url));
+      if (media) {
         return (
           <span key={key}>
-            <CommentVideo url={url} id={video} />
-            {rest}
-          </span>
-        );
-      }
-      if (isInlineImage(url)) {
-        return (
-          <span key={key}>
-            <InlineImage url={url} alt="" />
+            {media}
             {rest}
           </span>
         );

@@ -40,10 +40,18 @@ export const resolveLink = (href: string): LinkTarget | null => {
   return { kind: 'external', url: absolute };
 };
 
+/** Reddit's image hosts (`external-preview` keeps its copies of other sites' pictures and GIFs) and Imgur's. */
 const IMAGE_URL =
-  /^https:\/\/(i\.redd\.it|preview\.redd\.it|i\.imgur\.com)\/[^\s]+\.(jpe?g|png|gif|webp)(\?[^\s]*)?$/i;
+  /^https:\/\/(i\.redd\.it|preview\.redd\.it|external-preview\.redd\.it|i\.imgur\.com)\/[^\s]+\.(jpe?g|png|gif|webp)(\?[^\s]*)?$/i;
 
 export const isInlineImage = (href: string): boolean => IMAGE_URL.test(href);
+
+/**
+ * A URL as Markdown text wrote it, without the `\` Reddit's editor escapes its
+ * `_` and other marks with: no working URL has one.
+ */
+export const unescapeUrl = (url: string): string =>
+  url.replace(/\\([\\`*_{}[\]()#+\-.!>~^|<])/g, '$1');
 
 const COMMENT_VIDEO_URL =
   /^https:\/\/(?:www\.)?reddit\.com\/link\/[a-z0-9]+\/video\/([a-z0-9]+)\/player\/?$/i;

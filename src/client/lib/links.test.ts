@@ -4,6 +4,7 @@ import {
   commentVideoId,
   commentVideoStream,
   isInlineImage,
+  unescapeUrl,
   normaliseHref,
   resolveLink,
 } from './links.ts';
@@ -60,8 +61,26 @@ void test('detects inline-able image links', () => {
     isInlineImage('https://preview.redd.it/abc.jpeg?width=640&format=pjpg')
   );
   assert.ok(isInlineImage('https://i.redd.it/xyz.png'));
+  assert.ok(
+    isInlineImage(
+      'https://external-preview.redd.it/bLcw81wep-Q_x.gif?auto=webp&s=939c1048'
+    )
+  );
   assert.ok(!isInlineImage('https://example.com/cat.png'));
+  assert.ok(!isInlineImage('https://evil-preview.redd.it.example.com/x.gif'));
   assert.ok(!isInlineImage('https://i.redd.it/xyz.png" onerror="x'));
+});
+
+void test('drops the escapes Reddit puts in URLs written as text', () => {
+  const url = unescapeUrl(
+    'https://external-preview.redd.it/lStPvg6J\\_254cLekY9u.gif?auto=webp&s=9ae7'
+  );
+  assert.equal(
+    url,
+    'https://external-preview.redd.it/lStPvg6J_254cLekY9u.gif?auto=webp&s=9ae7'
+  );
+  assert.ok(isInlineImage(url));
+  assert.equal(unescapeUrl('https://a.example/b%5Cc'), 'https://a.example/b%5Cc');
 });
 
 void test('finds the video a comment links to', () => {
