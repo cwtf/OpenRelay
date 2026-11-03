@@ -294,17 +294,14 @@ export function allowedIn(item: SavedMedia, allowed: readonly string[] | undefin
 }
 
 const REDDIT_HOST = /(?:^|\.)(?:reddit\.com|redd\.it|redditmedia\.com)$/i;
-const IMGUR_HOST = /(?:^|\.)imgur\.com$/i;
 
-const onHost = (url: string, host: RegExp): boolean => {
+const onReddit = (url: string): boolean => {
   try {
-    return host.test(new URL(url).hostname);
+    return REDDIT_HOST.test(new URL(url).hostname);
   } catch {
     return false;
   }
 };
-
-const onReddit = (url: string): boolean => onHost(url, REDDIT_HOST);
 
 /** Where a saved item is from, as the manage screen names it: Giphy, Reddit or the image's host. */
 export function savedSource(item: SavedMedia): string {
@@ -322,19 +319,18 @@ export const linkTo = (item: SavedMedia): string =>
   `[${isAnimated(item) ? "GIF" : "Image"}](${item.url})`;
 
 /**
- * Whether a Reddit reply offers the item at all: a Giphy GIF, or an image on
- * Reddit's or Imgur's hosts, which goes in as a link. An image from anywhere
- * else (a Lemmy instance) is left out.
+ * Whether a Reddit reply offers the item: only a Giphy GIF, for now. Reddit
+ * seems to show another account's image only as a link, whether it's
+ * referred to by its ID, linked by its URL or uploaded again (from a
+ * browser session Reddit refuses the upload), so saved images are left out.
  */
-export const redditTakes = (item: SavedMedia): boolean =>
-  !!item.giphy || !!item.asset || onReddit(item.url) || onHost(item.url, IMGUR_HOST);
+export const redditTakes = (item: SavedMedia): boolean => !!item.giphy;
 
 /**
  * How a saved item goes into a reply, as Markdown. Reddit takes a Giphy GIF
- * back by its ID where the community takes Giphy GIFs in comments, and
- * anything else only as a link: it won't show another account's upload by
- * its ID (its own editor can't either; the reply fails with a 500), and it
- * refuses a browser session's uploads. Lemmy shows any image URL.
+ * back by its ID where the community takes Giphy GIFs in comments, and as a
+ * link elsewhere (`allowed`, see `allowedIn`); it offers nothing else (see
+ * `redditTakes`). Lemmy shows any image URL.
  */
 export function reuseOf(
   item: SavedMedia,
@@ -345,15 +341,6 @@ export function reuseOf(
   if (item.giphy && allowedIn(item, allowed))
     return { markdown: `![gif](giphy|${item.giphy})`, ref: `giphy|${item.giphy}` };
   return { markdown: linkTo(item) };
-}
-
-/**
- * How a Reddit reply takes a saved item where the community takes its kind
- * (see `reuseOf`): back by its ID, only as a link, or not at all.
- */
-export function redditReuse(item: SavedMedia): "id" | "link" | "none" {
-  if (!redditTakes(item)) return "none";
-  return reuseOf(item, "Reddit").ref ? "id" : "link";
 }
 
 /**

@@ -144,12 +144,6 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       body: Object.fromEntries(new URLSearchParams(route.request().postData())),
     });
     const sent = writes.at(-1).body;
-    // Reddit refusing one saved image by its ID, so the reply goes again with it linked.
-    if (url.pathname === "/api/comment" && sent.richtext_json?.includes('"linkedasset1"'))
-      return route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({ json: { errors: [["BAD_MEDIA", "That image can't be used.", "richtext_json"]] } }),
-      });
     if (url.pathname === "/api/media/asset.json")
       return route.fulfill({
         contentType: "application/json",
@@ -508,34 +502,13 @@ try {
     await page.keyboard.press("Escape");
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
-  // r/test takes images but not Giphy GIFs: everything saved is offered, as
-  // links, since Reddit won't show another account's upload by its ID.
-  const uploaded = uploads.length;
-  const written = writes.length;
+  // Reddit replies offer only the Giphy GIF for now: Reddit shows another
+  // account's image only as a link.
   box = await openReply();
-  const pickSaved = async (src) => {
-    await app.getByRole("button", { name: "Saved GIFs and images" }).click();
-    const saved = app.locator(".reply-saved-pick");
-    await saved.first().waitFor();
-    assert.equal(await saved.count(), 4);
-    await saved.locator(`img[src="${src}"]`).click();
-  };
-  for (const src of ["https://i.redd.it/upload.png", linkedUpload, linkedOther]) {
-    await box.fill("");
-    await pickSaved(src);
-    await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("[Image]("));
-    assert.equal(await box.inputValue(), `[Image](${src})\n\n`);
-  }
-  // Nothing is fetched or uploaded, and the reply goes as plain Markdown.
-  assert.equal(uploads.length, uploaded);
-  assert.equal(writes.length, written);
-  await app.getByRole("button", { name: "Send", exact: true }).click();
-  await app.locator(".sheet").waitFor({ state: "detached" });
-  assert.deepEqual(
-    writes.slice(written).map((write) => [write.path, write.body.text]),
-    [["/api/comment", `[Image](${linkedOther})\n\n`]],
-  );
-  box = await openReply();
+  await app.getByRole("button", { name: "Saved GIFs and images" }).click();
+  await app.locator(".reply-saved-pick").first().waitFor();
+  assert.equal(await app.locator(".reply-saved-pick").count(), 1);
+  await app.getByRole("button", { name: "Saved GIFs and images" }).click();
   // The Giphy GIF r/test doesn't take goes in as a link.
   await box.fill("");
   await app.getByRole("button", { name: "Saved GIFs and images" }).click();
@@ -1030,7 +1003,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, sent again as a link when Reddit refuses the ID, another linked one re-uploaded), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer, only the GIF offered again, as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

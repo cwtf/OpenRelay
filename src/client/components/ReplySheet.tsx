@@ -196,7 +196,7 @@ export const ReplySheet = ({
     return null;
   };
 
-  /** Uploads an image file (a picked one, or a saved one fetched) and inserts it. */
+  /** Uploads a picked image file and inserts it. */
   const upload = (file: Promise<File>, at: readonly [number, number]) => {
     setUploading(true);
     file
