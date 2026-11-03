@@ -38,6 +38,13 @@ const readSession = async (fetchFn: Fetch, origin: string): Promise<Session> => 
 };
 
 /**
+ * Reddit turned the request down in its answer (an error list, or 400), so
+ * it did nothing, and the same write sent differently can't be a duplicate.
+ * A timeout or a 5xx is no refusal: the write may have gone through.
+ */
+class Refused extends Error {}
+
+/**
  * POST to a Reddit API path, refreshing a stale modhash once. `refused` is
  * the error when Reddit still answers 401 or 403.
  */
@@ -78,11 +85,13 @@ async function post(
     if (response.status === 401 || response.status === 403)
       throw new Error(refused);
     if (!response.ok)
-      throw new Error(`Reddit could not complete the request (${response.status}).`);
+      throw new (response.status === 400 ? Refused : Error)(
+        `Reddit could not complete the request (${response.status}).`,
+      );
     const body = await response.json().catch(() => ({}));
     const errors = body?.json?.errors;
     if (Array.isArray(errors) && errors.length)
-      throw new Error(String(errors[0]?.[1] || "Reddit could not complete the request."));
+      throw new Refused(String(errors[0]?.[1] || "Reddit could not complete the request."));
     return body;
   }
 }
@@ -315,30 +324,52 @@ async function postedComment(
   };
 }
 
-/** Run one allow-listed action; returns only what the reader needs. */
+/**
+ * Run one allow-listed action; returns only what the reader needs. A reply
+ * or edit may carry a `fallback` text (its saved media as links in place of
+ * their IDs), sent instead when Reddit refuses the media by ID; `linked`
+ * then says so.
+ */
 export async function apiAction(
   fetchFn: Fetch,
   origin: string,
   name: unknown,
   args: unknown,
-): Promise<{ id?: string; url?: string; comment?: CommentNode }> {
+): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true }> {
   if (!isAction(name) || !args || typeof args !== "object") fail();
   const action = ACTIONS[name as string]!;
+  const writing = name === "comment" || name === "edit";
+  const versions = [args as Args];
+  if (writing && (args as Args).fallback !== undefined)
+    versions.push({ ...(args as Args), text: (args as Args).fallback });
   // Validate before reading the session, so bad input never reaches Reddit.
-  const checked = action.params(args as Args, { uh: "", id: "t2_validate", name: "" });
+  const checked = versions.map((version) =>
+    action.params(version, { uh: "", id: "t2_validate", name: "" }),
+  )[0]!;
   // A reply or edit with media by ID (an upload, a Giphy GIF) goes as
   // richtext instead.
-  const rtjson =
-    (name === "comment" || name === "edit") && hasMediaRef(checked.text ?? "")
-      ? toRichtext(checked.text!)
-      : null;
+  const send = (version: Args) => {
+    const markdown = String(version.text ?? "");
+    const rtjson = writing && hasMediaRef(markdown) ? toRichtext(markdown) : null;
+    return post(fetchFn, origin, action.path, (me) => {
+      const params = action.params(version, me);
+      if (rtjson === null) return params;
+      delete params.text;
+      return { ...params, richtext_json: rtjson };
+    });
+  };
   const sentAt = Date.now();
-  const body = await post(fetchFn, origin, action.path, (me) => {
-    const params = action.params(args as Args, me);
-    if (rtjson === null) return params;
-    delete params.text;
-    return { ...params, richtext_json: rtjson };
-  });
+  let linked = false;
+  let body: any;
+  try {
+    body = await send(versions[0]!);
+  } catch (error) {
+    // Only the media by ID can differ, so a refusal of plain Markdown stands.
+    const fallback = versions[1];
+    if (!(error instanceof Refused) || !fallback || !hasMediaRef(checked.text ?? "")) throw error;
+    body = await send(fallback);
+    linked = true;
+  }
   const data = body?.json?.data;
   const created = data?.things?.[0]?.data;
   const id = String(data?.name ?? created?.name ?? fullName(created?.id) ?? "");
@@ -360,6 +391,7 @@ export async function apiAction(
     ...(/^t\d_[a-z0-9]+$/i.test(id) ? { id } : {}),
     ...(url ? { url } : {}),
     ...(comment ? { comment } : {}),
+    ...(linked ? { linked: true as const } : {}),
   };
 }
 

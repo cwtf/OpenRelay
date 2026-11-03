@@ -495,3 +495,50 @@ test("sends a reply with an uploaded image as Reddit's richtext", async () => {
   assert.equal(new URL(calls[2]!.url).pathname, "/api/comment");
   assert.equal(sent(calls[2]!).text, "![img](https://i.redd.it/x.png)");
 });
+
+test("sends the fallback with links when Reddit refuses a reply's media by ID", async () => {
+  resetWrites();
+  // Refuses media by ID, takes plain Markdown.
+  let answer = (body: Record<string, string>): Response =>
+    body.richtext_json
+      ? json({ json: { errors: [["BAD_MEDIA", "That media can't be used here.", "richtext_json"]] } })
+      : json({ json: { errors: [], data: { things: [] } } });
+  const { calls, fetchFn } = fakeReddit((url, init) =>
+    url.pathname === "/api/me.json"
+      ? json({ data: { modhash: "abc123modhash" } })
+      : answer(Object.fromEntries(new URLSearchParams(String(init?.body)))),
+  );
+  const args = {
+    parent: "t1_abc",
+    text: "Look\n\n![img](asset123)\n\n",
+    fallback: "Look\n\n[Image](https://i.redd.it/asset123.png)\n\n",
+  };
+  assert.deepEqual(await apiAction(fetchFn, origin, "comment", args), { linked: true });
+  const comments = calls.filter((call) => new URL(call.url).pathname === "/api/comment");
+  assert.equal(comments.length, 2);
+  assert.ok(sent(comments[0]!).richtext_json);
+  assert.equal(sent(comments[1]!).text, args.fallback);
+  // Accepted by ID, the fallback isn't sent.
+  answer = () => json({ json: { errors: [], data: { things: [] } } });
+  calls.length = 0;
+  assert.deepEqual(await apiAction(fetchFn, origin, "comment", args), {});
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 1);
+  // A 5xx may have posted the reply, so nothing is sent again.
+  answer = () => json({}, 500);
+  calls.length = 0;
+  await assert.rejects(apiAction(fetchFn, origin, "comment", args), /500/);
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 1);
+  // Nor is a reply without media by ID, whose fallback could change nothing.
+  answer = () => json({ json: { errors: [["RATELIMIT", "Take a break.", "ratelimit"]] } });
+  calls.length = 0;
+  await assert.rejects(
+    apiAction(fetchFn, origin, "comment", { parent: "t1_abc", text: "Hi", fallback: "Hi there" }),
+    /Take a break/,
+  );
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === "/api/comment").length, 1);
+  // The fallback is checked like the text, before any request.
+  calls.length = 0;
+  await assert.rejects(apiAction(fetchFn, origin, "comment", { ...args, fallback: 5 }));
+  await assert.rejects(apiAction(fetchFn, origin, "edit", { id: "t1_abc", text: "x", fallback: "y".repeat(40001) }));
+  assert.equal(calls.length, 0);
+});

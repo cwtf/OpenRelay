@@ -17,6 +17,7 @@ import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
 import { age, compact, duration, fullDate } from '../lib/format';
 import { openUrl } from '../lib/platform';
+import { savablePostMedia, type SavedMedia } from '../lib/savedMedia';
 import type { SaveState } from '../lib/saveProgress';
 import { Icon, type IconName } from './Icon';
 
@@ -141,12 +142,16 @@ export const PostFlags = ({
 
 /**
  * Viewer item for an image tapped in Markdown; a GIF with an MP4 plays that,
- * and a comment's video its stream.
+ * and a comment's video its stream. `save` is what the viewer's star keeps.
  */
-export const inlineViewerItem = (url: string, media?: InlineMedia): ViewerItem =>
-  media?.hls
+export const inlineViewerItem = (
+  url: string,
+  media?: InlineMedia,
+  save?: SavedMedia
+): ViewerItem => ({
+  ...(media?.hls
     ? {
-        kind: 'video',
+        kind: 'video' as const,
         hls: media.hls,
         width: media.width,
         height: media.height,
@@ -154,17 +159,28 @@ export const inlineViewerItem = (url: string, media?: InlineMedia): ViewerItem =
       }
     : media?.mp4
     ? {
-        kind: 'video',
+        kind: 'video' as const,
         mp4: media.mp4,
         width: media.width,
         height: media.height,
         isGif: true,
       }
     : media
-      ? { kind: 'image', url, width: media.width, height: media.height }
-      : { kind: 'image', url };
+      ? { kind: 'image' as const, url, width: media.width, height: media.height }
+      : { kind: 'image' as const, url }),
+  ...(save ? { save } : {}),
+});
 
+/** A post's viewer items, each with what the viewer's star would save of it. */
 export const viewerItemsFor = (post: PostSummary): ViewerItem[] => {
+  const savedAt = Date.now();
+  return postViewerItems(post).map((item, index) => {
+    const save = savablePostMedia(post, index, savedAt);
+    return save ? { ...item, save } : item;
+  });
+};
+
+const postViewerItems = (post: PostSummary): ViewerItem[] => {
   const media = post.media;
   switch (media.kind) {
     case 'image':

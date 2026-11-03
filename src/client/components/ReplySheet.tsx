@@ -15,7 +15,7 @@ import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
 import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
-import { reuseOf, savedKey, usableIn, type SavedMedia } from "../lib/savedMedia";
+import { linkTo, reuseOf, savedKey, usableIn, withLinks, type SavedMedia } from "../lib/savedMedia";
 import { forgetSaved, savedMediaFile, useSavedMedia } from "../lib/savedMediaStore";
 import { readJson, writeJson } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
@@ -113,6 +113,8 @@ export const ReplySheet = ({
   const [uploading, setUploading] = useState(false);
   // What the preview shows for images uploaded here, by the ID they go by.
   const [uploads, setUploads] = useState<Record<string, InlineMedia>>({});
+  // Saved items put in by ID, as links: sent instead if Reddit refuses the ID.
+  const [links, setLinks] = useState<Record<string, string>>({});
   const field = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const pendingSelection = useRef<[number, number] | null>(null);
@@ -232,7 +234,7 @@ export const ReplySheet = ({
       return;
     }
     const { ref } = way;
-    if (ref)
+    if (ref) {
       setUploads((current) => ({
         ...current,
         [ref]: {
@@ -242,17 +244,30 @@ export const ReplySheet = ({
           ...(item.mp4 ? { mp4: item.mp4 } : {}),
         },
       }));
+      setLinks((current) => ({ ...current, [ref]: linkTo(item) }));
+    }
     insert(way.markdown, at);
   };
 
   const send = (close: () => void) => {
     if (!text.trim() || sending || uploading) return;
     setSending(true);
-    runAction(editing ? "edit" : "comment", editing ? { id: editing.id, text } : { parent: parentId, text })
+    const fallback = withLinks(text, links);
+    runAction(editing ? "edit" : "comment", {
+      ...(editing ? { id: editing.id } : { parent: parentId }),
+      text,
+      ...(fallback !== text ? { fallback } : {}),
+    })
       .then((result) => {
         saveDraft(draftKey, "");
         setText("");
-        toast(editing ? "Edit saved" : "Reply sent");
+        toast(
+          result.linked
+            ? `${editing ? "Edit saved" : "Reply sent"}, with the saved image as a link: ${site.name} wouldn't take it again`
+            : editing
+              ? "Edit saved"
+              : "Reply sent",
+        );
         if (result.comment) onPosted?.(result.comment);
         close();
       })

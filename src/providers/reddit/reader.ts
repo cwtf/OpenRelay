@@ -626,7 +626,7 @@ async function fetchWiki(sub: string): Promise<string> {
 const runAction = (
   op: string,
   args: Record<string, unknown> = {},
-): Promise<{ id?: string; url?: string; comment?: CommentNode }> =>
+): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true }> =>
   bridge("action", undefined, { op, args });
 
 /** An image for a reply, uploaded by the Reddit tab: `![img](<asset id>)`. */

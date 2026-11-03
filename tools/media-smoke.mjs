@@ -146,6 +146,8 @@ try {
     assert.ok(fills, `${name} fills one axis (${box.width}x${box.height})`);
     assert.ok(Math.abs(box.width / box.height - w / h) < 0.02, `${name} keeps its aspect ratio`);
     await page.screenshot({ path: resolve(out, `viewer-${name}.png`) });
+    // A post's image can be saved for replies.
+    await app.getByRole("button", { name: "Save for replies" }).waitFor();
     await app.locator("body").press("Escape");
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
@@ -166,6 +168,9 @@ try {
     await card.getByRole("button", { name: opener }).first().click();
     await app.locator(".viewer-stage").first().waitFor();
     await page.waitForTimeout(450); // Opening animation.
+    // A video can't go into a comment, so it has no star.
+    if (title === "A video")
+      assert.equal(await app.getByRole("button", { name: "Save for replies" }).count(), 0);
     await swipe(60);
     await page.waitForTimeout(400);
     assert.equal(await app.locator(".viewer").count(), 1, `${title}: short swipe springs back`);
@@ -269,7 +274,7 @@ try {
 
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link; a comment's video shows as a tile that plays its v.redd.it stream.",
+    "PASS: viewer scales tall, wide and tiny images to fit the screen on both axes, keeping their shape; images and videos close on a vertical swipe; opened posts follow the Layout (Cards media, Compact/List thumbnail row); post images (not videos) and comment GIFs can be saved for replies; comment GIFs render inline (MP4 preferred; from Giphy, without a referrer, when Reddit has no copy), open in the viewer, and fall back to a link; a comment's video shows as a tile that plays its v.redd.it stream.",
   );
 } finally {
   await context.close();

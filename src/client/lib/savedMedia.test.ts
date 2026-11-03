@@ -6,7 +6,10 @@ import {
   parseSavedMedia,
   reuseOf,
   savableMedia,
+  savablePostMedia,
   usableIn,
+  linkTo,
+  withLinks,
   savedKey,
   withSaved,
   withoutSaved,
@@ -54,6 +57,58 @@ test("savableMedia keeps a Giphy GIF by its ID and an image by its URL", () => {
   assert.equal(savableMedia("giphy|bad id", "", undefined, 5), null);
   assert.equal(savableMedia("x", "http://example.com/a.png", undefined, 5), null);
   assert.equal(savableMedia("x", "javascript:alert(1)", undefined, 5), null);
+});
+
+test("savablePostMedia keeps a post's image, gallery image or GIF, never a video", () => {
+  const preview = { url: "https://preview.redd.it/abc12345.jpeg?auto=webp&s=1", width: 800, height: 600 };
+  // An i.redd.it post is saved by its own link, under its ID.
+  assert.deepEqual(
+    savablePostMedia({ url: "https://i.redd.it/abc12345.jpeg", media: { kind: "image", image: preview, animated: false } }, 0, 5),
+    { asset: "abc12345", url: "https://i.redd.it/abc12345.jpeg", width: 800, height: 600, savedAt: 5 },
+  );
+  // A link to a page, not the file, keeps Reddit's preview.
+  const external = { url: "https://external-preview.redd.it/Xy_9-long-hash.jpg?auto=webp&s=1", width: 10, height: 10 };
+  assert.deepEqual(
+    savablePostMedia({ url: "https://imgur.com/abc", media: { kind: "image", image: external, animated: false } }, 0, 5),
+    { url: external.url, width: 10, height: 10, savedAt: 5 },
+  );
+  const gallery = {
+    url: "https://www.reddit.com/gallery/xyz",
+    media: {
+      kind: "gallery" as const,
+      items: [
+        { url: "https://preview.redd.it/first1234.jpg?width=1080&format=pjpg", width: 1, height: 2 },
+        { url: "https://preview.redd.it/second123.png?width=1080&format=png", width: 3, height: 4 },
+      ],
+    },
+  };
+  assert.equal(savablePostMedia(gallery, 1, 5)?.asset, "second123");
+  assert.equal(savablePostMedia(gallery, 2, 5), null);
+  // Reddit plays an i.redd.it GIF as a video; it's saved as the GIF, with that MP4.
+  const video = (isGif: boolean) => ({
+    kind: "video" as const,
+    video: { mp4: "https://v.redd.it/v1/DASH_480.mp4?source=fallback", width: 480, height: 270, isGif },
+  });
+  assert.deepEqual(savablePostMedia({ url: "https://i.redd.it/gif12345.gif", media: video(true) }, 0, 5), {
+    asset: "gif12345",
+    url: "https://i.redd.it/gif12345.gif",
+    mp4: "https://v.redd.it/v1/DASH_480.mp4?source=fallback",
+    width: 480,
+    height: 270,
+    savedAt: 5,
+  });
+  assert.equal(savablePostMedia({ url: "https://v.redd.it/v1", media: video(true) }, 0, 5), null);
+  assert.equal(savablePostMedia({ url: "https://i.redd.it/gif12345.gif", media: video(false) }, 0, 5), null);
+  // A Lemmy instance's image keeps its URL.
+  assert.deepEqual(
+    savablePostMedia(
+      { url: "https://lemmy.world/pictrs/image/a-b-c.webp", media: { kind: "image", image: { url: "https://lemmy.world/pictrs/image/a-b-c.webp", width: 5, height: 6 }, animated: false } },
+      0,
+      5,
+    ),
+    { url: "https://lemmy.world/pictrs/image/a-b-c.webp", width: 5, height: 6, savedAt: 5 },
+  );
+  assert.equal(savablePostMedia({ url: "https://example.com", media: { kind: "self" } }, 0, 5), null);
 });
 
 test("withSaved puts the item first once and keeps the newest", () => {
@@ -134,4 +189,18 @@ test("reuseOf: Giphy GIFs and uploads by ID on Reddit, others linked; any image 
   assert.equal(usableIn(lemmy, "Reddit", []), true);
   assert.equal(usableIn(still, "Reddit", []), false);
   assert.equal(usableIn(lemmy, "Lemmy", undefined), true);
+});
+
+test("withLinks swaps only the saved items' IDs for their links", () => {
+  const gif = image("https://i.redd.it/up1.gif", { asset: "up1" });
+  const giphy = image("https://i.giphy.com/media/abc/giphy.gif", { giphy: "abc" });
+  const links = { up1: linkTo(gif), "giphy|abc": linkTo(giphy) };
+  assert.equal(
+    withLinks("A ![gif](up1) B ![gif](giphy|abc) C ![img](fresh9) ![img](up1)", links),
+    "A [GIF](https://i.redd.it/up1.gif) B [GIF](https://i.giphy.com/media/abc/giphy.gif) C ![img](fresh9) [GIF](https://i.redd.it/up1.gif)",
+  );
+  assert.equal(linkTo(image("https://i.redd.it/a.png")), "[Image](https://i.redd.it/a.png)");
+  assert.equal(withLinks("![img](up1)", {}), "![img](up1)");
+  // An inherited key is no saved item.
+  assert.equal(withLinks("![img](constructor)", {}), "![img](constructor)");
 });

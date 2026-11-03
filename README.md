@@ -109,7 +109,7 @@ A post removed by its community's moderators (or by Reddit) shows a **Restore fr
 
 ## Saved GIFs and images
 
-Tap a GIF or image in a comment or post to open it, then press the star to save it for your own replies. The composer's star button lists what you saved; pick one to add it to the reply, and the × on a tile removes it. On Reddit, a Giphy GIF goes back in by its Giphy ID, as Reddit's own GIF picker sends it, and an image or GIF on Reddit's image hosts by Reddit's ID for it (taken from the comment, or from the file name of an i.redd.it or preview.redd.it link, as Reddit's apps write a comment's image), so nothing is uploaded again. Reddit refuses to take new uploads from a browser session, so an image saved from anywhere else (a Lemmy instance or Imgur, for example) goes into a Reddit reply as a link to the image, even where the community's rules turn images off. On Lemmy, the reply links the image itself. A community's rules can turn off GIFs or images in comments: the composer offers only what the community takes, and hides the image button when it takes neither. Only the list of links is saved, on this device (up to 200), shared between Reddit and your Lemmy instances. An image deleted from its original comment can't be posted again.
+Tap a GIF or image in a comment or post to open it, then press the star to save it for your own replies. That includes an image post, each image of a gallery, and a GIF post; videos can't go into a comment, so they have no star. The composer's star button lists what you saved; pick one to add it to the reply, and the × on a tile removes it. On Reddit, a Giphy GIF goes back in by its Giphy ID, as Reddit's own GIF picker sends it, and an image or GIF on Reddit's image hosts by Reddit's ID for it (taken from the comment, or from the file name of an i.redd.it or preview.redd.it link, as Reddit's apps write a comment's image and as a post's image is named), so nothing is uploaded again. If Reddit turns down an ID it was given, the reply is sent once more with that image as a link, and the toast says so; a reply Reddit didn't answer (a timeout, or its own error) is never sent twice. Reddit refuses to take new uploads from a browser session, so an image saved from anywhere else (a Lemmy instance or Imgur, for example) goes into a Reddit reply as a link to the image, even where the community's rules turn images off. On Lemmy, the reply links the image itself. A community's rules can turn off GIFs or images in comments: the composer offers only what the community takes, and hides the image button when it takes neither. Only the list of links is saved, on this device (up to 200), shared between Reddit and your Lemmy instances. An image deleted from its original comment can't be posted again.
 
 ## Offline reading
 
@@ -171,7 +171,7 @@ npm ci
 npm run check
 ```
 
-This runs TypeScript, 144 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
+This runs TypeScript, 147 unit tests, and the production build (**dist/** for Chrome, **dist-firefox/** for Firefox). Reload the extension in Chrome after rebuilding.
 
 An additional Chromium test loads the **real built extension** into an isolated browser profile and uses deterministic Reddit HTML/JSON fixtures. With Playwright and its Chromium installed:
 

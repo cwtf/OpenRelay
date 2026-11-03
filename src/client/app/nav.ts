@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { FeedSort, PostSummary } from '../../shared/api';
 import type { SavedMedia } from '../lib/savedMedia';
 
-export type ViewerItem =
+export type ViewerItem = (
   | { kind: 'image'; url: string; width?: number; height?: number }
   | {
       kind: 'video';
@@ -12,7 +12,11 @@ export type ViewerItem =
       width: number;
       height: number;
       isGif: boolean;
-    };
+    }
+) & {
+  /** The GIF or image the viewer can save for replies. */
+  save?: SavedMedia;
+};
 
 export type ViewerSpec = {
   items: ViewerItem[];
@@ -21,8 +25,6 @@ export type ViewerSpec = {
   permalink?: string;
   sourceUrl?: string;
   origin?: DOMRect | null;
-  /** A comment's GIF or image the viewer can save for replies. */
-  save?: SavedMedia;
 };
 
 export type SheetRenderer = (close: () => void) => ReactNode;

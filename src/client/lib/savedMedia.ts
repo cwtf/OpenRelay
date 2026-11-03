@@ -1,8 +1,8 @@
 /**
- * GIFs and images saved from other people's comments, to reuse in replies.
+ * GIFs and images saved from comments and posts, to reuse in replies.
  * Only references are kept (a Giphy ID, or the image's URL), never the files.
  */
-import type { InlineMedia } from "../../shared/api";
+import type { InlineMedia, PostMedia } from "../../shared/api";
 
 export type SavedMedia = {
   /** Giphy's ID for a Giphy GIF, which Reddit takes back as `giphy|<id>`. */
@@ -68,6 +68,41 @@ export function savableMedia(
   return { ...(id ? { asset: id } : {}), url, ...mp4, ...size, savedAt };
 }
 
+/** A post's link that is the image file itself (i.redd.it, Imgur, a Lemmy instance's pictrs). */
+const IMAGE_FILE = /^https:\/\/[^\s"'<>()?#]+\.(?:jpe?g|png|gif|webp)(?:[?#]|$)/i;
+
+/**
+ * What the `index`th image of a post would be saved as: a gallery's image,
+ * a post's image (by its own link when that is the file, so an i.redd.it
+ * upload keeps its ID), or a GIF post Reddit plays as a video. Null for a
+ * real video, or anything else that can't be reused.
+ */
+export function savablePostMedia(
+  post: { url: string; media: PostMedia },
+  index: number,
+  savedAt: number,
+): SavedMedia | null {
+  const media = post.media;
+  const file = IMAGE_FILE.test(post.url) ? post.url : null;
+  switch (media.kind) {
+    case "gallery": {
+      const item = media.items[index];
+      return item ? savableMedia(item.url, item.url, item, savedAt) : null;
+    }
+    case "image": {
+      const url = file ?? media.image.url;
+      return savableMedia(url, url, { ...media.image, url }, savedAt);
+    }
+    case "video": {
+      if (!media.video.isGif || !file) return null;
+      const { width, height, mp4 } = media.video;
+      return savableMedia(file, file, { url: file, width, height, ...(mp4 ? { mp4 } : {}) }, savedAt);
+    }
+    default:
+      return null;
+  }
+}
+
 /** Saved media read back from storage; anything malformed is dropped. */
 export function parseSavedMedia(value: unknown): SavedMedia[] {
   if (!Array.isArray(value)) return [];
@@ -130,6 +165,10 @@ const onReddit = (url: string): boolean => {
   }
 };
 
+/** A saved item as a plain link, which any reply takes. */
+export const linkTo = (item: SavedMedia): string =>
+  `[${isAnimated(item) ? "GIF" : "Image"}](${item.url})`;
+
 /**
  * How a saved item goes into a reply: Markdown to insert as it is, or an
  * image to fetch and upload first. Reddit takes a Giphy GIF or an image
@@ -146,7 +185,7 @@ export function reuseOf(
   if (item.giphy) return { markdown: `![gif](giphy|${item.giphy})`, ref: `giphy|${item.giphy}` };
   if (item.asset)
     return { markdown: `![${isAnimated(item) ? "gif" : "img"}](${item.asset})`, ref: item.asset };
-  if (!onReddit(item.url)) return { markdown: `[${isAnimated(item) ? "GIF" : "Image"}](${item.url})` };
+  if (!onReddit(item.url)) return { markdown: linkTo(item) };
   return { upload: item.url };
 }
 
@@ -162,3 +201,12 @@ export const usableIn = (
   const way = reuseOf(item, site);
   return ("markdown" in way && !way.markdown.startsWith("!")) || allowedIn(item, allowed);
 };
+
+/**
+ * The reply with each saved item it refers to by ID (`links`, by that ID)
+ * as its link instead: what goes in when Reddit won't take an ID again.
+ */
+export const withLinks = (markdown: string, links: Record<string, string>): string =>
+  markdown.replace(/!\[(?:img|gif)\]\(([^)\s]+)\)/g, (whole, ref: string) =>
+    Object.hasOwn(links, ref) ? links[ref]! : whole,
+  );

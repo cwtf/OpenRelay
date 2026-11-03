@@ -42,9 +42,8 @@ export const ReaderMarkdown = ({
       onLink: nav.openLink,
       onImage: (url: string, inline?: InlineMedia, save?: SavedMedia) =>
         nav.openMedia({
-          items: [inlineViewerItem(url, inline)],
+          items: [inlineViewerItem(url, inline, save)],
           index: 0,
-          ...(save ? { save } : {}),
         }),
       highlight: null,
       autoplayGifs: prefs.autoplayGifs,

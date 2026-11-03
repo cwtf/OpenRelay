@@ -144,6 +144,12 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
       body: Object.fromEntries(new URLSearchParams(route.request().postData())),
     });
     const sent = writes.at(-1).body;
+    // Reddit refusing one saved image by its ID, so the reply goes again with it linked.
+    if (url.pathname === "/api/comment" && sent.richtext_json?.includes('"linkedasset1"'))
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ json: { errors: [["BAD_MEDIA", "That image can't be used.", "richtext_json"]] } }),
+      });
     if (url.pathname === "/api/media/asset.json")
       return route.fulfill({
         contentType: "application/json",
@@ -546,8 +552,19 @@ try {
   assert.equal(await box.inputValue(), "![img](linkedasset1)\n\n");
   assert.equal(uploads.length, uploaded);
   assert.equal(writes.length, written);
+  // When Reddit refuses the ID, the reply goes again with the image linked.
+  await app.getByRole("button", { name: "Send", exact: true }).click();
+  await app.locator(".toast", { hasText: "with the saved image as a link" }).waitFor();
+  assert.deepEqual(
+    writes.slice(written).map((write) => [write.path, write.body.text ?? "richtext"]),
+    [
+      ["/api/comment", "richtext"],
+      ["/api/comment", `[Image](${linkedUpload})\n\n`],
+    ],
+  );
+  await app.locator(".sheet").waitFor({ state: "detached" });
+  box = await openReply();
   // Any other linked image is fetched again and uploaded as a new attachment.
-  await box.fill("");
   await pickSaved(linkedOther);
   await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
   assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
@@ -975,7 +992,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, another linked one re-uploaded), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via a lease to S3 and sent as richtext, a comment's images and GIF saved from the viewer and picked again where the community takes no Giphy GIFs: an uploaded or Reddit-linked one by its asset ID, sent again as a link when Reddit refuses the ID, another linked one re-uploaded), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

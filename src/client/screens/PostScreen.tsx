@@ -859,10 +859,9 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       onLink: nav.openLink,
       onImage: (url: string, media?: InlineMedia, save?: SavedMedia) =>
         nav.openMedia({
-          items: [inlineViewerItem(url, media)],
+          items: [inlineViewerItem(url, media, save)],
           index: 0,
           sourceUrl: url,
-          ...(save ? { save } : {}),
         }),
       highlight,
       autoplayGifs: prefs.autoplayGifs,

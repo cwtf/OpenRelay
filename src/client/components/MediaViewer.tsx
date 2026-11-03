@@ -560,7 +560,7 @@ const VideoPage = ({
   );
 };
 
-/** Keeps a comment's GIF or image for replies (the composer's Saved tab). */
+/** Keeps a comment's or post's GIF or image for replies (the composer's Saved tab). */
 const SaveButton = ({ item }: { item: SavedMedia }) => {
   useSavedMedia();
   useEffect(() => updateSaved(item), [item]);
@@ -760,7 +760,7 @@ export const MediaViewer = ({ spec, onClosed }: MediaViewerProps) => {
             {index + 1} / {spec.items.length}
           </span>
         ) : null}
-        {spec.save ? <SaveButton item={spec.save} /> : null}
+        {current?.save ? <SaveButton item={current.save} /> : null}
         {current?.kind === 'image' ? (
           <>
             <button

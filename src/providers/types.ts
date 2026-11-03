@@ -161,11 +161,14 @@ export type ReaderProvider = {
   fetchRules(sub: string): Promise<SubredditRule[]>;
   fetchModerators(sub: string): Promise<Moderator[]>;
   fetchWiki(sub: string): Promise<string>;
-  /** A validated write, performed by the page with the viewer's session. */
+  /**
+   * A validated write, performed by the page with the viewer's session.
+   * `linked`: a reply went in with its `fallback` text (saved media as links).
+   */
   runAction(
     op: string,
     args?: Record<string, unknown>,
-  ): Promise<{ id?: string; url?: string; comment?: CommentNode }>;
+  ): Promise<{ id?: string; url?: string; comment?: CommentNode; linked?: true }>;
   /**
    * Uploads an image for a reply, by the page with the viewer's session.
    * `markdown` embeds it; `ref` is the ID or URL that Markdown refers to.
