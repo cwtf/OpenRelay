@@ -15,7 +15,7 @@ import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
 import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
-import { allowedIn, reuseOf, savedKey, type SavedMedia } from "../lib/savedMedia";
+import { reuseOf, savedKey, usableIn, type SavedMedia } from "../lib/savedMedia";
 import { forgetSaved, savedMediaFile, useSavedMedia } from "../lib/savedMediaStore";
 import { readJson, writeJson } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
@@ -128,7 +128,8 @@ export const ReplySheet = ({
   // A community that takes neither still nor animated images.
   const canUpload =
     canAttach && (!allowed || allowed.includes("static") || allowed.includes("animated"));
-  const usable = saved.filter((item) => allowedIn(item, allowed));
+  const reuseSite = site.name === "Lemmy" ? "Lemmy" : "Reddit";
+  const usable = saved.filter((item) => usableIn(item, reuseSite, allowed));
 
   useEffect(() => () => uploadUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
@@ -225,7 +226,7 @@ export const ReplySheet = ({
     if (uploading) return;
     const at = cursor();
     setShowSaved(false);
-    const way = reuseOf(item, site.name === "Lemmy" ? "Lemmy" : "Reddit");
+    const way = reuseOf(item, reuseSite);
     if ("upload" in way) {
       upload(savedMediaFile(way.upload), at);
       return;

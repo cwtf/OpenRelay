@@ -120,11 +120,23 @@ export function allowedIn(item: SavedMedia, allowed: readonly string[] | undefin
   return allowed.includes(isAnimated(item) ? "animated" : "static");
 }
 
+const REDDIT_HOST = /(?:^|\.)(?:reddit\.com|redd\.it|redditmedia\.com)$/i;
+
+const onReddit = (url: string): boolean => {
+  try {
+    return REDDIT_HOST.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+};
+
 /**
  * How a saved item goes into a reply: Markdown to insert as it is, or an
  * image to fetch and upload first. Reddit takes a Giphy GIF or an image
  * uploaded to a comment back by its ID, and shows other images only once
- * they're uploaded to it; Lemmy shows any image URL.
+ * they're uploaded to it, which it refuses a browser session; so an image
+ * from anywhere else (a Lemmy instance, Imgur) goes in as a link. Lemmy
+ * shows any image URL.
  */
 export function reuseOf(
   item: SavedMedia,
@@ -134,5 +146,19 @@ export function reuseOf(
   if (item.giphy) return { markdown: `![gif](giphy|${item.giphy})`, ref: `giphy|${item.giphy}` };
   if (item.asset)
     return { markdown: `![${isAnimated(item) ? "gif" : "img"}](${item.asset})`, ref: item.asset };
+  if (!onReddit(item.url)) return { markdown: `[${isAnimated(item) ? "GIF" : "Image"}](${item.url})` };
   return { upload: item.url };
 }
+
+/**
+ * Whether a saved item can go into a reply here: a link always can,
+ * anything shown inline only where the community takes it (`allowedIn`).
+ */
+export const usableIn = (
+  item: SavedMedia,
+  site: "Reddit" | "Lemmy",
+  allowed: readonly string[] | undefined,
+): boolean => {
+  const way = reuseOf(item, site);
+  return ("markdown" in way && !way.markdown.startsWith("!")) || allowedIn(item, allowed);
+};
