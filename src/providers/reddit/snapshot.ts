@@ -14,7 +14,8 @@ const own = (el: Element, selector: string): Element[] =>
     (found) => found.parentElement?.closest(el.localName) === el,
   );
 /** A body slot as Reddit Markdown: Reddit renders it as HTML from its richtext. */
-const bodyOf = (slot: Element | undefined) => (slot ? htmlToMarkdown(slot) : undefined);
+const bodyOf = (slot: Element | undefined, post: string) =>
+  slot ? htmlToMarkdown(slot, post) : undefined;
 /** The widest picture a `srcset` offers, else `src`. */
 function picture(img: Element) {
   let url = img.getAttribute("src") || img.getAttribute("data-lazy-src") || "";
@@ -62,7 +63,7 @@ function shredditPost(el: Element): Raw | null {
     score: Number(attr("score")),
     num_comments: Number(attr("comment-count")),
     is_self: type === "text",
-    selftext: bodyOf(textBody(el, permalink)),
+    selftext: bodyOf(textBody(el, permalink), id),
     over_18: el.hasAttribute("nsfw"),
     spoiler: el.hasAttribute("spoiler"),
     post_hint: type === "image" ? "image" : undefined,
@@ -158,7 +159,7 @@ function comment(el: Element, postId: string): Raw | null {
       postId,
     author,
     body: slot
-      ? bodyOf(slot)
+      ? bodyOf(slot, attr("postid") || postId)
       : el.querySelector(":scope > .entry .usertext-body .md")?.textContent?.trim() ||
         (author ? "" : "[deleted]"),
     score: Number(attr("score") || attr("data-score")),

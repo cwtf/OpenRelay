@@ -111,6 +111,15 @@ const attr = (node: HtmlNode, name: string) => node.getAttribute?.(name) ?? "";
 const textOf = (node: HtmlNode): string =>
   node.nodeType === TEXT ? (node.nodeValue ?? "") : children(node).map(textOf).join("");
 const escapeText = (text: string) => text.replace(/[\\`*_~^[\]]/g, "\\$&");
+/** A URL as a Markdown link target. */
+const target = (url: string) =>
+  safeUrl(url).replace(/[()\s]/g, (c) => (c === "(" ? "%28" : c === ")" ? "%29" : "%20"));
+/** A video posted in a comment, which Reddit's Markdown only links to. */
+const VIDEO_LINK = /^https:\/\/(?:www\.)?reddit\.com\/link\/[a-z0-9]+\/video\/[a-z0-9]+\/player\/?$/i;
+/** Its stream, as Reddit's player loads it. */
+const VIDEO_STREAM = /^https:\/\/v\.redd\.it\/([a-z0-9]+)\//i;
+/** The post whose body `htmlToMarkdown` is reading, which a video's link names. */
+let reading = "";
 /** `**text**`, keeping the spaces around it outside the markers. */
 const wrap = (mark: string, text: string, end = mark) => {
   const [, before, body, after] = text.match(/^(\s*)([^]*?)(\s*)$/)!;
@@ -143,15 +152,26 @@ function inline(node: HtmlNode): string {
       return code.includes("`") ? "`` " + code + " ``" : "`" + code + "`";
     }
     case "A": {
-      const href = safeUrl(attr(node, "href")).replace(/[()\s]/g, (c) =>
-        c === "(" ? "%28" : c === ")" ? "%29" : "%20",
-      );
+      const href = target(attr(node, "href"));
+      // As Reddit's Markdown has it, so the reader plays it.
+      if (VIDEO_LINK.test(href)) return " " + href + " ";
       const label = inner().trim();
+      // A picture linked to its full size: the reader opens it when tapped.
+      if (/^!\[[^\]]*\]\([^)]*\)$/.test(label)) return label;
       return href ? "[" +(label || escapeText(href)) + "](" + href + ")" : inner();
     }
     case "IMG": {
-      const src = safeUrl(attr(node, "src"));
-      return src ? "[" + (escapeText(attr(node, "alt").trim()) || "image") + "](" + src + ")" : "";
+      const src = target(attr(node, "src"));
+      const alt = attr(node, "alt").replace(/[[\]\\]/g, "").trim() || "image";
+      return src ? "![" + alt + "](" + src + ")" : "";
+    }
+    // A video in a comment. Without its stream, its poster picture stands in.
+    case "SHREDDIT-PLAYER":
+    case "SHREDDIT-PLAYER-2": {
+      const id = VIDEO_STREAM.exec(safeUrl(attr(node, "src")))?.[1];
+      return id && reading
+        ? " https://www.reddit.com/link/" + reading + "/video/" + id + "/player "
+        : inner();
     }
   }
   if (attr(node, "class").split(/\s+/).includes("md-spoiler-text"))
@@ -252,5 +272,15 @@ function table(node: HtmlNode): string[] {
   ];
 }
 
-/** Reddit's rendered post or comment body back as Reddit Markdown. */
-export const htmlToMarkdown = (root: HtmlNode): string => blocks(root).join("\n\n");
+/**
+ * Reddit's rendered post or comment body back as Reddit Markdown. `post` is
+ * the ID of the post it's on (with `t3_` or without), for its videos' links.
+ */
+export function htmlToMarkdown(root: HtmlNode, post = ""): string {
+  reading = /^(?:t3_)?([a-z0-9]+)$/i.exec(post)?.[1] ?? "";
+  try {
+    return blocks(root).join("\n\n");
+  } finally {
+    reading = "";
+  }
+}

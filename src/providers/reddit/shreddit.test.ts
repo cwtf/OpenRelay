@@ -122,7 +122,39 @@ test("turns Reddit's rendered bodies back into Markdown", () => {
       "## A *heading*",
       "***",
       "| A | B |\n| --- | --- |\n| 1\\|2 | 3 |",
-      "Image: [image](https://i.redd.it/x.png)",
+      "Image: ![image](https://i.redd.it/x.png)",
     ].join("\n\n"),
+  );
+});
+
+test("keeps pictures and videos posted in comments", () => {
+  const picture = "https://preview.redd.it/abc.png?width=640&format=png&auto=webp&s=1";
+  const body = h(
+    "div",
+    {},
+    h("p", {}, "Look:"),
+    h("figure", {}, h("a", { href: "https://i.redd.it/abc.png" },
+      h("img", { src: picture, alt: "Comment [Image]" }))),
+    h("figure", {}, h("shreddit-player-2", {
+      src: "https://v.redd.it/vid123/HLSPlaylist.m3u8?a=1",
+      poster: "https://preview.redd.it/p.png",
+    }, h("img", { src: "https://preview.redd.it/p.png", alt: "media poster" }))),
+    h("p", {}, h("a", { href: "https://reddit.com/link/xyz/video/vid456/player" },
+      h("img", { src: "https://preview.redd.it/q.png", alt: "media poster" }))),
+  );
+  assert.equal(
+    htmlToMarkdown(body, "t3_xyz"),
+    [
+      "Look:",
+      `![Comment Image](${picture})`,
+      "https://www.reddit.com/link/xyz/video/vid123/player",
+      "https://reddit.com/link/xyz/video/vid456/player",
+    ].join("\n\n"),
+  );
+  // Without the post, the video's poster stands in for it.
+  assert.equal(
+    htmlToMarkdown(h("div", {}, h("shreddit-player", { src: "https://v.redd.it/v/HLS.m3u8" },
+      h("img", { src: "https://preview.redd.it/p.png", alt: "media poster" })))),
+    "![media poster](https://preview.redd.it/p.png)",
   );
 });
