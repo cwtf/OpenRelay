@@ -40,6 +40,9 @@ const comment = (id, body, extra = {}) => ({
   },
 });
 const listing = (children) => ({ kind: "Listing", data: { after: null, children } });
+/** Refuse the feed's JSON, as Reddit sometimes does mid-session. */
+let refuseFeed = false;
+const htmlPieces = [];
 // Reddit's context view for the inbox reply r1: a long parent, then r1.
 const threadWithReply = comment("c0", Array.from({ length: 80 }, (_, i) => "Parent line " + i).join("\n\n"), {
   replies: listing([comment("r1", "A reply to you", { author: "carol", parent_id: "t1_c0" })]),
@@ -78,6 +81,9 @@ await context.route(/^https:\/\/www\.reddit\.com\//, async (route) => {
       ),
     });
   }
+  if (url.pathname.startsWith("/svc/shreddit/")) htmlPieces.push(url.pathname);
+  if (refuseFeed && url.pathname === "/r/test/hot.json")
+    return route.fulfill({ status: 403, contentType: "text/html", body: "<p>blocked</p>" });
   if (url.pathname.endsWith(".json"))
     return route.fulfill({
       contentType: "application/json",
@@ -325,11 +331,26 @@ try {
   });
   await app.locator(".screen.is-detail").getByText("Opened post").waitFor();
 
+  // Reddit refuses the feed's JSON once: the session reads its HTML from then
+  // on, but the inbox and a reply's context still load from JSON.
+  refuseFeed = true;
+  await app.locator(".screen.is-feed").getByRole("button", { name: "Refresh", exact: true }).click();
+  for (let i = 0; i < 50 && !htmlPieces.some((p) => p.includes("community-more-posts")); i++)
+    await page.waitForTimeout(100);
+  assert.ok(htmlPieces.some((p) => p.includes("community-more-posts")));
+  refuseFeed = false;
+  await drawer("Inbox");
+  await top().locator('[data-mid="t1_r1"]').getByText("A reply to you").click();
+  await app.locator('.comment.is-context[data-cid="t1_r1"]').waitFor();
+  await app.getByText("Single comment thread").waitFor();
+  await app.locator(".screen.is-detail").getByRole("button", { name: "Close post" }).click();
+  await app.locator(".pane-empty").waitFor();
+
   assert.ok(writes.every((write) => write.path.startsWith("/api/")));
   assert.equal(context.pages().length, 2); // No tabs opened for these screens.
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: in-reader Profile (sections, karma, follows Layout), User (friend, message), Compose, Inbox (read, reply, read all, swipe actions, tapping a reply opens its context scrolled to the comment), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
+    "PASS: in-reader Profile (sections, karma, follows Layout), User (friend, message), Compose, Inbox (read, reply, read all, swipe actions, tapping a reply opens its context scrolled to the comment, from JSON even after the session fell back to Reddit's HTML), Moderator (reports, approve), Friends (remove), New Post (rules, options, submit); writes only to /api/*.",
   );
 } finally {
   await context.close();

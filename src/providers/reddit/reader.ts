@@ -398,8 +398,10 @@ async function fetchContext(
   sort: CommentSort,
   context = 3,
 ): Promise<PostResponse> {
-  // The HTML has no single thread; the post screen then shows the whole post.
-  if (jsonRefused) throw new ApiFailure("Reddit refused this thread.");
+  // Asked of JSON even once the session reads HTML: one refused read sets
+  // that, while the inbox and profiles still load from JSON. The HTML has no
+  // single thread, so when this is refused too the post screen shows the
+  // whole post.
   const result = await json(
     "/comments/" +
       id.replace(/^t3_/, "") +

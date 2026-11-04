@@ -600,10 +600,23 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   // Opened from Inbox "Context" (or a profile comment): bring the comment
   // into view once it has rendered and the screen has slid in.
   useEffect(() => {
-    if (!focus || focused.current || !tree || !inTree(tree, focus)) return;
-    focused.current = true;
-    const timer = window.setTimeout(() => scrollToComment(focus), 380);
+    if (!focus || focused.current || !tree) return;
+    if (!inTree(tree, focus)) {
+      // The whole thread loaded in place of the comment's own, without it.
+      if (!thread) {
+        focused.current = true;
+        toast("That comment isn't among the comments loaded here");
+      }
+      return;
+    }
+    // Marked once it has scrolled: a new tree before then cancels the timer.
+    const timer = window.setTimeout(() => {
+      focused.current = true;
+      scrollToComment(focus);
+    }, 380);
     return () => window.clearTimeout(timer);
+    // `thread` is read only when the tree arrives, which is what this follows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, focus, scrollToComment]);
 
   const jump = (direction: 1 | -1) => {
