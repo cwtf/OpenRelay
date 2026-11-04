@@ -11,6 +11,7 @@ import type { ViewerItem, ViewerSpec } from '../app/nav';
 import type Hls from 'hls.js';
 import { providerOf } from '../../providers/hosts';
 import { site } from '../lib/api';
+import { videoPlaybackUrl } from '../lib/video';
 import {
   copyText,
   downloadImage,
@@ -380,7 +381,8 @@ const VideoPage = ({
     if (!video) return;
     let disposed = false;
     let player: Hls | undefined;
-    let streaming = Boolean(item.hls && !item.isGif);
+    const hls = item.hls ? videoPlaybackUrl(item.hls) : undefined;
+    let streaming = Boolean(hls && !item.isGif);
     setFailed(false);
     setAudioUnavailable(false);
 
@@ -398,7 +400,7 @@ const VideoPage = ({
         return;
       }
       setAudioUnavailable(lostStream);
-      video.src = item.mp4;
+      video.src = videoPlaybackUrl(item.mp4);
       video.load();
       play();
     };
@@ -422,10 +424,10 @@ const VideoPage = ({
             if (data.fatal && streaming) useMp4();
           });
           player.attachMedia(video);
-          player.loadSource(item.hls!);
+          player.loadSource(hls!);
           play();
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = item.hls!;
+          video.src = hls!;
           play();
         } else useMp4();
       } catch {

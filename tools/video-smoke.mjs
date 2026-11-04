@@ -33,7 +33,8 @@ if (desktop) {
   });
 }
 
-const names = ['sound', 'hlsonly', 'silent', 'broken', 'noaudio', 'gif', 'unplayable'];
+const names = ['sound', 'hlsonly', 'cdn', 'cdnfallback', 'silent', 'broken', 'noaudio', 'gif', 'unplayable'];
+const cdnQuery = '?f=sd%2CsubsAll%2ChlsSpecOrder%2Cvp9&v=1&a=123%2Cabc%3D%3D';
 const post = (id) => ({
   kind: 't3',
   data: {
@@ -41,23 +42,36 @@ const post = (id) => ({
     permalink: `/r/test/comments/${id}/x/`, url: `https://v.redd.it/${id}`,
     is_self: false, domain: 'v.redd.it', score: 1, num_comments: 0,
     secure_media: { reddit_video: {
-      ...(id === 'hlsonly' ? {} : { fallback_url: `https://v.redd.it/${id}/fallback.mp4` }),
-      hls_url: `https://v.redd.it/${id}/${id === 'silent' ? 'stream_0' : 'master'}.m3u8`,
+      ...(['hlsonly', 'cdn'].includes(id) ? {} : {
+        fallback_url: `https://${id === 'cdnfallback' ? 'cf.v.redd.it' : 'v.redd.it'}/${id}/fallback.mp4`,
+      }),
+      hls_url: `https://${id.startsWith('cdn') ? 'cf.v.redd.it' : 'v.redd.it'}/${id}/${id === 'silent' ? 'stream_0' : 'master'}.m3u8${id.startsWith('cdn') ? cdnQuery : ''}`,
       width: 160, height: 90, is_gif: id === 'gif',
     } },
   },
 });
 const requested = [];
+const cdnRequests = [];
+const cdnPlaylists = [];
 const errors = [];
 try {
-  await context.route(/^https:\/\/(www\.reddit\.com|v\.redd\.it)\//, async (route) => {
+  await context.route(/^https:\/\/(www\.reddit\.com|(?:cf\.)?v\.redd\.it)\//, async (route) => {
     const url = new URL(route.request().url());
+    if (url.hostname === 'cf.v.redd.it') {
+      cdnRequests.push(url.href);
+      // Like the real CDN response: HTTP success without CORS permission.
+      return route.fulfill({ status: 200, headers: {
+        'access-control-allow-origin': '',
+      }, contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n' });
+    }
     if (url.hostname === 'v.redd.it') {
       requested.push(url.pathname);
+      if (url.pathname.startsWith('/cdn') && url.pathname.endsWith('/master.m3u8'))
+        cdnPlaylists.push(url.search);
       const [, id, file] = url.pathname.split('/');
       const headers = { 'access-control-allow-origin': '*' };
       if (!names.includes(id) || !/^[\w.-]+$/.test(file) ||
-          (id === 'broken' && file.endsWith('.m3u8')) ||
+          (['broken', 'cdnfallback'].includes(id) && file.endsWith('.m3u8')) ||
           (id === 'noaudio' && file === 'stream_1.m3u8') || id === 'unplayable')
         return route.fulfill({ status: 404, headers, body: '' });
       const body = await readFile(resolve('tools/fixtures/video', file));
@@ -103,7 +117,7 @@ try {
       return v && v.readyState >= 3 && v.currentTime > 0.1;
     });
   };
-  for (const id of ['sound', 'hlsonly']) {
+  for (const id of ['sound', 'hlsonly', 'cdn']) {
     const video = await open(id);
     await play(video);
     await app.waitForFunction(() => document.querySelector('.viewer video').webkitAudioDecodedByteCount > 0);
@@ -140,7 +154,7 @@ try {
     await app.waitForFunction(() => document.querySelector('.viewer video').webkitAudioDecodedByteCount > 0);
     await close();
   }
-  for (const id of ['broken', 'noaudio']) {
+  for (const id of ['broken', 'noaudio', 'cdnfallback']) {
     const video = await open(id);
     await app.getByRole('status').filter({ hasText: 'Audio unavailable' }).waitFor({ timeout: 30000 });
     assert.match(await video.getAttribute('src'), /fallback\.mp4$/);
@@ -159,8 +173,11 @@ try {
   await open('unplayable');
   await app.getByText("This video can't be played here.", { exact: true }).waitFor({ timeout: 30000 });
   await close();
+  assert.deepEqual(cdnRequests, [], 'playback avoids the CDN host without CORS');
+  assert.ok(cdnPlaylists.length >= 3, 'CDN HLS-only playback, reopening and MP4 fallback exercised');
+  assert.ok(cdnPlaylists.every((query) => query === cdnQuery), 'signed playback parameters stay intact');
   assert.deepEqual(errors, []);
-  console.log(`PASS (${desktop ? 'desktop' : 'extension'}): separate HLS audio decodes a non-silent signal; HLS-only videos, seeking, cleanup/reopening, broken playlists/audio fallback, silent videos, GIFs and playback errors.`);
+  console.log(`PASS (${desktop ? 'desktop' : 'extension'}): separate HLS audio decodes a non-silent signal; CDN playback with signed URLs, HLS-only videos, seeking, cleanup/reopening, broken playlists/audio fallback, silent videos, GIFs and playback errors.`);
 } finally {
   if (electronApp) await electronApp.close();
   else await context.close();
