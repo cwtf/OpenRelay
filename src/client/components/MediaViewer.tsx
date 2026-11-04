@@ -382,7 +382,7 @@ const VideoPage = ({
     let disposed = false;
     let player: Hls | undefined;
     const hls = item.hls ? videoPlaybackUrl(item.hls) : undefined;
-    let streaming = Boolean(hls && !item.isGif);
+    let streaming = Boolean(hls && (!item.isGif || !item.mp4));
     setFailed(false);
     setAudioUnavailable(false);
 

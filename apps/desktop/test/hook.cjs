@@ -18,7 +18,7 @@ app.whenReady().then(() => {
     .webRequest.onBeforeRequest((details, callback) => {
       const url = new URL(details.url);
       // Reddit's hosts and the fixture Lemmy instance.
-      const reddit = /^(?:(www\.|old\.)?reddit\.com|v\.redd\.it|lemmy\.world)$/.test(url.hostname);
+      const reddit = /^(?:(www\.|old\.)?reddit\.com|v\.redd\.it|preview\.redd\.it|lemmy\.world)$/.test(url.hostname);
       callback({
         cancel:
           !["openrelay:", "devtools:", "chrome-error:", "data:", "blob:"].includes(url.protocol) &&

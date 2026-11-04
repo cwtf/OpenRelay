@@ -79,8 +79,17 @@ function shredditPost(el: Element): Raw | null {
   const poster = player?.getAttribute("poster");
   const preview = poster ? { url: poster } : shown && picture(shown);
   if (preview?.url) raw.preview = { images: [{ source: preview }] };
-  const hls = player?.getAttribute("src");
-  if (hls) raw.media = { reddit_video: { hls_url: hls } };
+  const source = safeUrl(player?.getAttribute("src"));
+  if (source) {
+    // Reddit can serve a GIF as a direct MP4 (a .gif URL with format=mp4).
+    // Keep its source type and GIF flag for muted, looping playback.
+    const src = new URL(source);
+    const mp4 = /\.mp4$/i.test(src.pathname) || src.searchParams.get("format") === "mp4";
+    raw.media = { reddit_video: {
+      [mp4 ? "fallback_url" : "hls_url"]: source,
+      is_gif: type === "gif" || Boolean(player?.hasAttribute("gif")),
+    } };
+  }
   const slides = own(el, "gallery-carousel li").flatMap((slide) => {
     const sized = slide.querySelector("img[width]");
     const full = slide.querySelector("zoomable-img img") ?? sized;

@@ -33,7 +33,7 @@ if (desktop) {
   });
 }
 
-const names = ['sound', 'hlsonly', 'cdn', 'cdnfallback', 'silent', 'broken', 'noaudio', 'gif', 'unplayable'];
+const names = ['sound', 'hlsonly', 'cdn', 'cdnfallback', 'silent', 'broken', 'noaudio', 'gif', 'hlsgif', 'unplayable'];
 const cdnQuery = '?f=sd%2CsubsAll%2ChlsSpecOrder%2Cvp9&v=1&a=123%2Cabc%3D%3D';
 const post = (id) => ({
   kind: 't3',
@@ -42,11 +42,11 @@ const post = (id) => ({
     permalink: `/r/test/comments/${id}/x/`, url: `https://v.redd.it/${id}`,
     is_self: false, domain: 'v.redd.it', score: 1, num_comments: 0,
     secure_media: { reddit_video: {
-      ...(['hlsonly', 'cdn'].includes(id) ? {} : {
+      ...(['hlsonly', 'cdn', 'hlsgif'].includes(id) ? {} : {
         fallback_url: `https://${id === 'cdnfallback' ? 'cf.v.redd.it' : 'v.redd.it'}/${id}/fallback.mp4`,
       }),
       hls_url: `https://${id.startsWith('cdn') ? 'cf.v.redd.it' : 'v.redd.it'}/${id}/${id === 'silent' ? 'stream_0' : 'master'}.m3u8${id.startsWith('cdn') ? cdnQuery : ''}`,
-      width: 160, height: 90, is_gif: id === 'gif',
+      width: 160, height: 90, is_gif: ['gif', 'hlsgif'].includes(id),
     } },
   },
 });
@@ -54,9 +54,15 @@ const requested = [];
 const cdnRequests = [];
 const cdnPlaylists = [];
 const errors = [];
+const htmlGifSource = 'https://preview.redd.it/htmlgif.gif?width=160&format=mp4&s=fixture';
+const htmlGif = `<shreddit-post id="t3_htmlgif" post-title="Video htmlgif" author="fixture" subreddit-name="htmlgif" permalink="/r/htmlgif/comments/htmlgif/x/" content-href="https://i.redd.it/htmlgif.gif" post-type="gif" score="1" comment-count="0"><shreddit-player src="${htmlGifSource.replaceAll('&', '&amp;')}" gif></shreddit-player></shreddit-post>`;
 try {
-  await context.route(/^https:\/\/(www\.reddit\.com|(?:cf\.)?v\.redd\.it)\//, async (route) => {
+  await context.route(/^https:\/\/(www\.reddit\.com|preview\.redd\.it|(?:cf\.)?v\.redd\.it)\//, async (route) => {
     const url = new URL(route.request().url());
+    if (url.hostname === 'preview.redd.it') {
+      requested.push(url.pathname + url.search);
+      return route.fulfill({ contentType: 'video/mp4', body: await readFile(resolve('tools/fixtures/video/fallback.mp4')) });
+    }
     if (url.hostname === 'cf.v.redd.it') {
       cdnRequests.push(url.href);
       // Like the real CDN response: HTTP success without CORS permission.
@@ -78,6 +84,21 @@ try {
       return route.fulfill({ body, headers,
         contentType: file.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4' });
     }
+    if (url.pathname === '/r/htmlgif/') return route.fulfill({
+      contentType: 'text/html', body: '<title>HTML GIF fixture</title>' + htmlGif,
+    });
+    if (url.pathname === '/original.gif') return route.fulfill({
+      contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'),
+    });
+    if (url.pathname === '/comments/htmlgif.json') return route.fulfill({
+      contentType: 'application/json', body: JSON.stringify([
+        { data: { children: [{ kind: 't3', data: {
+          id: 'htmlgif', name: 't3_htmlgif', title: 'Video htmlgif', subreddit: 'htmlgif',
+          permalink: '/r/htmlgif/comments/htmlgif/x/', url: 'https://i.redd.it/htmlgif.gif',
+          preview: { images: [{ source: { url: 'https://www.reddit.com/original.gif', width: 160, height: 90 } }] },
+        } }] } }, { data: { children: [] } },
+      ]),
+    });
     if (url.pathname.endsWith('.json')) return route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { after: null, children:
@@ -170,14 +191,42 @@ try {
   assert.equal(await gif.evaluate((v) => v.muted && v.loop && !v.controls), true);
   assert.ok(!requested.some((path) => path.startsWith('/gif/') && path.endsWith('.m3u8')), 'GIF bypasses HLS');
   await close();
+  const hlsGif = await open('hlsgif');
+  await play(hlsGif);
+  assert.equal(await hlsGif.evaluate((v) => v.muted && v.loop && !v.controls), true, 'HLS-only GIFs still stream');
+  await close();
   await open('unplayable');
   await app.getByText("This video can't be played here.", { exact: true }).waitFor({ timeout: 30000 });
   await close();
   assert.deepEqual(cdnRequests, [], 'playback avoids the CDN host without CORS');
   assert.ok(cdnPlaylists.length >= 3, 'CDN HLS-only playback, reopening and MP4 fallback exercised');
   assert.ok(cdnPlaylists.every((query) => query === cdnQuery), 'signed playback parameters stay intact');
+
+  // The feed snapshot has Reddit's MP4 GIF player; the post JSON describes
+  // the same upload as an animated image. Both must be usable as GIFs.
+  await page.goto('https://www.reddit.com/r/htmlgif/');
+  app = undefined;
+  for (let i = 0; i < 100 && !app; i++) {
+    app = page.frames().find((frame) => frame.url().startsWith(
+      desktop ? 'openrelay://reader' : 'chrome-extension://'));
+    if (!app) await page.waitForTimeout(100);
+  }
+  const card = app.locator('.post', { hasText: 'Video htmlgif' });
+  await card.getByText('GIF', { exact: true }).first().waitFor();
+  const feedGif = await open('htmlgif');
+  await play(feedGif);
+  assert.equal(await feedGif.evaluate((v) => v.muted && v.loop && !v.controls), true);
+  assert.equal(await feedGif.getAttribute('src'), htmlGifSource, 'HTML GIF uses its direct MP4');
+  await close();
+  await card.getByRole('button', { name: '0 comments', exact: true }).click();
+  const detail = app.locator('.screen.is-detail');
+  await detail.getByText('GIF', { exact: true }).waitFor();
+  await detail.getByRole('button', { name: /^Open (image|media)$/ }).click();
+  await app.locator('.viewer img').waitFor();
+  await app.waitForFunction(() => document.querySelector('.viewer img')?.naturalWidth > 0);
+  await close();
   assert.deepEqual(errors, []);
-  console.log(`PASS (${desktop ? 'desktop' : 'extension'}): separate HLS audio decodes a non-silent signal; CDN playback with signed URLs, HLS-only videos, seeking, cleanup/reopening, broken playlists/audio fallback, silent videos, GIFs and playback errors.`);
+  console.log(`PASS (${desktop ? 'desktop' : 'extension'}): separate HLS audio decodes a non-silent signal; CDN playback with signed URLs, HLS-only videos and GIFs, seeking, cleanup/reopening, broken playlists/audio fallback, silent videos, HTML GIF previews and JSON GIFs in both panes, and playback errors.`);
 } finally {
   if (electronApp) await electronApp.close();
   else await context.close();
