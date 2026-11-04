@@ -127,6 +127,7 @@ export const updateAbout = (sub: string, patch: Partial<SubredditAbout>) => {
   for (const listener of aboutListeners) listener();
 };
 
+/** A community's info, loaded once and cached; none for an empty `sub`. */
 export const useAbout = (sub: string): SubredditAbout | null => {
   const key = sub.toLowerCase();
   const [, setLoaded] = useState(0);
@@ -138,7 +139,7 @@ export const useAbout = (sub: string): SubredditAbout | null => {
     };
   }, []);
   useEffect(() => {
-    if (aboutCache.has(key)) return;
+    if (!key || aboutCache.has(key)) return;
     let live = true;
     fetchAbout(sub)
       .then(({ about: info }) => {
@@ -150,7 +151,7 @@ export const useAbout = (sub: string): SubredditAbout | null => {
       live = false;
     };
   }, [key, sub]);
-  return aboutCache.get(key) ?? null;
+  return (key && aboutCache.get(key)) || null;
 };
 
 const Skeletons = ({ layout }: { layout: string }) => (

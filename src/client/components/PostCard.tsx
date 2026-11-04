@@ -18,7 +18,7 @@ import {
 import { openPostActions } from './PostActions';
 import { ModActionsSheet } from './Relay';
 import { SwipeActions, type SwipeAction } from './SwipeActions';
-import { VoteLinks, useVoteToggle } from './VoteLinks';
+import { HIDDEN_SCORE_TITLE, VoteLinks, useVoteToggle } from './VoteLinks';
 import { useAccount } from '../lib/account';
 import { sharePost } from '../lib/platform';
 import { toggleSaved, useSaved } from '../lib/saved';
@@ -51,6 +51,7 @@ const Stats = ({ post, onMore }: { post: PostSummary; onMore: () => void }) => {
         thingId={post.id}
         permalink={post.permalink}
         score={post.score}
+        scoreHidden={post.scoreHidden}
         vote={post.vote}
         kind="post"
         variant="stat"
@@ -111,6 +112,7 @@ const PostRow = ({
             thingId={post.id}
             permalink={post.permalink}
             score={post.score}
+            scoreHidden={post.scoreHidden}
             vote={post.vote}
             kind="post"
             variant="inline"
@@ -190,7 +192,11 @@ const Crosspost = ({ original }: { original: PostSummary }) => {
         <div className="crosspost-stats">
           <span>
             <Icon name="up" size={14} />
-            {compact(original.score)}
+            {original.scoreHidden ? (
+              <Icon name="hide" size={14} title={HIDDEN_SCORE_TITLE} />
+            ) : (
+              compact(original.score)
+            )}
           </span>
           <span>
             <Icon name="comment" size={14} />

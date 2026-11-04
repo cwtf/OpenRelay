@@ -33,6 +33,7 @@ import { ReplySheet } from "../components/ReplySheet";
 import { SaveBodyMediaSheet } from "./SavedMediaScreen";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
+import { useAbout } from "./FeedScreen";
 import { currentAccount } from "../lib/account";
 import { fetchContext, fetchPost, fetchReplies, entryRoute, site } from "../lib/api";
 import {
@@ -500,6 +501,15 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     [tree, archiveOnly, sort, restore],
   );
 
+  // The community's info says how long it hides new scores; it's read only
+  // for a thread that has hidden ones.
+  const anyHidden = useMemo(() => {
+    const hidden = (nodes: CommentNode[]): boolean =>
+      nodes.some((node) => node.scoreHidden || hidden(node.replies));
+    return Boolean(tree && !archiveOnly && hidden(tree));
+  }, [tree, archiveOnly]);
+  const scoreHideMinutes = useAbout(anyHidden && post ? post.subreddit : "")?.scoreHideMinutes;
+
   const rows = useMemo(() => {
     const out: Row[] = [];
     const walk = (nodes: CommentNode[], depth: number) => {
@@ -774,7 +784,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       const saved = media.length === 1 && isSaved(media[0]!);
       nav.openSheet((onClosed) => (
         <Sheet
-          title={`${node.author} · ${compact(node.score)} points`}
+          title={`${node.author} · ${node.scoreHidden ? "score hidden" : `${compact(node.score)} points`}`}
           onClosed={onClosed}
         >
           {(close) => {
@@ -1255,6 +1265,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                   thingId={post.id}
                   permalink={post.permalink}
                   score={post.score}
+                  scoreHidden={post.scoreHidden}
                   vote={post.vote}
                   kind="post"
                   variant="pill"
@@ -1406,6 +1417,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 onActions={commentActions}
                 swipe={commentSwipe}
                 readOnly={archiveOnly}
+                scoreHideMinutes={scoreHideMinutes}
               />
             ) : (
               <MoreRow

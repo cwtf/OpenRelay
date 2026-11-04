@@ -167,6 +167,7 @@ export function normalizePost(p: Raw): PostDetail {
     domain: String(p.domain || parent?.domain || ""),
     createdAt: num(p.created_utc) * 1000,
     score: num(p.score),
+    ...(p.hide_score === true ? { scoreHidden: true as const } : {}),
     ...(typeof p.upvote_ratio === "number" &&
     p.upvote_ratio >= 0 &&
     p.upvote_ratio <= 1
@@ -272,6 +273,12 @@ function modInfo(t: Raw): { mod?: ModInfo } {
     ? { mod: { reports, ...(state ? { state } : {}) } }
     : {};
 }
+/**
+ * While a community hides new comments' scores (`comment_score_hide_mins`),
+ * Reddit sends each such comment as `score: 1` with `score_hidden` set.
+ */
+const hiddenScore = (c: Raw): { scoreHidden?: true } =>
+  c.score_hidden === true ? { scoreHidden: true } : {};
 const NAME = /^[\w-]{3,20}$/;
 const fullname = (value: unknown, prefix: string) =>
   typeof value === "string" && /^t\d_[a-z0-9]+$/i.test(value)
@@ -283,6 +290,7 @@ export function normalizeListingComment(c: Raw): ListingComment {
     author: String(c.author ?? "[deleted]"),
     body: String(c.body ?? ""),
     score: num(c.score),
+    ...hiddenScore(c),
     createdAt: num(c.created_utc) * 1000,
     subreddit: String(c.subreddit ?? ""),
     postId: fullname(c.link_id, "t3_"),
@@ -416,6 +424,7 @@ export function normalizeComments(children: unknown = []): {
           author: String(c.author ?? "[deleted]"),
           body: String(c.body ?? ""),
           score: num(c.score),
+          ...hiddenScore(c),
           createdAt: num(c.created_utc) * 1000,
           edited: Boolean(c.edited),
           stickied: Boolean(c.stickied),

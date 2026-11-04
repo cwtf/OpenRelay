@@ -490,6 +490,9 @@ async function fetchAbout(sub: string): Promise<AboutResponse> {
             ),
           }
         : {}),
+      ...(typeof d.comment_score_hide_mins === "number" && d.comment_score_hide_mins > 0
+        ? { scoreHideMinutes: d.comment_score_hide_mins }
+        : {}),
       title: d.title,
       description: d.public_description,
       subscribers: d.subscribers,

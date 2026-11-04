@@ -276,6 +276,21 @@ test("keeps the media a comment body refers to by ID", () => {
   const plain = normalizeComments([{ kind: "t1", data: { id: "c2", body: "hi" } }]);
   assert.equal("media" in plain.comments[0]!, false);
 });
+test("marks scores the community hides for now", () => {
+  // Reddit sends each such comment as 1 point with `score_hidden` set.
+  const { comments } = normalizeComments([
+    { kind: "t1", data: { id: "c1", body: "new", score: 1, score_hidden: true } },
+    { kind: "t1", data: { id: "c2", body: "old", score: 1, score_hidden: false } },
+  ]);
+  assert.equal(comments[0]?.scoreHidden, true);
+  assert.equal("scoreHidden" in comments[1]!, false);
+  const [listed] = normalizeListing([
+    { kind: "t1", data: { id: "c3", body: "new", score: 1, score_hidden: true } },
+  ]);
+  assert.equal(listed?.type === "comment" && listed.comment.scoreHidden, true);
+  assert.equal(normalizePost({ id: "p1", title: "T", score: 1, hide_score: true }).scoreHidden, true);
+  assert.equal("scoreHidden" in normalizePost({ id: "p2", title: "T", score: 5 }), false);
+});
 test("keeps the stream of a video a comment links to", () => {
   const hls = "https://v.redd.it/link/p1/asset/v1/HLSPlaylist.m3u8?a=1&amp;v=1";
   const [comment] = normalizeComments([

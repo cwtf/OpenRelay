@@ -163,6 +163,8 @@ function comment(el: Element, postId: string): Raw | null {
       : el.querySelector(":scope > .entry .usertext-body .md")?.textContent?.trim() ||
         (author ? "" : "[deleted]"),
     score: Number(attr("score") || attr("data-score")),
+    // Old Reddit writes "[score hidden]" in place of the score.
+    score_hidden: Boolean(el.querySelector(":scope > .entry .score-hidden")),
     created_utc: time(attr("created") || el.querySelector("time")?.getAttribute("datetime")),
     permalink:
       safeUrl(attr("permalink") || el.querySelector<HTMLAnchorElement>("a.bylink")?.href) ||

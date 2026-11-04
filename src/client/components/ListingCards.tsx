@@ -208,6 +208,7 @@ export const CommentCard = ({
           thingId={comment.id}
           permalink={comment.permalink}
           score={comment.score}
+          scoreHidden={comment.scoreHidden}
           vote={comment.vote}
           kind="comment"
           variant="inline"

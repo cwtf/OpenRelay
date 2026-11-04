@@ -5,7 +5,7 @@ import { useLongPress } from '../lib/gestures';
 import { Markdown } from '../lib/markdown';
 import { Icon } from './Icon';
 import { FlairChip } from './PostParts';
-import { VoteLinks, useVoteToggle } from './VoteLinks';
+import { HiddenScoreChip, VoteLinks, useVoteToggle } from './VoteLinks';
 import { SwipeActions, type SwipeAction } from './SwipeActions';
 import { useNav } from '../app/nav';
 import { useAccount } from '../lib/account';
@@ -51,6 +51,8 @@ type CommentRowProps = {
   swipe?: CommentSwipe | undefined;
   /** An archived thread Reddit no longer shows: no voting, replying or editing. */
   readOnly?: boolean;
+  /** How long the community hides new comments' scores, when known. */
+  scoreHideMinutes?: number | undefined;
 };
 
 export const CommentRow = memo(
@@ -64,12 +66,17 @@ export const CommentRow = memo(
     onActions,
     swipe,
     readOnly,
+    scoreHideMinutes,
   }: CommentRowProps) => {
     const nav = useNav();
     const account = useAccount();
     const vote = useVoteToggle(node.id, node.vote, node.score);
     const own = account?.name.toLowerCase() === node.author.toLowerCase();
     const live = !readOnly;
+    const scoreShownAt =
+      node.scoreHidden && scoreHideMinutes
+        ? node.createdAt + scoreHideMinutes * 60000
+        : undefined;
     // Relay's comment swipe actions: Up, Down, User, Edit, Reply, Parent, Mod, More.
     const actions: SwipeAction[] = [
       ...(live
@@ -164,6 +171,8 @@ export const CommentRow = memo(
               thingId={node.id}
               permalink={node.permalink}
               score={node.score}
+              scoreHidden={node.scoreHidden}
+              scoreShownAt={scoreShownAt}
               vote={node.vote}
               kind="comment"
               variant="inline"
@@ -187,6 +196,7 @@ export const CommentRow = memo(
             {age(node.createdAt)}
             {node.edited ? '*' : ''}
           </time>
+          {live && scoreShownAt !== undefined ? <HiddenScoreChip shownAt={scoreShownAt} /> : null}
           {node.stickied ? <Icon name="pin" className="pinned" /> : null}
           {node.locked ? <Icon name="lock" /> : null}
           <span className="grow" />

@@ -77,6 +77,25 @@ const comment = {
   },
 };
 const fixture = `<!doctype html><html><head><title>Reddit fixture</title></head><body><h1>Original Reddit fixture</h1><shreddit-post id="t3_abc123" post-title="${post.title}" author="example_user" subreddit-prefixed-name="r/test" permalink="${post.permalink}" content-href="${post.url}" post-type="text" score="123" comment-count="2" created-timestamp="2023-11-14T22:13:20Z"><div slot="text-body">Loaded page text.</div></shreddit-post></body></html>`;
+/**
+ * A thread whose new comment's score Reddit hides (sent as 1 with
+ * `score_hidden`), beside an older one it shows.
+ */
+const hiddenThread = (subreddit) => {
+  const id = subreddit === "test" ? "hid123" : "hid456";
+  const at = Math.floor(Date.now() / 1000);
+  return [
+    { data: { children: [{ kind: "t3", data: { ...post, id, name: "t3_" + id, subreddit, permalink: `/r/${subreddit}/comments/${id}/hidden/` } }] } },
+    {
+      data: {
+        children: [
+          { kind: "t1", data: { id: "n1", name: "t1_n1", parent_id: "t3_" + id, author: "quiet_owl", body: "A comment whose score is hidden", score: 1, score_hidden: true, created_utc: at - 300 } },
+          { kind: "t1", data: { id: "n2", name: "t1_n2", parent_id: "t3_" + id, author: "old_timer", body: "A comment whose score shows", score: 128, created_utc: at - 7200 } },
+        ],
+      },
+    },
+  ];
+};
 let deny = false;
 /** Also refuse new Reddit's HTML pieces and the post's own page. */
 let denyHtml = false;
@@ -302,6 +321,8 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
             ],
           },
         }
+      : url.pathname.includes("/comments/hid")
+      ? hiddenThread(url.pathname.includes("/comments/hid123") ? "test" : "broken")
       : url.pathname.includes("/comments/")
       ? [
           { data: { children: [{ kind: "t3", data: post }] } },
@@ -325,6 +346,8 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
               description: "## Sidebar heading\n\nThe full **sidebar** text.",
               // Comments here take images, not Giphy GIFs.
               allowed_media_in_comments: ["static", "animated"],
+              // r/test hides new comments' scores for an hour; r/broken doesn't say.
+              ...(url.pathname.startsWith("/r/broken/") ? {} : { comment_score_hide_mins: 60 }),
             },
           }
         : { data: { children: [{ kind: "t3", data: post }], after: null } };
@@ -922,6 +945,27 @@ try {
   await app
     .getByText("An actual nested comment fixture", { exact: true })
     .waitFor();
+  // A hidden score: a clock and a countdown when the community says how long
+  // for, else a dashed ring; never Reddit's placeholder 1.
+  await page.goto("https://www.reddit.com/r/test/comments/hid123/hidden/");
+  app = await reader();
+  const hiddenRow = app.locator(".comment", { hasText: "A comment whose score is hidden" });
+  await hiddenRow.locator(".score-chip", { hasText: /^score in 5[45]m$/ }).waitFor();
+  assert.equal(await hiddenRow.locator(".vote-score.is-hidden:not(.is-unknown)").count(), 1);
+  assert.equal((await hiddenRow.locator(".vote-score").textContent()).trim(), "");
+  assert.equal(
+    (await app.locator(".comment", { hasText: "A comment whose score shows" }).locator(".vote-score").textContent()).trim(),
+    "128",
+  );
+  await app.locator(".screen.is-entering").waitFor({ state: "detached" });
+  await page.screenshot({ path: resolve(out, "hidden-score-countdown.png") });
+  await page.goto("https://www.reddit.com/r/broken/comments/hid456/hidden/");
+  app = await reader();
+  const unknownRow = app.locator(".comment", { hasText: "A comment whose score is hidden" });
+  await unknownRow.locator(".vote-score.is-hidden.is-unknown").waitFor();
+  assert.equal(await unknownRow.locator(".score-chip").count(), 0);
+  await app.locator(".screen.is-entering").waitFor({ state: "detached" });
+  await page.screenshot({ path: resolve(out, "hidden-score-unknown.png") });
   await page.goto("https://www.reddit.com/settings/");
   await page.waitForTimeout(1000);
   assert.equal(await page.locator("#openrelay-extension").count(), 0);

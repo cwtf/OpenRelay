@@ -2,11 +2,12 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { pageUrl } from "../../extension/bridge";
-import { compact } from "../lib/format";
+import { compact, untilScore } from "../lib/format";
 import { redditUrl } from "../lib/platform";
 import { castVote, useVote } from "../lib/votes";
 import { isLemmyItem } from "../lib/hybrid";
@@ -26,10 +27,44 @@ export const useVoteToggle = (thingId: string, vote: Vote | undefined, score: nu
   };
 };
 
+export const HIDDEN_SCORE_TITLE = "Score hidden by the community for now";
+
+/** One clock for every countdown on screen, ticking while any is shown. */
+let minuteTimer: number | undefined;
+const minuteListeners = new Set<() => void>();
+const subscribeMinute = (listener: () => void) => {
+  minuteListeners.add(listener);
+  minuteTimer ??= window.setInterval(() => minuteListeners.forEach((fn) => fn()), 20000);
+  return () => {
+    minuteListeners.delete(listener);
+    if (!minuteListeners.size) {
+      clearInterval(minuteTimer);
+      minuteTimer = undefined;
+    }
+  };
+};
+/** The time, to the minute. */
+const useMinute = () =>
+  useSyncExternalStore(subscribeMinute, () => Math.floor(Date.now() / 60000) * 60000);
+
+/** When a hidden score shows, after a comment's time. */
+export const HiddenScoreChip = ({ shownAt }: { shownAt: number }) => {
+  useMinute();
+  return (
+    <span className="score-chip" title={`Score shown ${new Date(shownAt).toLocaleTimeString(undefined, { timeStyle: "short" })}`}>
+      {untilScore(shownAt)}
+    </span>
+  );
+};
+
 type VoteLinksProps = {
   thingId: string;
   permalink: string;
   score: number;
+  /** The community hides the score for now: `score` is only a placeholder. */
+  scoreHidden?: boolean | undefined;
+  /** When a hidden score shows, if the community says; a clock then fills the ring. */
+  scoreShownAt?: number | undefined;
   /** The viewer's vote as reported by Reddit, if known. */
   vote?: Vote | undefined;
   kind: "post" | "comment";
@@ -182,6 +217,8 @@ export const VoteLinks = ({
   thingId,
   permalink,
   score,
+  scoreHidden,
+  scoreShownAt,
   vote,
   kind,
   variant,
@@ -221,15 +258,23 @@ export const VoteLinks = ({
     draggable,
     (direction) => void castVote(thingId, direction, current, shown),
   );
-  const text = compact(shown);
+  // A hidden score stays hidden after a vote: the page's count is a placeholder
+  // too. A clock when the community says how long for, else a dashed ring.
+  const text = scoreHidden ? "" : compact(shown);
+  const hidden = scoreHidden
+    ? scoreShownAt !== undefined
+      ? " is-hidden"
+      : " is-hidden is-unknown"
+    : "";
   const scoreEl = (
     <span
       // is-interactive: feed rows otherwise let presses through to the post.
-      className={`vote-score${text.length > 3 ? " is-long" : ""}${draggable ? " is-interactive" : ""}`}
+      className={`vote-score${text.length > 3 ? " is-long" : ""}${hidden}${draggable ? " is-interactive" : ""}`}
       data-no-swipe={draggable || undefined}
+      {...(scoreHidden ? { title: HIDDEN_SCORE_TITLE, "aria-label": "Score hidden" } : {})}
       {...dragVote.handlers}
     >
-      {text}
+      {scoreHidden ? <Icon name={scoreShownAt !== undefined ? "clock" : "hide"} /> : text}
     </span>
   );
   const armed = dragVote.armed;

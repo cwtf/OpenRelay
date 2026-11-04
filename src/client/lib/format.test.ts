@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { age, compact, controversialRatio, duration, plural } from './format.ts';
+import { age, compact, controversialRatio, duration, plural, untilScore } from './format.ts';
 
 void test('formats compact counts', () => {
   assert.equal(compact(999), '999');
@@ -29,4 +29,12 @@ void test('flags posts whose votes are split', () => {
   assert.equal(controversialRatio({ upvoteRatio: 0.6, comments: 40 }), null);
   assert.equal(controversialRatio({ upvoteRatio: 0.5, comments: 9 }), null);
   assert.equal(controversialRatio({ comments: 40 }), null);
+});
+
+void test('says when a hidden score shows', () => {
+  const now = 1_700_000_000_000;
+  assert.equal(untilScore(now + 55.5 * 60_000, now), 'score in 56m');
+  assert.equal(untilScore(now + 65 * 60_000, now), 'score in 1h 5m');
+  assert.equal(untilScore(now + 120 * 60_000, now), 'score in 2h');
+  assert.equal(untilScore(now - 1, now), 'refresh for score');
 });

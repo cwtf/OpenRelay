@@ -48,6 +48,18 @@ export const fullDate = (timestamp: number): string =>
     timeStyle: 'short',
   });
 
+/**
+ * When a hidden score shows, such as "score in 56m" or "score in 1h 5m".
+ * Reddit only shows it on the next load, so once due it asks for a refresh.
+ */
+export const untilScore = (shownAt: number, now = Date.now()): string => {
+  const minutes = Math.ceil((shownAt - now) / 60000);
+  if (minutes <= 0) return 'refresh for score';
+  if (minutes < 60) return `score in ${minutes}m`;
+  const rest = minutes % 60;
+  return `score in ${Math.floor(minutes / 60)}h${rest ? ` ${rest}m` : ''}`;
+};
+
 export const duration = (seconds: number): string => {
   const total = Math.round(seconds);
   const m = Math.floor(total / 60);

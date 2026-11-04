@@ -108,6 +108,8 @@ export type PostSummary = {
   domain: string;
   createdAt: number;
   score: number;
+  /** Set while the community hides new scores; `score` is then a placeholder. */
+  scoreHidden?: true;
   /** Share of votes that are upvotes (0–1), when the site reports it. */
   upvoteRatio?: number;
   comments: number;
@@ -152,6 +154,8 @@ export type CommentNode = {
   author: string;
   body: string;
   score: number;
+  /** Set while the community hides new scores; `score` is then a placeholder. */
+  scoreHidden?: true;
   createdAt: number;
   edited: boolean;
   stickied: boolean;
@@ -182,6 +186,8 @@ export type ListingComment = {
   author: string;
   body: string;
   score: number;
+  /** Set while the community hides new scores; `score` is then a placeholder. */
+  scoreHidden?: true;
   createdAt: number;
   subreddit: string;
   postId: string;
@@ -260,6 +266,8 @@ export type SubredditAbout = {
    * `giphy`, `static`, `animated`, `expression`); absent when unknown.
    */
   commentMedia?: string[];
+  /** How long new comments' scores stay hidden (`comment_score_hide_mins`), when set. */
+  scoreHideMinutes?: number;
   description?: string;
   subscribers?: number;
   active?: number;

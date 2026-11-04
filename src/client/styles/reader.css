@@ -776,6 +776,32 @@
   border-width: 1.5px;
 }
 
+/* A score the community hides for now: a clock in the ring when it says how
+   long for (with a countdown chip after the comment's time), else an eye
+   crossed out in a dashed ring. The ring still drags to vote. */
+.vote-score.is-hidden {
+  color: var(--text-3);
+}
+
+.vote-score.is-hidden .icon {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.vote-score.is-unknown {
+  border-style: dashed;
+}
+
+.score-chip {
+  padding: 1px 6px;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: calc(11px * var(--ts));
+  white-space: nowrap;
+}
+
 .post-stats .grow {
   flex: 1;
 }
