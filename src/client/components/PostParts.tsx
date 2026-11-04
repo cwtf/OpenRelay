@@ -15,11 +15,28 @@ import type {
 import type { ViewerItem, ViewerSpec } from '../app/nav';
 import { useNav } from '../app/nav';
 import { usePrefs } from '../app/prefs';
-import { age, compact, duration, fullDate } from '../lib/format';
+import { age, compact, controversialRatio, duration, fullDate } from '../lib/format';
 import { openUrl } from '../lib/platform';
 import { savablePostMedia, savableOn, type SavedMedia } from '../lib/savedMedia';
 import type { SaveState } from '../lib/saveProgress';
 import { Icon, type IconName } from './Icon';
+
+// ------------------------------------------------------- controversy
+
+/** "54%" with the Controversial sort's bolt, on a post whose votes are split. */
+export const ControversialChip = ({ post }: { post: PostSummary }) => {
+  const percent = controversialRatio(post);
+  return percent === null ? null : (
+    <span
+      className="controversial-chip"
+      title={`Controversial: ${percent}% upvoted`}
+      aria-label={`Controversial, ${percent}% upvoted`}
+    >
+      <Icon name="controversial" />
+      {percent}%
+    </span>
+  );
+};
 
 // ------------------------------------------------------------------ flair
 
@@ -47,9 +64,12 @@ export const FlairChip = ({ flair }: { flair: Flair }) => {
 export const PostMeta = ({
   post,
   showSub,
+  showControversial,
 }: {
   post: PostSummary;
   showSub?: boolean;
+  /** The post page: the feed shows the chip in its stats row instead. */
+  showControversial?: boolean;
 }) => {
   const authorClass =
     post.distinguished === 'moderator'
@@ -81,6 +101,7 @@ export const PostMeta = ({
           <span className="domain">{post.domain}</span>
         </>
       ) : null}
+      {showControversial ? <ControversialChip post={post} /> : null}
     </div>
   );
 };

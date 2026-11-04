@@ -8,6 +8,7 @@ import { useIsSelectedPost } from '../lib/panes';
 import { readPosts } from '../lib/storage';
 import { Icon } from './Icon';
 import {
+  ControversialChip,
   MediaFrame,
   PostFlags,
   PostMeta,
@@ -54,6 +55,7 @@ const Stats = ({ post, onMore }: { post: PostSummary; onMore: () => void }) => {
         kind="post"
         variant="stat"
       />
+      <ControversialChip post={post} />
       <button
         type="button"
         className="stat"
@@ -113,6 +115,7 @@ const PostRow = ({
             kind="post"
             variant="inline"
           />
+          <ControversialChip post={post} />
           <span>
             <Icon name="comment" size={14} />
             {compact(post.comments)}

@@ -167,6 +167,11 @@ export function normalizePost(p: Raw): PostDetail {
     domain: String(p.domain || parent?.domain || ""),
     createdAt: num(p.created_utc) * 1000,
     score: num(p.score),
+    ...(typeof p.upvote_ratio === "number" &&
+    p.upvote_ratio >= 0 &&
+    p.upvote_ratio <= 1
+      ? { upvoteRatio: p.upvote_ratio }
+      : {}),
     comments: num(p.num_comments),
     nsfw: Boolean(p.over_18),
     spoiler: Boolean(p.spoiler),
@@ -416,6 +421,7 @@ export function normalizeComments(children: unknown = []): {
           stickied: Boolean(c.stickied),
           locked: Boolean(c.locked),
           isSubmitter: Boolean(c.is_submitter),
+          ...(num(c.controversiality) > 0 ? { controversial: true } : {}),
           permalink: safeUrl(c.permalink),
           replies: nested.comments,
           moreReplies: nested.more,

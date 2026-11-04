@@ -6,7 +6,20 @@ const compactFormatter = new Intl.NumberFormat('en', {
 export const compact = (value: number): string =>
   Math.abs(value) < 1000 ? String(value) : compactFormatter.format(value);
 
-export const plural = (count: number, one: string, many = `${one}s`): string =>
+/**
+ * The upvote percentage to flag a post with, when its votes are split:
+ * under 60% upvoted, on a post with at least 10 comments (a low ratio on a
+ * post few people saw is noise).
+ */
+export const controversialRatio = (post: {
+  upvoteRatio?: number;
+  comments: number;
+}): number | null =>
+  post.upvoteRatio !== undefined && post.upvoteRatio < 0.6 && post.comments >= 10
+    ? Math.round(post.upvoteRatio * 100)
+    : null;
+
+export const plural =(count: number, one: string, many = `${one}s`): string =>
   `${compact(count)} ${count === 1 ? one : many}`;
 
 const UNITS: [number, string][] = [

@@ -173,6 +173,13 @@ export const CommentRow = memo(
               <span className="vote-score">{compact(node.score)}</span>
             </span>
           )}
+          {node.controversial ? (
+            <Icon
+              name="controversial"
+              className="controversial-mark"
+              title="Controversial: many upvotes and many downvotes"
+            />
+          ) : null}
           <time
             dateTime={new Date(node.createdAt).toISOString()}
             title={fullDate(node.createdAt)}

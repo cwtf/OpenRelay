@@ -108,6 +108,8 @@ export type PostSummary = {
   domain: string;
   createdAt: number;
   score: number;
+  /** Share of votes that are upvotes (0–1), when the site reports it. */
+  upvoteRatio?: number;
   comments: number;
   nsfw: boolean;
   spoiler: boolean;
@@ -155,6 +157,8 @@ export type CommentNode = {
   stickied: boolean;
   locked: boolean;
   isSubmitter: boolean;
+  /** Many upvotes and many downvotes: Reddit's `controversiality`. */
+  controversial?: boolean;
   distinguished?: Distinguished;
   authorFlair?: Flair;
   permalink: string;

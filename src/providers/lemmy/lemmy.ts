@@ -136,6 +136,7 @@ export function normalizePost(view: Raw, origin: string): PostDetail {
     domain: url ? hostOf(url) : `self.${community}`,
     createdAt: time(p.published),
     score: num(counts.score),
+    ...upvoteRatio(counts),
     comments: num(counts.comments),
     nsfw: Boolean(p.nsfw || view?.community?.nsfw),
     spoiler: false,
@@ -159,6 +160,24 @@ export function normalizePost(view: Raw, origin: string): PostDetail {
     media,
   };
 }
+
+/** A post's share of upvotes, from its counts (none before anyone votes). */
+const upvoteRatio = (counts: Raw) => {
+  const up = num(counts?.upvotes);
+  const total = up + num(counts?.downvotes);
+  return total > 0 ? { upvoteRatio: up / total } : {};
+};
+
+/**
+ * Lemmy has no `controversiality`; this marks a comment the way Reddit's does
+ * in effect: at least 3 votes each way, the smaller side at least half the
+ * larger.
+ */
+export const controversialCounts = (counts: Raw): boolean => {
+  const up = num(counts?.upvotes);
+  const down = num(counts?.downvotes);
+  return Math.min(up, down) >= 3 && Math.min(up, down) * 2 >= Math.max(up, down);
+};
 
 /** `my_vote`: present only when signed in. */
 const vote = (v: unknown) =>
@@ -197,6 +216,7 @@ export function normalizeComments(
         locked: Boolean(view?.post?.locked),
         isSubmitter:
           view?.creator?.id !== undefined && view?.creator?.id === view?.post?.creator_id,
+        ...(controversialCounts(view?.counts) ? { controversial: true } : {}),
         permalink: new URL(`/comment/${num(c.id)}`, origin).href,
         replies: [],
         moreReplies: false,

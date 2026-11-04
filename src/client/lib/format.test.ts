@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { age, compact, duration, plural } from './format.ts';
+import { age, compact, controversialRatio, duration, plural } from './format.ts';
 
 void test('formats compact counts', () => {
   assert.equal(compact(999), '999');
@@ -22,4 +22,11 @@ void test('formats relative ages', () => {
 void test('formats durations', () => {
   assert.equal(duration(74), '1:14');
   assert.equal(duration(5), '0:05');
+});
+
+void test('flags posts whose votes are split', () => {
+  assert.equal(controversialRatio({ upvoteRatio: 0.544, comments: 40 }), 54);
+  assert.equal(controversialRatio({ upvoteRatio: 0.6, comments: 40 }), null);
+  assert.equal(controversialRatio({ upvoteRatio: 0.5, comments: 9 }), null);
+  assert.equal(controversialRatio({ comments: 40 }), null);
 });

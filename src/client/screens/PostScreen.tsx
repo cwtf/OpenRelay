@@ -1206,7 +1206,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
                 data-layout={prefs.layout}
               >
                 <div className="row-main">
-                  <PostMeta post={shown} showSub />
+                  <PostMeta post={shown} showSub showControversial />
                   <h1 className="post-title">{shown.title}</h1>
                   <PostFlags post={shown} />
                   {captured}
@@ -1215,7 +1215,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
               </section>
             ) : (
               <section className="post-head">
-                <PostMeta post={shown} showSub />
+                <PostMeta post={shown} showSub showControversial />
                 <h1 className="post-title">{shown.title}</h1>
                 <PostFlags post={shown} />
                 {captured}

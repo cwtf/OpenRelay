@@ -538,3 +538,14 @@ test("skips comments, messages and rules Reddit sends in an unexpected shape", (
     { title: "Be kind", description: "" },
   ]);
 });
+test("reads a post's upvote ratio and a controversial comment", () => {
+  assert.equal(normalizePost({ id: "a", upvote_ratio: 0.54 }).upvoteRatio, 0.54);
+  assert.equal("upvoteRatio" in normalizePost({ id: "b" }), false);
+  assert.equal("upvoteRatio" in normalizePost({ id: "c", upvote_ratio: 3 }), false);
+  const { comments } = normalizeComments([
+    { kind: "t1", data: { id: "c1", body: "split", controversiality: 1 } },
+    { kind: "t1", data: { id: "c2", body: "liked", controversiality: 0 } },
+  ]);
+  assert.equal(comments[0]!.controversial, true);
+  assert.equal("controversial" in comments[1]!, false);
+});

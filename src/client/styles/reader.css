@@ -585,6 +585,31 @@
   height: 18px;
 }
 
+/* A post whose votes are split: its upvote percentage on an amber pill. */
+.controversial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+  font-size: calc(12px * var(--ts));
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.controversial-chip .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.post-stats .controversial-chip {
+  margin: 0 4px;
+}
+
 /* Vote arrows forward one click to the matching native Reddit control. Each
    control is a capsule of arrows either side of a score ring whose border is
    the current vote's colour. Dragging the ring toward an arrow (VoteLinks'
@@ -1702,6 +1727,12 @@ button.post-action {
 
 .comment-head .pinned {
   color: var(--mod);
+}
+
+/* Controversial comments: the Controversial sort's bolt after the score. */
+.comment-head .controversial-mark {
+  margin-left: -4px;
+  color: var(--admin);
 }
 
 /* Relay's hidden-replies badge: white "+N" on green, 8px corners. */

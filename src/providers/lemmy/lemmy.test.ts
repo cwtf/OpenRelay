@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   allowedApiPath,
+  controversialCounts,
   feedSort,
   hostTag,
   lemmyNumber,
@@ -244,4 +245,22 @@ test("opens this instance's posts and communities in the reader", () => {
   for (const href of ["https://lemmy.ml/post/42", "https://www.reddit.com/r/linux/", "https://lemmy.world/u/someone"])
     assert.equal(resolveLink(href, ORIGIN)?.kind, "external", href);
   assert.equal(resolveLink("javascript:alert(1)", ORIGIN), null);
+});
+
+test("works out split votes from Lemmy's counts", () => {
+  const counts = (upvotes: number, downvotes: number) => ({
+    ...imagePost,
+    counts: { ...imagePost.counts, upvotes, downvotes },
+  });
+  assert.equal(normalizePost(counts(54, 46), ORIGIN).upvoteRatio, 0.54);
+  assert.equal("upvoteRatio" in normalizePost(counts(0, 0), ORIGIN), false);
+  assert.equal(controversialCounts({ upvotes: 6, downvotes: 4 }), true);
+  assert.equal(controversialCounts({ upvotes: 2, downvotes: 2 }), false);
+  assert.equal(controversialCounts({ upvotes: 20, downvotes: 4 }), false);
+  const [split] = normalizeComments(
+    [{ ...comment(1, "0.1", 0), counts: { score: 2, upvotes: 8, downvotes: 6 } }],
+    ORIGIN,
+  );
+  assert.equal(split!.controversial, true);
+  assert.equal("controversial" in normalizeComments([comment(2, "0.2", 0)], ORIGIN)[0]!, false);
 });
