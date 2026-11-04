@@ -286,6 +286,10 @@ const fixtures = async (route) => {
       body: JSON.stringify(body),
     });
   }
+  // The loaded-page fallback needs both JSON and background HTML reads refused.
+  // Keep document navigation available so there is still a page to extract.
+  if (deny && !route.request().isNavigationRequest())
+    return route.fulfill({ status: 403, contentType: "text/html", body: "Forbidden" });
   return route.fulfill({
     contentType: "text/html",
     body: fixture,
@@ -617,6 +621,7 @@ try {
       "User",
       "Save feed for offline",
       "Saved for offline",
+      "Saved GIFs & images",
       "Settings",
     ],
   );
