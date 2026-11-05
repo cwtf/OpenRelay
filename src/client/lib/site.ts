@@ -10,4 +10,8 @@ import { RecentSet } from "./storage";
 export const siteKey = (key: string): string =>
   providerOf(pageUrl) === "reddit" ? key : `${key}@${pageUrl.hostname}`;
 
+/** `siteKey` for another site's host, e.g. to read its accounts from the drawer. */
+export const hostKey = (host: string, key: string): string =>
+  providerOf(`https://${host}/`) === "reddit" ? key : `${key}@${host}`;
+
 export const recentCommunities = new RecentSet(siteKey("recent-subs"), 12);

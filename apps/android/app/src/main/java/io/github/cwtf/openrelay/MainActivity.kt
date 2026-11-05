@@ -108,6 +108,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var toggleButton: Button
     private lateinit var storage: JsonFileStorage
     private lateinit var offline: OfflineFiles
+    /**
+     * Each account's saved cookies, `"<site key>/<name>"` to a `Cookie` header.
+     * Its own file, so the reader's `storage.getAll` never returns them; like
+     * the others it isn't backed up (`allowBackup="false"`).
+     */
+    private lateinit var accounts: JsonFileStorage
     private var pageProxy: JavaScriptReplyProxy? = null
     private var readerProxy: JavaScriptReplyProxy? = null
     private var readerShown = false
@@ -139,6 +145,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         storage = JsonFileStorage(File(filesDir, "openrelay-storage.json"))
         offline = OfflineFiles(File(filesDir, "offline"))
+        accounts = JsonFileStorage(File(filesDir, "accounts.json"))
         downloads = Downloads(this) { message ->
             runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
         }
@@ -330,6 +337,20 @@ class MainActivity : ComponentActivity() {
                 }
                 return@addWebMessageListener
             }
+            if (request.optString("method").startsWith("accounts.")) {
+                val args = request.optJSONObject("args") ?: JSONObject()
+                val answer = { value: Any?, error: Exception? ->
+                    if (error != null) response.put("error", error.message ?: "Request failed")
+                    else response.put("value", value ?: JSONObject.NULL)
+                    reply.postMessage(response.toString())
+                }
+                try {
+                    handleAccounts(request.optString("method"), args) { answer(it, null) }
+                } catch (error: Exception) {
+                    answer(null, error)
+                }
+                return@addWebMessageListener
+            }
             if (request.optString("method") == "notifications.enable") {
                 val answer = { granted: Boolean ->
                     if (granted) InboxNotifications.enable(this)
@@ -368,6 +389,67 @@ class MainActivity : ComponentActivity() {
         "notifications.enabled" -> InboxNotifications.enabled(this)
         "notifications.disable" -> InboxNotifications.disable(this).let { JSONObject.NULL }
         else -> throw IllegalArgumentException("Unsupported method")
+    }
+
+    // --- Accounts -------------------------------------------------------------
+
+    /**
+     * `ReaderHost.accounts`: saves a site's cookies under an account name and
+     * puts them back, on the main thread as CookieManager wants. Cookie values
+     * never go to the reader; it reloads the page after a switch.
+     */
+    private fun handleAccounts(method: String, args: JSONObject, done: (Any?) -> Unit) {
+        val site = AccountCookies.site(args.optString("site"), instanceHosts())
+        val key = { "${site.key}/${AccountCookies.name(args.optString("name"))}" }
+        when (method) {
+            "accounts.save" -> {
+                val cookies = AccountCookies.merge(site.origins.map { CookieManager.getInstance().getCookie(it) })
+                accounts.set(JSONObject().put(key(), AccountCookies.format(cookies)))
+                done(null)
+            }
+            "accounts.restore" -> {
+                val saved = accounts.getAll().optString(key(), "")
+                if (saved.isEmpty()) return done(false)
+                clearCookies(site) { setCookies(site.restore(AccountCookies.parse(saved))) { done(true) } }
+            }
+            "accounts.clear" -> clearCookies(site) { done(null) }
+            "accounts.forget" -> {
+                accounts.remove(JSONArray().put(key()))
+                done(null)
+            }
+            "accounts.revoke" -> {
+                val prefix = "${site.key}/"
+                val keys = accounts.getAll().keys().asSequence().filter { it.startsWith(prefix) }.toList()
+                accounts.remove(JSONArray(keys))
+                done(null)
+            }
+            else -> throw IllegalArgumentException("Unsupported method")
+        }
+    }
+
+    /** Expires every cookie the site has now. */
+    private fun clearCookies(site: AccountCookies.Site, done: () -> Unit) {
+        val names = AccountCookies.merge(site.origins.map { CookieManager.getInstance().getCookie(it) }).map { it.first }
+        setCookies(site.expire(names), done)
+    }
+
+    /** Sets each `(url, Set-Cookie)`, then flushes them to disk and calls [done]. */
+    private fun setCookies(cookies: List<Pair<String, String>>, done: () -> Unit) {
+        val manager = CookieManager.getInstance()
+        if (cookies.isEmpty()) {
+            manager.flush()
+            return done()
+        }
+        var left = cookies.size
+        for ((url, cookie) in cookies) {
+            manager.setCookie(url, cookie) { set ->
+                if (!set) Log.w(TAG, "A cookie was refused")
+                if (--left == 0) {
+                    manager.flush()
+                    done()
+                }
+            }
+        }
     }
 
     /** An image from [MEDIA_HOSTS] for an offline post: `{type, data}` with the bytes as base64. */

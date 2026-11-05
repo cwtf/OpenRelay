@@ -36,6 +36,18 @@ if (location.origin === READER_ORIGIN) {
       forget: async () => {},
       sync: async () => {},
     },
+    // Switching accounts: the main process keeps each account's cookies and
+    // swaps them in the app's session. The app owns its cookies, so there's
+    // no permission to ask for.
+    accounts: {
+      allow: async () => "granted",
+      save: (site, name) => ipcRenderer.invoke("openrelay:accounts-save", site, name),
+      restore: (site, name) =>
+        ipcRenderer.invoke("openrelay:accounts-restore", site, name),
+      clear: (site) => ipcRenderer.invoke("openrelay:accounts-clear", site),
+      forget: (site, name) => ipcRenderer.invoke("openrelay:accounts-forget", site, name),
+      revoke: (site) => ipcRenderer.invoke("openrelay:accounts-revoke", site),
+    },
     downloads: async () => ({
       save: (file) =>
         "url" in file

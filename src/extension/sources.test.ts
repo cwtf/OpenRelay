@@ -68,3 +68,18 @@ test("lets the tab go only to a source's front page, or a hybrid feed item's pag
   ])
     assert.equal(sourceUrl(value), null, String(value));
 });
+
+test("lets the tab go to the sign-in page, for adding an account, and nowhere near it", () => {
+  assert.equal(sourceUrl("https://www.reddit.com/login/"), "https://www.reddit.com/login/");
+  assert.equal(sourceUrl("https://lemmy.world/login"), "https://lemmy.world/login");
+  for (const value of [
+    "https://www.reddit.com/login",
+    "https://www.reddit.com/login/?dest=https://evil.example/",
+    "https://old.reddit.com/login/",
+    "https://www.reddit.com/logout/",
+    "https://lemmy.world/login/",
+    "https://lemmy.world/login?x=1",
+    "https://lemmy.world/logout",
+  ])
+    assert.equal(sourceUrl(value), null, value);
+});

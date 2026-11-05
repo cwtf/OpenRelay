@@ -28,7 +28,7 @@ test("without chrome.storage the extension host has no storage", async () => {
   assert.equal(await host.downloads(), "unavailable");
 });
 
-test("extension storage reports only chrome.storage.local changes", () => {
+test("extension storage reports only settings changes in chrome.storage.local", () => {
   const listeners: ((changes: object, area: string) => void)[] = [];
   g.chrome = {
     storage: {
@@ -44,10 +44,11 @@ test("extension storage reports only chrome.storage.local changes", () => {
     const seen: object[] = [];
     readerHost().storage!.onChanged!((changes) => seen.push(changes));
     for (const listener of listeners) {
-      listener({ a: { newValue: 1 } }, "sync");
-      listener({ b: { newValue: 2 } }, "local");
+      listener({ "openrelay:a": { newValue: 1 } }, "sync");
+      listener({ "openrelay:b": { newValue: 2 }, "openrelay-accounts:reddit.com:x": { newValue: [] } }, "local");
+      listener({ "openrelay-offline:index": { newValue: {} } }, "local");
     }
-    assert.deepEqual(seen, [{ b: { newValue: 2 } }]);
+    assert.deepEqual(seen, [{ "openrelay:b": { newValue: 2 } }]);
   } finally {
     delete g.chrome;
   }
@@ -128,6 +129,81 @@ test("extension offline posts sit beside the settings without being read with th
     (local as any).getKeys = async () => Object.keys(stored);
     assert.deepEqual(Object.keys(await host.storage!.getAll()), ["openrelay:prefs"]);
     await host.offline!.remove(["post:t3_a"]);
+    assert.deepEqual(Object.keys(stored), ["openrelay:prefs"]);
+  } finally {
+    delete g.chrome;
+  }
+});
+
+test("extension accounts swap a site's cookies in the reader tab's store", async () => {
+  const stored: Record<string, unknown> = { "openrelay:prefs": {} };
+  const local = {
+    get: async (keys: string[] | string | null) =>
+      Object.fromEntries(
+        Object.entries(stored).filter(([key]) => keys === null || [keys].flat().includes(key)),
+      ),
+    set: async (items: Record<string, unknown>) => void Object.assign(stored, items),
+    remove: async (keys: string[] | string) => {
+      for (const key of [keys].flat()) delete stored[key];
+    },
+  };
+  const cookie = (name: string, value: string, domain = ".reddit.com") => ({
+    name,
+    value,
+    domain,
+    hostOnly: !domain.startsWith("."),
+    path: "/",
+    secure: true,
+    httpOnly: true,
+    session: true,
+    storeId: "1",
+  });
+  let jar = [cookie("reddit_session", "alice"), cookie("pref", "x", "www.reddit.com"), cookie("other", "y", ".example.com")];
+  const requested: unknown[] = [];
+  const stores: unknown[] = [];
+  g.chrome = {
+    storage: { local },
+    permissions: {
+      request: async (permissions: unknown) => (requested.push(permissions), true),
+      remove: async () => true,
+      contains: async () => true,
+    },
+    runtime: { sendMessage: async () => "1" },
+    cookies: {
+      getAll: async (filter: { domain: string; storeId?: string }) => {
+        stores.push(filter.storeId);
+        return jar.filter((c) => c.domain.replace(/^\./, "").endsWith(filter.domain));
+      },
+      set: async (details: any) => {
+        stores.push(details.storeId);
+        jar.push(cookie(details.name, details.value, details.domain ?? new URL(details.url).hostname));
+      },
+      remove: async (details: { url: string; name: string }) => {
+        jar = jar.filter((c) => !(c.name === details.name && details.url.includes(c.domain.replace(/^\./, ""))));
+      },
+    },
+  };
+  try {
+    const accounts = readerHost().accounts!;
+    assert.equal(await accounts.allow("www.reddit.com"), "granted");
+    assert.deepEqual(requested, [{ permissions: ["cookies"], origins: ["https://*.reddit.com/*"] }]);
+    await accounts.save("www.reddit.com", "alice");
+    await accounts.clear("www.reddit.com");
+    assert.deepEqual(jar.map((c) => c.name), ["other"]);
+    jar.push(cookie("reddit_session", "bob"));
+    await accounts.save("www.reddit.com", "bob");
+    assert.equal(await accounts.restore("www.reddit.com", "alice"), true);
+    assert.deepEqual(jar.map((c) => `${c.name}=${c.value}@${c.domain}`).sort(), [
+      "other=y@.example.com",
+      "pref=x@www.reddit.com",
+      "reddit_session=alice@.reddit.com",
+    ]);
+    assert.equal(await accounts.restore("www.reddit.com", "carol"), false);
+    assert.ok(stores.every((id) => id === "1"));
+    // Saved sign-ins never reach the reader's settings, even without getKeys.
+    assert.deepEqual(Object.keys(await readerHost().storage!.getAll()), ["openrelay:prefs"]);
+    await assert.rejects(accounts.save("evil.example", "x y"));
+    await accounts.revoke!("www.reddit.com");
     assert.deepEqual(Object.keys(stored), ["openrelay:prefs"]);
   } finally {
     delete g.chrome;

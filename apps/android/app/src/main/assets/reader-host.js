@@ -90,6 +90,16 @@
       forget: async () => {},
       sync: async () => {},
     }),
+    // Accounts: the app saves and restores the site's cookies itself, and
+    // owns them, so there's nothing to ask for. Only names cross over.
+    accounts: Object.freeze({
+      allow: async () => "granted",
+      save: (site, name) => call("accounts.save", { site, name }).then(() => undefined),
+      restore: (site, name) => call("accounts.restore", { site, name }).then(Boolean),
+      clear: (site) => call("accounts.clear", { site }).then(() => undefined),
+      forget: (site, name) => call("accounts.forget", { site, name }).then(() => undefined),
+      revoke: (site) => call("accounts.revoke", { site }).then(() => undefined),
+    }),
     // Inbox notifications: the app checks the inboxes itself in the background.
     notifications: Object.freeze({
       enabled: () => call("notifications.enabled").then(Boolean),

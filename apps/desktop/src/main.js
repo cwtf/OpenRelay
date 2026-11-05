@@ -207,6 +207,134 @@ ipcMain.handle("openrelay:offline-remove", async (event, keys) => {
   await Promise.all(keys.map((key) => rm(offlinePath(key), { force: true })));
 });
 
+// Saved sign-ins for switching accounts (ReaderHost.accounts): each account's
+// copy of a site's cookies, in their own file, never in openrelay-storage.json,
+// so the reader's getAll can't return them. The reader sends only names; the
+// cookie values stay in this process. Same rules as src/hosts/cookies.ts.
+const ACCOUNT_NAME = /^[\w-]{1,64}$/;
+const REDDIT_HOSTS = new Set(["www.reddit.com", "old.reddit.com", "reddit.com"]);
+/** The cookie domain for a site: all of reddit.com, or a listed instance. */
+async function accountDomain(site) {
+  if (typeof site !== "string") throw new Error("Invalid site");
+  if (REDDIT_HOSTS.has(site)) return "reddit.com";
+  await loadStore(); // Knows the instance list.
+  if (instances.has(site)) return site;
+  throw new Error("Invalid site");
+}
+const accountName = (name) => {
+  if (typeof name !== "string" || !ACCOUNT_NAME.test(name)) throw new Error("Invalid name");
+  return name;
+};
+/** Whether a cookie's domain is `domain` or one of its subdomains. */
+const inDomain = (cookieDomain, domain) => {
+  const bare = String(cookieDomain).replace(/^\./, "").toLowerCase();
+  return bare === domain || bare.endsWith("." + domain);
+};
+const cookieUrl = (cookie) =>
+  `${cookie.secure ? "https" : "http"}://${cookie.domain.replace(/^\./, "")}${cookie.path || "/"}`;
+// Every cookie, filtered here: Electron's `get({ domain })` leaves out
+// host-only cookies of subdomains (www.reddit.com's).
+const siteCookies = async (domain) =>
+  (await session.fromPartition(PARTITION).cookies.get({})).filter((cookie) =>
+    inDomain(cookie.domain, domain),
+  );
+
+// Keyed "<domain>:<name>" (a flat object, so no name can reach a prototype).
+const accountsPath = () => join(app.getPath("userData"), "openrelay-accounts.json");
+let accounts = null;
+let accountsSaving = Promise.resolve();
+const loadAccounts = () =>
+  (accounts ??= readFile(accountsPath(), "utf8")
+    .then((text) => JSON.parse(text))
+    .catch(() => ({})));
+const saveAccounts = (data) =>
+  (accountsSaving = accountsSaving.then(async () => {
+    const temp = accountsPath() + ".tmp";
+    await writeFile(temp, JSON.stringify(data));
+    await rename(temp, accountsPath());
+  }));
+
+async function clearSite(domain) {
+  const cookies = session.fromPartition(PARTITION).cookies;
+  for (const cookie of await siteCookies(domain))
+    await cookies.remove(cookieUrl(cookie), cookie.name);
+}
+
+ipcMain.handle("openrelay:accounts-save", async (event, site, name) => {
+  readerFrame(event);
+  const domain = await accountDomain(site);
+  const key = `${domain}:${accountName(name)}`;
+  const saved = (await siteCookies(domain)).map((cookie) => ({
+    name: cookie.name,
+    value: cookie.value,
+    domain: cookie.domain,
+    hostOnly: cookie.hostOnly,
+    path: cookie.path,
+    secure: cookie.secure,
+    httpOnly: cookie.httpOnly,
+    ...(cookie.sameSite ? { sameSite: cookie.sameSite } : {}),
+    ...(!cookie.session && cookie.expirationDate !== undefined
+      ? { expirationDate: cookie.expirationDate }
+      : {}),
+  }));
+  const data = await loadAccounts();
+  data[key] = saved;
+  await saveAccounts(data);
+});
+ipcMain.handle("openrelay:accounts-restore", async (event, site, name) => {
+  readerFrame(event);
+  const domain = await accountDomain(site);
+  const saved = (await loadAccounts())[`${domain}:${accountName(name)}`];
+  if (!Array.isArray(saved)) return false;
+  await clearSite(domain);
+  const cookies = session.fromPartition(PARTITION).cookies;
+  const now = Date.now() / 1000;
+  for (const cookie of saved) {
+    if (!inDomain(cookie.domain, domain)) continue;
+    if (cookie.expirationDate !== undefined && cookie.expirationDate <= now) continue;
+    try {
+      await cookies.set({
+        url: cookieUrl(cookie),
+        name: cookie.name,
+        value: cookie.value,
+        // A host-only cookie gets no domain: giving one widens it to subdomains.
+        ...(cookie.hostOnly ? {} : { domain: cookie.domain }),
+        path: cookie.path || "/",
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        ...(cookie.sameSite ? { sameSite: cookie.sameSite } : {}),
+        ...(cookie.expirationDate !== undefined
+          ? { expirationDate: cookie.expirationDate }
+          : {}),
+      });
+    } catch (error) {
+      console.warn(`Couldn't restore cookie ${cookie.name}:`, error?.message);
+    }
+  }
+  await cookies.flushStore();
+  return true;
+});
+ipcMain.handle("openrelay:accounts-clear", async (event, site) => {
+  readerFrame(event);
+  await clearSite(await accountDomain(site));
+  await session.fromPartition(PARTITION).cookies.flushStore();
+});
+ipcMain.handle("openrelay:accounts-forget", async (event, site, name) => {
+  readerFrame(event);
+  const key = `${await accountDomain(site)}:${accountName(name)}`;
+  const data = await loadAccounts();
+  if (!Object.hasOwn(data, key)) return;
+  delete data[key];
+  await saveAccounts(data);
+});
+ipcMain.handle("openrelay:accounts-revoke", async (event, site) => {
+  readerFrame(event);
+  const prefix = (await accountDomain(site)) + ":";
+  const data = await loadAccounts();
+  for (const key of Object.keys(data)) if (key.startsWith(prefix)) delete data[key];
+  await saveAccounts(data);
+});
+
 // Images for offline posts, from Reddit's image hosts only (MEDIA_HOSTS in
 // src/hosts/types.ts), without cookies, as base64.
 const MEDIA_HOSTS = new Set([

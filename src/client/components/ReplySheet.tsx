@@ -12,6 +12,8 @@ import type { CommentNode, InlineMedia } from "../../shared/api";
 import { usePrefs } from "../app/prefs";
 import { useNav } from "../app/nav";
 import { useAccount } from "../lib/account";
+import { useAccounts } from "../lib/accounts";
+import { Avatar } from "../screens/FeedScreen";
 import { isLemmyName } from "../lib/hybrid";
 import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
 import { Markdown } from "../lib/markdown";
@@ -108,6 +110,7 @@ export const ReplySheet = ({
   onClosed,
 }: ReplySheetProps) => {
   const account = useAccount();
+  const accounts = useAccounts();
   // Edits keep their own drafts, separate from replies to the same item.
   const draftKey = editing ? `edit:${editing.id}` : parentId;
   const [text, setText] = useState(() => loadDraft(draftKey) || editing?.text || "");
@@ -300,6 +303,12 @@ export const ReplySheet = ({
           </div>
         ) : (
           <div className="composer">
+            {accounts.list.length > 1 ? (
+              <div className="reply-as">
+                <Avatar name={account.name} size="small" src={account.icon} />
+                {editing ? "Editing as" : "Replying as"} {site.userLabel(account.name)}
+              </div>
+            ) : null}
             {quote && !editing ? (
               <>
                 <div className="reply-parent">Replying to {site.userLabel(author)}</div>

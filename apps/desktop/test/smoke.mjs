@@ -612,7 +612,6 @@ try {
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
     [
-      "Reddit",
       "Profile",
       "Inbox",
       "Moderator",
@@ -627,9 +626,10 @@ try {
   );
   assert.equal(await app.locator(".drawer .sub-row, .drawer .drawer-search").count(), 0);
   assert.equal(await app.locator(".drawer-count").textContent(), "3");
+  // Relay's account header: the signed-in account's picture.
   assert.equal(
     await app.locator(".drawer-head img.avatar").getAttribute("src"),
-    "https://www.reddit.com/img/test.png",
+    "https://www.reddit.com/img/me.png",
   );
   await page.waitForTimeout(400); // Let the drawer finish sliding in.
   await page.screenshot({ path: resolve(out, "drawer-top.png") });
@@ -887,6 +887,96 @@ try {
   assert.equal(electronApp.windows().length, 1);
   assert.deepEqual(errors, []);
 
+  // Switching accounts: the reader's host saves the site's cookies under a
+  // name, clears them and puts them back, with their flags; it never hands
+  // the reader a value.
+  const redditCookies = () =>
+    electronApp.evaluate(async ({ session }) =>
+      (await session.fromPartition("persist:openrelay").cookies.get({}))
+        .filter((c) => /(^|\.)reddit\.com$/.test(c.domain))
+        .map(({ name, value, domain, hostOnly, path, secure, httpOnly, sameSite, expirationDate }) =>
+          ({ name, value, domain, hostOnly, path, secure, httpOnly, sameSite, expirationDate }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  const expires = Math.floor(Date.now() / 1000) + 3600;
+  await electronApp.evaluate(async ({ session }, expires) => {
+    // A host-only cookie beside the domain-wide reddit_session.
+    await session.fromPartition("persist:openrelay").cookies.set({
+      url: "https://www.reddit.com/",
+      name: "token_v2",
+      value: "fixture-token",
+      secure: true,
+      httpOnly: true,
+      sameSite: "lax",
+      expirationDate: expires,
+    });
+  }, expires);
+  const signedIn = await redditCookies();
+  assert.deepEqual(signedIn.map((c) => [c.name, c.hostOnly]), [
+    ["reddit_session", false],
+    ["token_v2", true],
+  ]);
+  const accounts = (script, ...args) =>
+    app.evaluate(
+      ([script, args]) =>
+        openRelayReaderHost.accounts[script](...args).then(
+          (value) => (value === undefined ? {} : { value }),
+          (error) => ({ error: String(error?.message ?? error) }),
+        ),
+      [script, args],
+    );
+  assert.deepEqual(await accounts("allow", "www.reddit.com"), { value: "granted" });
+  assert.deepEqual(await accounts("save", "www.reddit.com", "fixture_user"), {});
+  assert.deepEqual(await accounts("clear", "www.reddit.com"), {});
+  assert.deepEqual(await redditCookies(), []);
+  // Nothing saved under that name: false, and the cookies stay as they are.
+  assert.deepEqual(await accounts("restore", "www.reddit.com", "someone_else"), { value: false });
+  assert.deepEqual(await redditCookies(), []);
+  // old.reddit.com shares www's copy: both are the reddit.com domain.
+  assert.deepEqual(await accounts("restore", "old.reddit.com", "fixture_user"), { value: true });
+  assert.deepEqual(await redditCookies(), signedIn);
+  assert.equal(signedIn[1].expirationDate, expires);
+  assert.equal(signedIn[1].httpOnly, true);
+  assert.equal(signedIn[1].sameSite, "lax");
+  // Restoring replaces: a cookie set since is gone afterwards.
+  await electronApp.evaluate(({ session }) =>
+    session.fromPartition("persist:openrelay").cookies.set({
+      url: "https://www.reddit.com/", name: "other_account", value: "x", secure: true,
+    }),
+  );
+  assert.deepEqual(await accounts("restore", "www.reddit.com", "fixture_user"), { value: true });
+  assert.deepEqual(await redditCookies(), signedIn);
+  // Only Reddit's hosts and listed instances, and plain names.
+  for (const [site, name] of [
+    ["example.com", "fixture_user"],
+    ["evil.reddit.com", "fixture_user"],
+    ["www.reddit.com", "bad name"],
+    ["www.reddit.com", "x".repeat(65)],
+    ["www.reddit.com", 42],
+  ])
+    assert.match((await accounts("save", site, name)).error ?? "", /Invalid/, `${site} ${name}`);
+  assert.deepEqual(await accounts("save", "lemmy.world", "lemmy_user"), {});
+  // The copies live in their own file, never in the reader's storage.
+  const { readFile } = await import("node:fs/promises");
+  const savedFile = JSON.parse(await readFile(resolve(profile, "openrelay-accounts.json"), "utf8"));
+  assert.deepEqual(Object.keys(savedFile).sort(), ["lemmy.world:lemmy_user", "reddit.com:fixture_user"]);
+  assert.doesNotMatch(
+    JSON.stringify(await app.evaluate(() => openRelayReaderHost.storage.getAll())),
+    /fixture-session|fixture-token/,
+  );
+  assert.deepEqual(await accounts("forget", "www.reddit.com", "fixture_user"), {});
+  assert.deepEqual(await accounts("restore", "www.reddit.com", "fixture_user"), { value: false });
+  assert.deepEqual(await accounts("revoke", "lemmy.world"), {});
+  assert.deepEqual(
+    JSON.parse(await readFile(resolve(profile, "openrelay-accounts.json"), "utf8")),
+    {},
+  );
+  // Leave the session as the fixtures expect it.
+  await electronApp.evaluate(({ session }) =>
+    session.fromPartition("persist:openrelay").cookies.remove("https://www.reddit.com/", "token_v2"),
+  );
+  assert.deepEqual(errors, []);
+
   // Settings live in the app's storage file and survive a restart.
   await electronApp.close();
   ({ electronApp, page } = await launch());
@@ -898,7 +988,7 @@ try {
 
   // lemmy.world, listed by default: OpenRelay opens there too.
   await app.getByRole("button", { name: "Open menu" }).click();
-  await app.locator(".drawer-item.source-current").click();
+  await app.locator(".drawer-account-name").click();
   await app.locator(".source-row .drawer-item", { hasText: "lemmy.world" }).click();
   await page.waitForURL("https://lemmy.world/");
   app = await reader();
@@ -906,7 +996,7 @@ try {
   assert.ok(await app.getByText("c/linux").count());
   assert.deepEqual(errors, []);
   console.log(
-    "PASS (desktop): content.js injection in an isolated world, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence across reload and restart, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, menu toggle, excluded routes, blocked-JSON fallback, same-origin requests with the session, reader origin on bridge messages, hosts kept to their frames, no Reddit reads from the reader, window-open rules, the default Lemmy instance opens in OpenRelay; no page errors.",
+    "PASS (desktop): content.js injection in an isolated world, loaded-page feed, comments, Relay-style collapse, replying (format bar, preview, drafts), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence across reload and restart, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, menu toggle, excluded routes, blocked-JSON fallback, same-origin requests with the session, reader origin on bridge messages, hosts kept to their frames, no Reddit reads from the reader, window-open rules, switching accounts (save, clear, restore with cookie flags, forget, revoke, site and name checks, kept out of reader storage), the default Lemmy instance opens in OpenRelay; no page errors.",
   );
 } finally {
   await electronApp.close();

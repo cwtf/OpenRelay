@@ -2346,6 +2346,158 @@ button.post-action {
   font-size: 14px;
 }
 
+/* The account header, after Relay: the account, the others to switch to,
+   and the name that opens the switcher. */
+.drawer-account {
+  padding-bottom: 8px;
+}
+
+.drawer-account-avatars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.drawer-account-avatars .spacer {
+  flex: 1;
+}
+
+.avatar.is-signed-out {
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+.drawer-account-other {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface-2);
+}
+
+.drawer-account-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% + 16px);
+  margin: 10px -8px 0;
+  padding: 6px 8px;
+  border-radius: 12px;
+  text-align: left;
+  color: var(--text);
+}
+
+.drawer-account-name:active {
+  background: var(--press);
+}
+
+.drawer-account-name .lines {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-account-name .title,
+.drawer-account-name .subtitle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-account-name .title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.drawer-account-name .subtitle {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.drawer-label {
+  padding: 8px 22px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.drawer-item.account-item .avatar {
+  margin: 0 -2px;
+}
+
+.drawer-item.account-item.is-nested {
+  padding-left: 52px;
+  min-height: 44px;
+}
+
+.drawer-item .label small,
+.account-row .label small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.drawer-item .label small.is-error,
+.account-row .label small.is-error {
+  color: var(--admin);
+}
+
+/* Account sheets. */
+.sheet-text {
+  margin: 4px 20px 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.account-note {
+  display: flex;
+  gap: 12px;
+  margin: 0 20px 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.account-note .icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.account-note.is-warning {
+  color: var(--warn);
+}
+
+.sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 0 12px 0 20px;
+}
+
+.account-row .label {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+}
+
+.btn.is-small {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
 .drawer-body {
   flex: 1;
   overflow-y: auto;
@@ -3906,6 +4058,25 @@ button.appbar-title {
   font-size: 12.5px;
   color: var(--text-3);
   margin-bottom: -4px;
+}
+
+/* With more than one account, who the reply goes out as. */
+.reply-as {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 3px 12px 3px 3px;
+  border: 1px solid var(--outline);
+  border-radius: 18px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.reply-as .avatar.is-small {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
 }
 
 .composer .quote {

@@ -84,6 +84,36 @@ export type InstanceAccess = {
 };
 
 /**
+ * Saved sign-ins, one per account, for switching accounts. The host copies a
+ * site's cookies under an account name and puts them back on switch; the
+ * reader sees only names, never cookie values. `site` is a bare host name:
+ * one of Reddit's (its cookies are the whole `reddit.com` domain) or a listed
+ * Lemmy instance. The host refuses any other site and any name that doesn't
+ * match `ACCOUNT_NAME`.
+ */
+export type AccountSessions = {
+  /**
+   * Asks for cookie access to `site`. Call it straight from the click
+   * handler, before awaiting anything: the browser's prompt needs the user
+   * gesture. Hosts that own their cookies answer "granted".
+   */
+  allow(site: string): Promise<"granted" | "declined">;
+  /** Copies the site's current cookies under `name`, replacing an older copy. */
+  save(site: string, name: string): Promise<void>;
+  /** Replaces the site's cookies with the copy saved under `name`; false if there's none. */
+  restore(site: string, name: string): Promise<boolean>;
+  /** Removes the site's cookies, which signs this browser out of it. */
+  clear(site: string): Promise<void>;
+  /** Deletes the copy saved under `name`. */
+  forget(site: string, name: string): Promise<void>;
+  /** Deletes every copy saved for the site and gives cookie access back. */
+  revoke?(site: string): Promise<void>;
+};
+
+/** Account names a host keeps a sign-in for (Reddit's and Lemmy's). */
+export const ACCOUNT_NAME = /^[\w-]{1,64}$/;
+
+/**
  * Inbox notifications the host checks for by itself, in the background, with
  * the signed-in sessions it already has (Android only; there's no push server).
  */
@@ -154,6 +184,8 @@ export type ReaderHost = {
    * open in the instance's own web app.
    */
   instances?: InstanceAccess;
+  /** Absent when the host can't switch accounts; the drawer then lists none. */
+  accounts?: AccountSessions;
   /** Absent when the host can't notify; Settings then leaves the option out. */
   notifications?: InboxNotifications;
   /**

@@ -3,6 +3,7 @@ import type { Account } from "../../shared/api";
 import { fetchAccount } from "./api";
 import { readJson, writeJson } from "./storage";
 import { siteKey } from "./site";
+import { followSignedIn } from "./accounts";
 
 /** Reuse the saved account for this long before re-reading it from Reddit. */
 const MAX_AGE = 30 * 60 * 1000;
@@ -33,6 +34,7 @@ export const ensureAccount = (maxAge = MAX_AGE): void => {
       writeJson(KEY, { at: Date.now(), account: next } satisfies Saved);
       account = next;
       for (const listener of listeners) listener();
+      followSignedIn(next);
     })
     .catch(() => undefined) // Keep the saved account; retry on the next load.
     .finally(() => {

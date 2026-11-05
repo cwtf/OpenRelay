@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { Community } from "../../shared/api";
 import { useNav } from "../app/nav";
-import { compact, hueOf } from "../lib/format";
+import { hueOf } from "../lib/format";
 import { readJson, writeJson } from "../lib/storage";
 import { recentCommunities } from "../lib/site";
 import {
@@ -34,7 +34,22 @@ import {
   type Source,
 } from "../lib/sources";
 import { SaveFeedSheet, SavingItem, SavingSheet } from "./SaveFeedSheet";
-import { Avatar, useAbout, useFeedPicture } from "../screens/FeedScreen";
+import { otherAccounts, type AccountEntry } from "../lib/accountState";
+import {
+  accountsFor,
+  browseSignedOut,
+  canSwitchAccounts,
+  useAccounts,
+} from "../lib/accounts";
+import {
+  AccountAvatar,
+  AccountsSheet,
+  AddAccountSheet,
+  hereHost,
+  hostOf,
+  nameOn,
+  switchTo,
+} from "./AccountSheets";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
 import { readerHost } from "../../hosts/reader";
@@ -143,47 +158,103 @@ const AddInstanceSheet = ({ onClosed }: { onClosed: () => void }) => {
 };
 
 /**
- * Relay's account switcher, for sites: the current source, and when opened
- * the others and "Add Lemmy instance". Switching loads the site in this tab.
+ * Relay's account switcher, opened from the drawer's header: this site's
+ * accounts (switching reloads the tab signed in as the other one), then the
+ * other sites with theirs, and adding an account or a Lemmy instance.
  */
-const SourceSwitcher = ({ onSwitch }: { onSwitch: () => void }) => {
+const AccountSwitcher = ({ onDone }: { onDone: () => void }) => {
   const nav = useNav();
+  const account = useAccount();
+  const accounts = useAccounts();
   const sources = useSources();
   const current = currentSource();
-  const [open, setOpen] = useState(false);
+  const canSwitch = canSwitchAccounts();
+  const here = hereHost();
   const others = sources.filter((source) => source.id !== current?.id);
-  const icon = (source: Source | null): IconName =>
-    !source
-      ? "book"
-      : source.kind === "reddit"
-        ? "subreddit"
-        : source.kind === "hybrid"
-          ? "hybrid"
-          : "globe";
+  const icon = (source: Source): IconName =>
+    source.kind === "reddit" ? "subreddit" : source.kind === "hybrid" ? "hybrid" : "globe";
+  const sheet = (render: (onClosed: () => void) => ReactNode) => {
+    onDone();
+    nav.openSheet(render);
+  };
+  // A single account isn't listed until a second is added.
+  const listed: AccountEntry[] = accounts.list.length
+    ? accounts.list
+    : account
+      ? [{ name: account.name, ...(account.icon ? { icon: account.icon } : {}) }]
+      : [];
+  const active = accounts.list.length ? accounts.active : (account?.name ?? null);
   return (
-    <>
-      <button
-        type="button"
-        className="drawer-item source-current"
-        data-ripple
-        aria-expanded={open}
-        aria-controls="drawer-sources"
-        onClick={() => setOpen(!open)}
-      >
-        <Icon name={icon(current)} />
-        <span className="label">{current?.label ?? "Saved for offline"}</span>
-        <Icon name={open ? "chevronUp" : "chevronDown"} />
-      </button>
-      {open ? (
-        <div id="drawer-sources" role="group" aria-label="Switch source">
-          {others.map((source) => (
-            <div key={source.id} className="source-row">
+    <div id="drawer-accounts" role="group" aria-label="Switch account">
+      <div className="drawer-label">{current?.label ?? "Saved for offline"}</div>
+      {listed.map((entry) => {
+        const on = entry.name === active;
+        return (
+          <button
+            key={entry.name}
+            type="button"
+            className={`drawer-item account-item${on ? " is-active" : ""}`}
+            data-ripple
+            aria-current={on || undefined}
+            onClick={() => {
+              onDone();
+              if (!on) switchTo(nav.openSheet, here, entry.name);
+            }}
+          >
+            <AccountAvatar entry={entry} size="small" />
+            <span className="label">
+              {site.userLabel(entry.name)}
+              {entry.expired ? <small className="is-error">Sign in again</small> : null}
+            </span>
+            {on ? <Icon name="check" size={20} /> : null}
+          </button>
+        );
+      })}
+      {canSwitch && accounts.active ? (
+        <button
+          type="button"
+          className="drawer-item"
+          data-ripple
+          onClick={() => {
+            onDone();
+            void browseSignedOut(here).catch((error: unknown) =>
+              toast(error instanceof Error ? error.message : "Could not sign out"),
+            );
+          }}
+        >
+          <Icon name="hide" />
+          <span className="label">Browse signed out</span>
+        </button>
+      ) : null}
+      {canSwitch && current ? (
+        <button
+          type="button"
+          className="drawer-item"
+          data-ripple
+          onClick={() => sheet((onSheetClosed) => <AddAccountSheet onClosed={onSheetClosed} />)}
+        >
+          <Icon name="personAdd" />
+          <span className="label">Add {site.name} account</span>
+        </button>
+      ) : !account && current ? (
+        <button type="button" className="drawer-item" data-ripple onClick={promptLogin}>
+          <Icon name="accountCircle" />
+          <span className="label">Sign in to {site.name}</span>
+        </button>
+      ) : null}
+      {others.map((source) => {
+        const host = hostOf(source);
+        const theirs = canSwitch ? accountsFor(host).list : [];
+        return (
+          <div key={source.id}>
+            <div className="drawer-sep" />
+            <div className="source-row">
               <button
                 type="button"
                 className="drawer-item"
                 data-ripple
                 onClick={() => {
-                  onSwitch();
+                  onDone();
                   switchSource(source);
                 }}
               >
@@ -202,24 +273,123 @@ const SourceSwitcher = ({ onSwitch }: { onSwitch: () => void }) => {
                 </button>
               ) : null}
             </div>
-          ))}
-          <button
-            type="button"
-            className="drawer-item"
-            data-ripple
-            onClick={() =>
-              nav.openSheet((onSheetClosed) => (
-                <AddInstanceSheet onClosed={onSheetClosed} />
-              ))
-            }
-          >
-            <Icon name="addCircle" />
-            <span className="label">Add Lemmy instance</span>
-          </button>
-        </div>
-      ) : null}
+            {theirs.map((entry) => (
+              <button
+                key={entry.name}
+                type="button"
+                className="drawer-item account-item is-nested"
+                data-ripple
+                onClick={() => {
+                  onDone();
+                  switchTo(nav.openSheet, host, entry.name);
+                }}
+              >
+                <AccountAvatar entry={entry} size="small" />
+                <span className="label">{nameOn(host, entry.name)}</span>
+              </button>
+            ))}
+          </div>
+        );
+      })}
       <div className="drawer-sep" />
-    </>
+      <button
+        type="button"
+        className="drawer-item"
+        data-ripple
+        // The drawer stays open under the sheet, to show the instance added.
+        onClick={() => nav.openSheet((onSheetClosed) => <AddInstanceSheet onClosed={onSheetClosed} />)}
+      >
+        <Icon name="addCircle" />
+        <span className="label">Add Lemmy instance</span>
+      </button>
+      {canSwitch ? (
+        <button
+          type="button"
+          className="drawer-item"
+          data-ripple
+          onClick={() =>
+            sheet((onSheetClosed) => (
+              <AccountsSheet onClosed={onSheetClosed} openSheet={nav.openSheet} />
+            ))
+          }
+        >
+          <Icon name="people" />
+          <span className="label">Manage accounts</span>
+        </button>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * The drawer's header, after Relay: the signed-in account, the other
+ * accounts to switch to in one tap, and the site. Tapping the name opens the
+ * account switcher in place of the menu.
+ */
+const AccountHeader = ({
+  open,
+  onToggle,
+  onSwitch,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onSwitch: () => void;
+}) => {
+  const nav = useNav();
+  const account = useAccount();
+  const accounts = useAccounts();
+  const current = currentSource();
+  const others = canSwitchAccounts() ? otherAccounts(accounts).slice(0, 3) : [];
+  const entry: AccountEntry | null = account
+    ? { name: account.name, ...(account.icon ? { icon: account.icon } : {}) }
+    : null;
+  return (
+    <div className="drawer-head drawer-account">
+      <div className="drawer-account-avatars">
+        {entry ? (
+          <AccountAvatar entry={entry} size="large" />
+        ) : (
+          <span className="avatar is-large is-signed-out" aria-hidden>
+            <Icon name="accountCircle" size={32} />
+          </span>
+        )}
+        <span className="spacer" />
+        {others.map((other) => (
+          <button
+            key={other.name}
+            type="button"
+            className="drawer-account-other"
+            aria-label={`Switch to ${site.userLabel(other.name)}`}
+            title={site.userLabel(other.name)}
+            onClick={() => {
+              onSwitch();
+              switchTo(nav.openSheet, hereHost(), other.name);
+            }}
+          >
+            <AccountAvatar entry={other} size="small" />
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="drawer-account-name"
+        data-ripple
+        aria-expanded={open}
+        aria-controls="drawer-accounts"
+        onClick={onToggle}
+      >
+        <span className="lines">
+          <span className="title">
+            {account ? site.userLabel(account.name) : `Sign in to ${site.name}`}
+          </span>
+          <span className="subtitle">
+            {current?.label ?? "Saved for offline"}
+            {!account && accounts.list.length ? " · signed out" : ""}
+          </span>
+        </span>
+        <Icon name={open ? "chevronUp" : "chevronDown"} />
+      </button>
+    </div>
   );
 };
 
@@ -835,9 +1005,8 @@ type DrawerProps = { onClosed: () => void };
 export const Drawer = ({ onClosed }: DrawerProps) => {
   const nav = useNav();
   const { session, current } = nav;
-  const about = useAbout(current);
-  const picture = useFeedPicture(current, about);
   const account = useAccount();
+  const [accountsOpen, setAccountsOpen] = useState(false);
   const saving = useSaveProgress();
   const savedMedia = useSavedMedia();
   const [closing, setClosing] = useState(false);
@@ -926,27 +1095,20 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
           if (panel.current) panel.current.style.transform = "";
         }}
       >
-        <div className="drawer-head">
-          <Avatar name={current} size="large" src={picture} />
-          <div className="title">{about?.title || site.communityLabel(current)}</div>
-          <div className="subtitle">{site.communityLabel(current)}</div>
-          <div className="numbers">
-            {about?.subscribers !== undefined ? (
-              <span>
-                <b>{compact(about.subscribers)}</b> members
-              </span>
-            ) : null}
-            {about?.active ? (
-              <span>
-                <b>{compact(about.active)}</b> online
-              </span>
-            ) : null}
+        <AccountHeader
+          open={accountsOpen}
+          onToggle={() => setAccountsOpen(!accountsOpen)}
+          onSwitch={close}
+        />
+        {/* Relay's navigation drawer: account destinations and Settings, or
+            the account switcher in their place. Communities are in the
+            sheet that opens from the feed title. */}
+        {accountsOpen ? (
+          <div className="drawer-body">
+            <AccountSwitcher onDone={close} />
           </div>
-        </div>
-        {/* Relay's navigation drawer: account destinations and Settings.
-            Communities are in the sheet that opens from the feed title. */}
+        ) : (
         <div className="drawer-body">
-          <SourceSwitcher onSwitch={close} />
           {/* Account destinations, as in Relay's drawer. */}
           {account ? (
             <>
@@ -1047,6 +1209,7 @@ export const Drawer = ({ onClosed }: DrawerProps) => {
           <div className="drawer-sep" />
           {item("tune", "Settings", nav.openSettings)}
         </div>
+        )}
         <div className="drawer-foot">
           {account
             ? `Signed in as ${site.userLabel(account.name)}`

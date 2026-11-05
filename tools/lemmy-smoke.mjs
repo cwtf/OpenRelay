@@ -256,7 +256,7 @@ try {
   // lemmy.world is listed from the start, but OpenRelay doesn't run there
   // until it's opened (and Chrome's access is granted).
   await app.getByRole("button", { name: "Open menu" }).click();
-  await app.locator(".drawer-item.source-current").click();
+  await app.locator(".drawer-account-name").click();
   await app.locator(".source-row .drawer-item", { hasText: "lemmy.world" }).waitFor();
   assert.deepEqual(await registered(), []);
   // The add sheet checks what's typed; adding a listed instance keeps one row.
@@ -319,7 +319,7 @@ try {
     await app
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
-    ["lemmy.world", "Profile", "Inbox", "New Post", "User", "Save feed for offline", "Saved for offline", "Saved GIFs & images", "Settings"],
+    ["Profile", "Inbox", "New Post", "User", "Save feed for offline", "Saved for offline", "Saved GIFs & images", "Settings"],
   );
   await page.screenshot({ path: resolve(out, "lemmy-drawer.png") });
   await app.locator("body").press("Escape");
@@ -385,7 +385,7 @@ try {
   // Back to Reddit through the switcher.
   await app.locator("body").press("Escape");
   await app.getByRole("button", { name: "Open menu" }).first().click();
-  await app.locator(".drawer-item.source-current").click();
+  await app.locator(".drawer-account-name").click();
   await app.locator(".source-row .drawer-item", { hasText: "Reddit" }).click();
   await page.waitForURL("https://www.reddit.com/");
   app = await reader();
@@ -417,7 +417,7 @@ try {
   await page.goto("https://www.reddit.com/r/test/");
   app = await reader();
   await app.getByRole("button", { name: "Open menu" }).click();
-  await app.locator(".drawer-item.source-current").click();
+  await app.locator(".drawer-account-name").click();
   await app.getByRole("button", { name: "Remove lemmy.world" }).click();
   assert.equal(await app.locator(".source-row").count(), 0);
   for (let i = 0; i < 50 && (await registered()).length; i++)
@@ -430,7 +430,7 @@ try {
   await page.goto("https://www.reddit.com/r/test/");
   app = await reader();
   await app.getByRole("button", { name: "Open menu" }).click();
-  await app.locator(".drawer-item.source-current").click();
+  await app.locator(".drawer-account-name").click();
   await app.getByRole("button", { name: "Add Lemmy instance" }).waitFor();
   assert.equal(await app.locator(".source-row").count(), 0);
 

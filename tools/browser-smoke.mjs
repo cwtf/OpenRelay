@@ -744,7 +744,6 @@ try {
       .locator(".drawer-body > .drawer-item .label")
       .evaluateAll((els) => els.map((el) => el.textContent)),
     [
-      "Reddit",
       "Profile",
       "Inbox",
       "Moderator",
@@ -760,10 +759,20 @@ try {
   assert.equal(await app.locator(".drawer .sub-row, .drawer .drawer-search").count(), 0);
   assert.equal(await app.locator(".drawer-count").textContent(), "3");
   assert.equal(await app.locator(".drawer-num").textContent(), "3");
+  // Relay's account header: the signed-in account's picture and name, and
+  // the site, which opens the account switcher in place of the menu.
   assert.equal(
     await app.locator(".drawer-head img.avatar").getAttribute("src"),
-    "https://www.reddit.com/img/test.png",
+    "https://www.reddit.com/img/me.png",
   );
+  assert.equal(await app.locator(".drawer-account-name .title").textContent(), "u/fixture_user");
+  await app.locator(".drawer-account-name").click();
+  assert.deepEqual(
+    await app.locator("#drawer-accounts .drawer-item .label").allTextContents(),
+    // A single account has nothing saved to sign out of yet.
+    ["u/fixture_user", "Add Reddit account", "lemmy.world", "Add Lemmy instance", "Manage accounts"],
+  );
+  await app.locator(".drawer-account-name").click();
   await page.waitForTimeout(400); // Let the drawer finish sliding in.
   await page.screenshot({ path: resolve(out, "drawer-top.png") });
   await app.locator("body").press("Escape");
@@ -924,7 +933,7 @@ try {
     await chrome.tabs.sendMessage(tab.id, { type: "openrelay:toggle" });
   });
   assert.equal(await page.locator("body").evaluate((el) => el.inert), true);
-  // Home shows the signed-in account's profile picture.
+  // The drawer shows the account's picture on Home too.
   sheet = await titleSheet();
   await sheet.locator(".sub-row-main", { hasText: "Home" }).click();
   await sheet.waitFor({ state: "detached" });

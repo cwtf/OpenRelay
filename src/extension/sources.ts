@@ -6,6 +6,8 @@
  */
 
 export const REDDIT_HOME = "https://www.reddit.com/";
+/** Where adding an account signs in, in the tab whose sign-in was just cleared. */
+export const REDDIT_LOGIN = "https://www.reddit.com/login/";
 
 /**
  * The Lemmy instances listed until the viewer changes the list. Removing one
@@ -54,9 +56,9 @@ export function instanceHost(input: string): string | null {
 /** An instance's front page. */
 export const instanceHome = (host: string): string => `https://${host}/`;
 
-/** An instance's front page, a post or comment, or a community or user. */
+/** An instance's front page, its sign-in page, a post or comment, or a community or user. */
 const INSTANCE_PAGE =
-  /^\/(?:|(?:post|comment)\/\d{1,12}|[cu]\/[A-Za-z0-9_]{1,50}(?:@[a-z0-9.-]{1,253})?)$/;
+  /^\/(?:|login|(?:post|comment)\/\d{1,12}|[cu]\/[A-Za-z0-9_]{1,50}(?:@[a-z0-9.-]{1,253})?)$/;
 
 /**
  * `value` if the reader may send the tab there: Reddit's front page, or a
@@ -80,7 +82,7 @@ export function sourceUrl(value: unknown): string | null {
     url.port
   )
     return null;
-  if (url.href === REDDIT_HOME) return url.href;
+  if (url.href === REDDIT_HOME || url.href === REDDIT_LOGIN) return url.href;
   return instanceHost(url.hostname) === url.hostname && INSTANCE_PAGE.test(url.pathname)
     ? url.href
     : null;

@@ -3,6 +3,9 @@ import { readerHost } from "../../hosts/reader";
 import type { InboxNotifications } from "../../hosts/types";
 import { COMMENT_SORTS, type Prefs } from "../../shared/api";
 import { usePrefs } from "../app/prefs";
+import { useNav } from "../app/nav";
+import { canSwitchAccounts } from "../lib/accounts";
+import { AccountsSheet } from "./AccountSheets";
 import { sortLabel } from "../lib/format";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./Sheet";
@@ -157,10 +160,11 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
     (value: Prefs[K]) =>
       update({ [key]: value } as Partial<Prefs>);
   const notifications = readerHost().notifications;
+  const nav = useNav();
 
   return (
     <Sheet title="Settings" onClosed={onClosed}>
-      {() => (
+      {(close) => (
         <>
           <div className="sheet-section">Theme</div>
           <Segmented
@@ -337,6 +341,30 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
             value={prefs.giphyGifs}
             onChange={set("giphyGifs")}
           />
+
+          {canSwitchAccounts() ? (
+            <>
+              <div className="sheet-section">Accounts</div>
+              <button
+                type="button"
+                className="sheet-item"
+                data-ripple
+                onClick={() => {
+                  close();
+                  nav.openSheet((onAccountsClosed) => (
+                    <AccountsSheet onClosed={onAccountsClosed} openSheet={nav.openSheet} />
+                  ));
+                }}
+              >
+                <Icon name="people" />
+                <span className="label">
+                  Accounts
+                  <span className="hint">Switch, reorder or remove the accounts kept on this device</span>
+                </span>
+                <Icon name="chevronRight" />
+              </button>
+            </>
+          ) : null}
 
           {notifications ? (
             <>

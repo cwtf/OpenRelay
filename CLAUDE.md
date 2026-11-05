@@ -25,7 +25,7 @@ node --experimental-strip-types --test src/client/lib/panes.test.ts
 node --experimental-strip-types --test --test-name-pattern="modhash" src/providers/reddit/writes.test.ts
 ```
 
-Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `media-smoke`, `offline-smoke`, `archive-smoke`, `lemmy-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
+Run one browser suite with `node tools/vote-smoke.mjs` (or `browser-smoke`, `account-smoke`, `accounts-smoke`, `media-smoke`, `offline-smoke`, `archive-smoke`, `lemmy-smoke`). They need Playwright with Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` override where those come from. They load the real `dist/` into a throwaway profile under `test-results/` with third-party cookies blocked, serve fixture Reddit HTML/JSON, and assert on the exact write requests sent. They never contact real Reddit.
 
 The desktop app has its own `package.json` (Electron and Playwright) in `apps/desktop/`:
 
@@ -53,7 +53,7 @@ The code runs in three contexts. `tools/build.mjs` builds them separately: the r
 
 1. **Content script** (`src/extension/content.ts`, Reddit page origin): mounts a full-screen closed-shadow-DOM host holding an iframe of `reader.html`, passing the page URL in the hash (`#source=…`). It marks the page `inert`, shows the "Original Reddit" exit button, and skips humanity/captcha gate pages. It polls `location.href` to remount on SPA navigation. It is also the **only** code that talks to Reddit: requests run same-origin with the user's session. Everything site-specific (routes, gate pages, the bridge actions) is the page provider's (see Providers).
 2. **Reader** (`src/client/`, extension origin, inside the iframe): the React app. It can't reach Reddit directly. Every request goes through `bridge()` in `src/extension/bridge.ts`, a postMessage RPC to the parent page. Despite its folder, `bridge.ts` is imported by the reader.
-3. **Service worker** (`src/extension/background.ts`): only forwards toolbar-icon clicks as `openrelay:toggle`.
+3. **Service worker** (`src/extension/background.ts`): forwards toolbar-icon clicks as `openrelay:toggle`, and answers the reader's `openrelay:cookie-store` (the cookie store of the reader's tab, for switching accounts) for the extension's own `reader.html` only.
 
 ### Providers
 
@@ -87,7 +87,15 @@ The drawer's **Hybrid** source (shown once an instance is listed) is the Reddit 
 
 ### Host adapter
 
-Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, the offline store, image fetching for offline posts, file downloads) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
+Code outside `src/hosts/` must not call `chrome.*` directly (the toolbar worker excepted). `src/hosts/types.ts` defines what OpenRelay needs from the app running it: `ReaderHost` for the reader frame (storage, the offline store, image fetching for offline posts, file downloads, and the optional `accounts`) and `PageHost` for the content script (reader URL, toggle). `hosts/reader.ts` and `hosts/page.ts` return the browser-extension implementation, unless a wrapper app (Android WebView, Electron) has defined `globalThis.openRelayReaderHost` / `openRelayPageHost` first. The reader origin the bridge trusts comes from `PageHost.readerUrl()`. `docs/handover-android-electron.md` covers the wrapper apps.
+
+### Accounts
+
+More than one account per site, switched from the drawer's header (Relay's account header; `AccountHeader`/`AccountSwitcher` in `Drawer.tsx`, sheets in `AccountSheets.tsx`). A site's sign-in is its cookies, so switching swaps them:
+
+- The host does the swapping, behind the optional `ReaderHost.accounts` (`AccountSessions` in `hosts/types.ts`): `save`/`restore`/`clear`/`forget`/`revoke` a site's cookies under an account name. Cookie values never reach the reader or its `HostStorage`. The extension keeps them under `openrelay-accounts:` in `chrome.storage.local` (`extensionStorage` filters them out of `getAll` and `onChanged`), in the reader tab's own cookie store; the pure parts are `hosts/cookies.ts`. The desktop app keeps them in `openrelay-accounts.json`, Android in its private storage (`CookieManager` gives only `name=value`, so restored cookies lose their expiry and HttpOnly).
+- The reader keeps only names, per site, under `siteKey("accounts")` (`lib/accounts.ts`; the pure state changes are `lib/accountState.ts`). A single account isn't listed until a second is added. `ensureAccount` calls `followSignedIn`, which finishes an add and follows sign-ins made on the site itself.
+- Every switch, add or sign-out reloads the tab (adding loads the sign-in page, which `sourceUrl()` allows), so the page, the content script and its modhash start over as the new account.
 
 ### Android inbox notifications
 
@@ -115,7 +123,7 @@ Plain JavaScript, no bundler; it uses the built `dist/` files, never `src/` dire
 - `me`: account name and avatar only.
 - `navigate`: the drawer's source switcher (handled by `content.ts` itself, for every site). Loads Reddit's front page, or a Lemmy instance's front page or a hybrid feed item's page on it, in the tab, and only those (`sourceUrl()` in `src/extension/sources.ts`). Added instances are kept under the `lemmy-instances` storage key (`src/client/lib/sources.ts`).
 
-The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, and host access to Reddit's image hosts for offline images), no third-party hosts apart from the optional Giphy GIFs and Arctic Shift (`lib/archive.ts`, fetched only when you press Restore from archive on a removed post), and the inbox read with `mark=false`. Keep changes consistent with it.
+The session modhash (CSRF token) is fetched and kept only in the content script and never sent to the reader. The README's "Data and permissions" section is the user-facing promise: only the `storage` and `unlimitedStorage` permissions (plus optional ones asked for when used: `downloads`, `cookies` for keeping more than one account, and host access to Reddit's image hosts for offline images), no third-party hosts apart from the optional Giphy GIFs and Arctic Shift (`lib/archive.ts`, fetched only when you press Restore from archive on a removed post), and the inbox read with `mark=false`. Keep changes consistent with it.
 
 ### Data flow
 
@@ -134,4 +142,4 @@ The session modhash (CSRF token) is fetched and kept only in the content script 
 
 - `dist/`, `dist-firefox/`, `*.xpi`, `dist.crx`, `dist.pem` (the extension signing key) and `test-results/` are git-ignored. Never commit `dist.pem`, `apps/android/keystore.properties` or the `.jks` keystore.
 - `releases/` holds the official packages that `build:apps` puts there, one subfolder per platform. `android/`, `chrome/` and `firefox/` are committed (`.gitignore` re-includes their `.zip` and `.xpi` files); `desktop/` is git-ignored, because the exes are about 98 MiB, too close to GitHub's 100 MiB file limit, and they're published only as GitHub Release assets (`--publish`). The script refuses to copy a committed package over 100 MiB. The `.crx` is signed with `dist.pem` by `tools/extension-packages.mjs` (CRX3 and zip in plain Node), so the extension ID stays `hgeofllbbcejfkcojkpkdkpkkdijgbaj`. The desktop build's `compression: "maximum"`, English-only `electronLanguages` and the installer's `differentialPackage: false` (solid compression; there's no electron-updater) keep the downloads small.
-- The README lists the unit-test count ("81 unit tests"). Update it if you add or remove tests.
+- The README lists the unit-test count ("180 unit tests"). Update it if you add or remove tests.
