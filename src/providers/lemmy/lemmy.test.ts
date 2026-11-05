@@ -103,6 +103,63 @@ test("normalizes text and link posts, with the viewer's vote", () => {
   assert.equal(link.thumb?.url, imagePost.post.thumbnail_url);
 });
 
+test("opens Lemmy's YouTube player embeds on the original site", () => {
+  // lemmy.world/post/53985331: the embed is HTML, not a video file.
+  const url = "https://www.youtube.com/watch?v=GozdIQx1Wow";
+  const post = normalizePost({
+    ...imagePost,
+    post: {
+      ...imagePost.post,
+      id: 53985331,
+      url,
+      url_content_type: "text/html; charset=utf-8",
+      embed_video_url: "https://www.youtube.com/embed/GozdIQx1Wow",
+      embed_title: "LeAnn Rimes - Blue (Official Music Video)",
+    },
+  }, ORIGIN);
+  assert.deepEqual(post.media, {
+    kind: "embed",
+    url,
+    provider: "youtube.com",
+    title: "LeAnn Rimes - Blue (Official Music Video)",
+    poster: { url: imagePost.post.thumbnail_url, width: 512, height: 342 },
+  });
+});
+
+test("keeps Lemmy's direct video files in the built-in player", () => {
+  // lemmy.world/post/53990517: an HTML post with a separate playable MP4.
+  const loopsVideo = "https://loopsusercontent.com/videos/229516079626084330/344731839299669654/0BFP9bNR5h1JHH7jbhezEi2iB57hshVTdDu4IcCHqk5DZm4DsTmPGPoIsr17.720p.mp4";
+  for (const [url, type, embed, expected] of [
+    ["https://loops.video/v/j8KYw8ekWm", "text/html; charset=utf-8", loopsVideo, loopsVideo],
+    ["https://video.example/clip.WEBM?token=abc#t=1", "", undefined, "https://video.example/clip.WEBM?token=abc#t=1"],
+    ["https://video.example/stream/123", "video/mp4", undefined, "https://video.example/stream/123"],
+    // The original's video content type must not be applied to an HTML embed.
+    ["https://video.example/stream/123", "video/webm", "https://video.example/player/123", "https://video.example/stream/123"],
+  ]) {
+    const post = normalizePost({ post: { url, url_content_type: type, embed_video_url: embed } }, ORIGIN);
+    assert.deepEqual(post.media, {
+      kind: "video",
+      video: { mp4: expected, width: 640, height: 360, isGif: false },
+    });
+  }
+});
+
+test("does not guess that extensionless player embeds are video files", () => {
+  for (const embed of [
+    "https://player.vimeo.com/video/123",
+    "https://video.example/player?file=clip.mp4",
+  ]) {
+    const post = normalizePost({ post: { url: "https://video.example/watch/123", embed_video_url: embed } }, ORIGIN);
+    assert.deepEqual(post.media, {
+      kind: "embed", url: "https://video.example/watch/123", provider: "video.example",
+    });
+  }
+  const unsafe = normalizePost({ post: {
+    url: "https://video.example/watch/123", embed_video_url: "javascript:alert(1)",
+  } }, ORIGIN);
+  assert.equal(unsafe.media.kind, "link");
+});
+
 const comment = (id: number, path: string, childCount: number, extra = {}) => ({
   comment: { id, post_id: 53789780, content: `comment ${id}`, path, published: "2026-10-31T18:26:53Z", deleted: false, removed: false, distinguished: false, ...extra },
   creator: { id: id * 10, name: `user${id}`, local: true },

@@ -79,7 +79,8 @@ export const communityName = (c: Raw | undefined) => qualified(c, "");
 const personName = (p: Raw | undefined) => qualified(p, "[deleted]");
 
 const IMAGE = /\.(png|jpe?g|gif|webp|avif)(\?|$)/i;
-const VIDEO = /\.(mp4|webm|m4v|mov)(\?|$)/i;
+const VIDEO = /\.(mp4|webm|m4v|mov)$/i;
+const isVideoFile = (url: string) => Boolean(url && VIDEO.test(new URL(url).pathname));
 
 /** A `PostView` (`/api/v3/post/list`, `/api/v3/post`) as a post. */
 export function normalizePost(view: Raw, origin: string): PostDetail {
@@ -96,7 +97,12 @@ export function normalizePost(view: Raw, origin: string): PostDetail {
       }
     : undefined;
   const type = String(p.url_content_type ?? "");
-  const video = safeUrl(p.embed_video_url) || (VIDEO.test(url) || type.startsWith("video/") ? url : "");
+  // embed_video_url can be a media file (Loops) or an HTML player (YouTube).
+  // The post's content type describes `url`, not its separate embed URL.
+  const embed = safeUrl(p.embed_video_url);
+  const video = isVideoFile(embed)
+    ? embed
+    : isVideoFile(url) || type.startsWith("video/") ? url : "";
   let media: PostMedia;
   if (!url) media = { kind: "self" };
   else if (type.startsWith("image/") || IMAGE.test(url))
@@ -113,6 +119,14 @@ export function normalizePost(view: Raw, origin: string): PostDetail {
     media = {
       kind: "video",
       video: { mp4: video, width: 640, height: 360, isGif: false },
+      ...(thumb ? { poster: thumb } : {}),
+    };
+  else if (embed)
+    media = {
+      kind: "embed",
+      url,
+      provider: hostOf(url).replace(/^www\./, ""),
+      ...(typeof p.embed_title === "string" ? { title: p.embed_title } : {}),
       ...(thumb ? { poster: thumb } : {}),
     };
   else

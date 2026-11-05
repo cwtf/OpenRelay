@@ -4,7 +4,7 @@
 // again. Fixture pages and API answers only (shaped like lemmy.world's,
 // Lemmy 0.19); no real site is contacted.
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const { chromium } = await import(
@@ -73,6 +73,28 @@ const imagePost = postView(102, "My desktop", {
   url_content_type: "image/png",
   thumbnail_url: "https://lemmy.world/pictrs/image/desk-thumb.png",
 });
+// The same embed_video_url field can contain an HTML player or an MP4.
+const youtubePost = postView(53985331, "Blue skies ahead", {
+  url: "https://www.youtube.com/watch?v=GozdIQx1Wow",
+  url_content_type: "text/html; charset=utf-8",
+  embed_video_url: "https://www.youtube.com/embed/GozdIQx1Wow",
+  embed_title: "LeAnn Rimes - Blue (Official Music Video)",
+  thumbnail_url: imagePost.post.thumbnail_url,
+});
+const loopsPost = postView(53990517, "A Loops video", {
+  url: "https://loops.video/v/j8KYw8ekWm",
+  url_content_type: "text/html; charset=utf-8",
+  embed_video_url: "https://loopsusercontent.com/fixture.mp4",
+  thumbnail_url: imagePost.post.thumbnail_url,
+});
+const youtubeRequests = [];
+await context.route("https://www.youtube.com/**", (route) => {
+  youtubeRequests.push(route.request().url());
+  return route.fulfill({ contentType: "text/html", body: "<!doctype html><title>YouTube fixture</title>" });
+});
+await context.route("https://loopsusercontent.com/fixture.mp4", async (route) =>
+  route.fulfill({ contentType: "video/mp4", body: await readFile(resolve("tools/fixtures/video/fallback.mp4")) }),
+);
 const commentView = (id, path, content, childCount) => ({
   comment: { id, post_id: 101, content, path, published: "2026-10-31T19:00:00Z", deleted: false, removed: false, distinguished: false },
   creator: creator(id, `user${id}`),
@@ -169,7 +191,7 @@ await context.route(/^https:\/\/lemmy\.world\//, async (route) => {
     case "/api/v3/user/unread_count":
       return answer({ replies: 2, mentions: 0, private_messages: 0 });
     case "/api/v3/post/list":
-      return answer({ posts: [textPost, imagePost] });
+      return answer({ posts: [textPost, imagePost, youtubePost, loopsPost] });
     case "/api/v3/post":
       return url.searchParams.get("id") === "101"
         ? answer({ post_view: textPost, community_view: { community: linux, counts: {} }, moderators: [] })
@@ -263,6 +285,31 @@ try {
   assert.ok(await app.getByText("c/linux@lemmy.ml").count());
   assert.equal(await page.locator("#openrelay-extension").count(), 1);
   assert.match(lemmyReads.find((r) => r.startsWith("/api/v3/post/list")), /sort=Hot/);
+
+  // HTML player embeds open the original page, never the native video viewer.
+  const youtubeCard = app.locator(".post", { hasText: "Blue skies ahead" });
+  const externalPage = context.waitForEvent("page");
+  await youtubeCard.getByRole("button", { name: "Open on youtube.com", exact: true }).click();
+  const youtube = await externalPage;
+  await youtube.waitForURL(youtubePost.post.url);
+  await youtube.waitForLoadState("domcontentloaded");
+  assert.equal(await app.locator(".viewer").count(), 0);
+  assert.deepEqual(youtubeRequests, [youtubePost.post.url]);
+  await youtube.close();
+
+  // A direct MP4 supplied as an embed still plays inside the reader.
+  await app.locator(".post", { hasText: "A Loops video" })
+    .getByRole("button", { name: "Play video", exact: true }).click();
+  await app.waitForFunction(() => {
+    const video = document.querySelector(".viewer video");
+    return video && video.currentTime > 0;
+  });
+  assert.equal(await app.locator(".viewer video").getAttribute("src"), loopsPost.post.embed_video_url);
+  await app.locator("body").press("Escape");
+  await app.locator(".viewer").waitFor({ state: "detached" });
+  // Scrolling to the video cards hides the feed toolbar; return to the top.
+  await app.locator(".scroller", { has: app.locator(".feed") })
+    .evaluate((el) => el.scrollTo({ top: 0 }));
 
   // The drawer: this instance's account, and only what Lemmy supports.
   await app.getByRole("button", { name: "Open menu" }).click();
@@ -390,7 +437,7 @@ try {
   assert.deepEqual(lemmyWrites, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: lemmy.world listed by default and opened from the switcher (access, content script registered), add sheet checks, feed, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, back to Reddit with Hybrid off (not offered, no Lemmy posts or reader reads on Reddit's front page), reader refused on a site not added, removal unregisters and stays removed; no other writes, no page errors.",
+    "PASS: lemmy.world listed by default and opened from the switcher (access, content script registered), add sheet checks, feed, YouTube embeds open the original page and direct MP4 embeds play in the reader, community labels, post with comment tree and more replies via Lemmy's API, spoilers and !community links, drawer limited to what Lemmy supports, vote and reply sent to Lemmy's API with the sign-in token, inbox read without marking and a message marked read when opened, back to Reddit with Hybrid off (not offered, no Lemmy posts or reader reads on Reddit's front page), reader refused on a site not added, removal unregisters and stays removed; no other writes, no page errors.",
   );
 } finally {
   await context.close();
