@@ -19,6 +19,9 @@
   touch-action: pan-y;
   /* Name truncation sizes from the screen (or pane) width, in cqw. */
   container-type: inline-size;
+  /* Each screen keeps its layers (app bar, the feed's sticky sort strip) to
+     itself, so they can't show through a screen opened over it. */
+  isolation: isolate;
 }
 
 /* The covered screen "holds": no parallax, no dim, just stays put. */
@@ -100,12 +103,7 @@
 }
 
 /* Full screen: the post slides over the listing, which stays mounted (and
-   scrolled) underneath. Pages opened over both panes stay on top. Each pane
-   keeps its own layers (app bars, sticky bars) to itself. */
-.app.is-dual > .screen {
-  isolation: isolate;
-}
-
+   scrolled) underneath. Pages opened over both panes stay on top. */
 .app.is-dual > .screen.is-detail {
   z-index: 1;
 }
