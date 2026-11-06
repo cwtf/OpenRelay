@@ -5,6 +5,7 @@ import { Root } from "./app/App";
 import { applyPrefsToDocument, loadCachedPrefs } from "./app/prefs";
 import { initStorage } from "./lib/storage";
 import { syncInstances, trustedSource } from "./lib/sources";
+import { installWheelScroll } from "./lib/wheelScroll";
 
 // Load saved settings first, then apply the theme before first paint.
 void initStorage().then(() => {
@@ -16,5 +17,6 @@ void initStorage().then(() => {
     return;
   }
   void syncInstances();
+  installWheelScroll();
   createRoot(container).render(<Root />);
 });

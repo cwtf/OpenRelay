@@ -313,6 +313,10 @@ export type Prefs = {
   showThumbnails: boolean;
   /** Relay's "Compact Crosspost Layout": one link to the original instead of its card. */
   compactCrossposts: boolean;
+  /** Hide posts you've read from feeds; the feed's "Hide read" chip overrides it per feed. */
+  hideRead: boolean;
+  /** Also mark posts read once they scroll off the top of a feed. */
+  markReadOnScroll: boolean;
   /** Relay's tablet setting: single or dual pane, per orientation. */
   paneModePortrait: "auto" | "single" | "dual";
   paneModeLandscape: "auto" | "single" | "dual";
@@ -337,6 +341,8 @@ export const DEFAULT_PREFS: Prefs = {
   giphyGifs: true,
   showThumbnails: true,
   compactCrossposts: false,
+  hideRead: false,
+  markReadOnScroll: false,
   paneModePortrait: "auto",
   paneModeLandscape: "auto",
   offlineImages: true,

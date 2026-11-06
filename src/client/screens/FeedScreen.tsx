@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
@@ -38,8 +39,14 @@ import {
   type LayoutSnapshot,
 } from "../lib/itemAnimator";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
-import { hiddenPosts } from "../lib/storage";
+import { hiddenPosts, readPosts } from "../lib/storage";
 import { setOfflineFeed } from "../lib/offline";
+import {
+  feedHidesRead,
+  onMarkedRead,
+  readAmong,
+  setFeedHidesRead,
+} from "../lib/readState";
 
 const SORT_ICONS: Record<FeedSort, IconName> = {
   hot: "hot",
@@ -218,21 +225,25 @@ export const FeedScreen = ({
       : { posts: [], after: null, status: "loading" };
   });
   const [hidden, setHidden] = useState(() => new Set(hiddenPosts.values()));
+  // Read posts are hidden only if they were read when they arrived (or were
+  // marked read from their menu): a post you open stays where it is until the
+  // feed reloads, so the list doesn't jump under you.
+  const [readOnArrival, setReadOnArrival] = useState(() =>
+    readAmong(feedCache.get(key)?.posts ?? []),
+  );
+  const [, setOverrideVersion] = useState(0);
+  const hideRead = feedHidesRead(sub, prefs.hideRead);
+  // "Show" in the hidden-posts bar: reveal them for now, without turning hiding off.
+  const [peek, setPeek] = useState(false);
+  const hiding = hideRead && !peek;
+  const readVersion = useSyncExternalStore(
+    readPosts.subscribe,
+    readPosts.getVersion,
+  );
   const [raised, setRaised] = useState(false);
+  const [stuck, setStuck] = useState(false);
   const barRef = useRef<HTMLElement>(null);
-  const barOffset = useRef(0);
-  const snapTimer = useRef<number | undefined>(undefined);
-
-  /** Move the app bar by `offset` px (0 = shown, -height = hidden). */
-  const placeBar = useCallback((offset: number, animate: boolean) => {
-    const bar = barRef.current;
-    barOffset.current = offset;
-    if (!bar) return;
-    bar.style.transition = animate
-      ? "transform var(--dur-short) var(--ease-emph), border-color 150ms"
-      : "border-color 150ms";
-    bar.style.transform = offset ? `translateY(${offset}px)` : "";
-  }, []);
+  const controlsRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
     async (
@@ -257,6 +268,10 @@ export const FeedScreen = ({
           mode === "more" ? after : null,
         );
         if (id !== requestId.current) return;
+        const arrivedRead = readAmong(page.posts);
+        setReadOnArrival((current) =>
+          mode === "more" ? new Set([...current, ...arrivedRead]) : arrivedRead,
+        );
         setState((current) => {
           const base = mode === "more" ? current.posts : [];
           const seen = new Set(base.map((post) => post.id));
@@ -286,16 +301,18 @@ export const FeedScreen = ({
     if (cached && Date.now() - cached.at < 10 * 60_000) {
       requestId.current++;
       setState({ posts: cached.posts, after: cached.after, status: "idle" });
+      setReadOnArrival(readAmong(cached.posts));
       requestAnimationFrame(() =>
         scrollerRef.current?.scrollTo({ top: cached.scrollTop }),
       );
     } else {
       setState({ posts: [], after: null, status: "loading" });
+      setReadOnArrival(new Set());
       scrollerRef.current?.scrollTo({ top: 0 });
       void load("initial");
     }
-    placeBar(0, true);
-  }, [key, load, placeBar]);
+    setPeek(false);
+  }, [key, load]);
 
   // Persist the feed for instant back-navigation between communities/sorts.
   useEffect(() => {
@@ -326,30 +343,19 @@ export const FeedScreen = ({
     return () => observer.disconnect();
   }, [state.status, state.after, load]);
 
-  // Quick-return app bar: it scrolls away with the content pixel for pixel,
-  // comes back as soon as you scroll up, and snaps fully open or closed
-  // once scrolling settles (like an Android "scroll|enterAlways|snap" bar).
-  const lastY = useRef(0);
+  // The app bar stays at the top, and the sort strip sticks just below it.
   const onScroll = () => {
     const el = scrollerRef.current;
-    const bar = barRef.current;
     if (!el) return;
     const y = el.scrollTop;
-    const delta = y - lastY.current;
-    const height = bar?.offsetHeight ?? 56;
-    const offset =
-      y <= 0 ? 0 : Math.min(0, Math.max(-height, barOffset.current - delta));
-    if (offset !== barOffset.current) placeBar(offset, false);
-    window.clearTimeout(snapTimer.current);
-    snapTimer.current = window.setTimeout(() => {
-      const current = barOffset.current;
-      if (current === 0 || current === -height) return;
-      const hide =
-        current < -height / 2 && (scrollerRef.current?.scrollTop ?? 0) > height;
-      placeBar(hide ? -height : 0, true);
-    }, 140);
     setRaised(y > 4);
-    lastY.current = y;
+    // Pinned under the app bar: it takes over the bar's divider.
+    const controls = controlsRef.current;
+    if (controls) {
+      const top =
+        controls.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      setStuck(y > 0 && top <= (barRef.current?.offsetHeight ?? 56) + 1);
+    }
     const cached = feedCache.get(key);
     if (cached) cached.scrollTop = y;
   };
@@ -397,9 +403,36 @@ export const FeedScreen = ({
     }
   };
 
+  // readPosts is read directly below; its version keeps these current. The
+  // visible list only follows it while hiding (marking unread brings a post
+  // back), so marking posts read on scroll doesn't rebuild it.
+  const hidingVersion = hiding ? readVersion : 0;
   const visible = useMemo(
-    () => state.posts.filter((post) => !hidden.has(post.id)),
-    [state.posts, hidden],
+    () =>
+      state.posts.filter(
+        (post) =>
+          !hidden.has(post.id) &&
+          !(hiding && readOnArrival.has(post.id) && readPosts.has(post.id)),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.posts, hidden, hiding, readOnArrival, hidingVersion],
+  );
+  const readHiddenCount = useMemo(
+    () =>
+      hideRead
+        ? state.posts.filter(
+            (post) =>
+              !hidden.has(post.id) &&
+              readOnArrival.has(post.id) &&
+              readPosts.has(post.id),
+          ).length
+        : 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.posts, hidden, hideRead, readOnArrival, readVersion],
+  );
+  const visibleIds = useMemo(
+    () => visible.map((post) => post.id).join(" "),
+    [visible],
   );
   useEffect(
     () => setOfflineFeed({ sub, sort, timeframe, posts: visible, after: state.after }),
@@ -423,7 +456,79 @@ export const FeedScreen = ({
     const before = pendingLayout.current;
     pendingLayout.current = null;
     if (before && feedRef.current) animateLayout(feedRef.current, before);
-  }, [hidden]);
+  }, [visible]);
+
+  // "Mark as read" from a post's menu: while hiding, the post leaves at once.
+  const hidingRef = useRef(hiding);
+  hidingRef.current = hiding;
+  useEffect(
+    () =>
+      onMarkedRead((id) => {
+        const add = () =>
+          setReadOnArrival((current) => new Set(current).add(id));
+        const list = feedRef.current;
+        const card = hidingRef.current
+          ? list?.querySelector<HTMLElement>(
+              `[data-anim-key="${CSS.escape(id)}"]`,
+            )
+          : null;
+        if (!card) return add();
+        void fadeOutRows([card]).then(() => {
+          if (list) pendingLayout.current = snapshotLayout(list);
+          add();
+        });
+      }),
+    [],
+  );
+
+  // Turning hiding on (here or in Settings) hides what you've read so far.
+  const postsRef = useRef(state.posts);
+  postsRef.current = state.posts;
+  // (A union: on a feed switch this runs after the switch has set the new set.)
+  useEffect(() => {
+    if (hideRead)
+      setReadOnArrival(
+        (current) => new Set([...current, ...readAmong(postsRef.current)]),
+      );
+  }, [hideRead]);
+
+  const toggleHideRead = () => {
+    setFeedHidesRead(sub, !hideRead, prefs.hideRead);
+    setOverrideVersion((n) => n + 1);
+    setPeek(false);
+  };
+
+  // "Mark read on scroll": a post is read once it has left the top of the feed.
+  useEffect(() => {
+    const root = scrollerRef.current;
+    const list = feedRef.current;
+    if (
+      !prefs.markReadOnScroll ||
+      !root ||
+      !list ||
+      typeof IntersectionObserver === "undefined"
+    )
+      return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.animKey;
+          if (
+            id &&
+            !entry.isIntersecting &&
+            entry.rootBounds &&
+            entry.boundingClientRect.bottom <= entry.rootBounds.top &&
+            !readPosts.has(id)
+          )
+            readPosts.add(id);
+        }
+      },
+      { root },
+    );
+    for (const card of list.querySelectorAll<HTMLElement>("[data-anim-key]"))
+      observer.observe(card);
+    return () => observer.disconnect();
+  }, [prefs.markReadOnScroll, visibleIds]);
   // A post you deleted (here or from its post screen) leaves like a hidden one.
   const deletedVersion = useDeletedVersion();
   useEffect(() => {
@@ -464,7 +569,10 @@ export const FeedScreen = ({
 
   return (
     <>
-      <header ref={barRef} className={`appbar${raised ? " is-raised" : ""}`}>
+      <header
+        ref={barRef}
+        className={`appbar is-pinned${raised && !stuck ? " is-raised" : ""}`}
+      >
         <button
           type="button"
           className="icon-btn"
@@ -607,29 +715,67 @@ export const FeedScreen = ({
               </button>
             ) : null}
           </div>
-          <nav className="sort-strip" aria-label="Sort posts">
-            {FEED_SORTS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={`filter-chip${sort === option ? " is-selected" : ""}`}
-                data-ripple
-                aria-pressed={sort === option}
-                onClick={() => chooseSort(option)}
-              >
-                <Icon name={sort === option ? "check" : SORT_ICONS[option]} />
-                {sortLabel[option]}
-                {(option === "top" || option === "controversial") &&
-                sort === option ? (
-                  <>
-                    {" · "}
-                    {timeframeLabel[timeframe]}
-                    <Icon name="chevronDown" />
-                  </>
-                ) : null}
-              </button>
-            ))}
-          </nav>
+          <div
+            ref={controlsRef}
+            className={`feed-controls${stuck ? " is-stuck" : ""}`}
+          >
+            <div className="sort-row">
+              <nav className="sort-strip" aria-label="Sort posts">
+                {FEED_SORTS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={`filter-chip${sort === option ? " is-selected" : ""}`}
+                    data-ripple
+                    aria-pressed={sort === option}
+                    onClick={() => chooseSort(option)}
+                  >
+                    <Icon name={sort === option ? "check" : SORT_ICONS[option]} />
+                    {sortLabel[option]}
+                    {(option === "top" || option === "controversial") &&
+                    sort === option ? (
+                      <>
+                        {" · "}
+                        {timeframeLabel[timeframe]}
+                        <Icon name="chevronDown" />
+                      </>
+                    ) : null}
+                  </button>
+                ))}
+              </nav>
+              {/* Outside the scrolling sorts, so it's always in reach. */}
+              <div className="sort-row-end">
+                <span className="sort-strip-divider" aria-hidden />
+                <button
+                  type="button"
+                  className={`filter-chip${hideRead ? " is-selected" : ""}`}
+                  data-ripple
+                  aria-pressed={hideRead}
+                  onClick={toggleHideRead}
+                >
+                  <Icon name={hideRead ? "check" : "hide"} />
+                  Hide read
+                </button>
+              </div>
+            </div>
+            {hideRead && readHiddenCount ? (
+              <div className="read-hidden-bar" role="status">
+                <Icon name={peek ? "eye" : "hide"} size={18} />
+                <span>
+                  {readHiddenCount} read {readHiddenCount === 1 ? "post" : "posts"}{" "}
+                  {peek ? "shown" : "hidden"}
+                </span>
+                <button
+                  type="button"
+                  className="read-hidden-action"
+                  data-ripple
+                  onClick={() => setPeek((current) => !current)}
+                >
+                  {peek ? "Hide" : "Show"}
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           {state.status === "loading" ? (
             <Skeletons layout={prefs.layout} />
@@ -649,7 +795,25 @@ export const FeedScreen = ({
             </FeedMessage>
           ) : null}
 
-          {state.status === "idle" && !visible.length ? (
+          {/* Everything loaded is read and hidden: the next page loads on its
+              own while there is one (the sentinel is in view). */}
+          {state.status === "idle" && !visible.length && hiding && readHiddenCount ? (
+            state.after ? null : (
+              <FeedMessage icon="checkCircle" title="You've read everything here">
+                <span>
+                  {readHiddenCount} read {readHiddenCount === 1 ? "post is" : "posts are"} hidden.
+                </span>
+                <button
+                  type="button"
+                  className="btn is-tonal"
+                  data-ripple
+                  onClick={() => setPeek(true)}
+                >
+                  <Icon name="eye" /> Show them
+                </button>
+              </FeedMessage>
+            )
+          ) : state.status === "idle" && !visible.length ? (
             <FeedMessage icon="new" title="Nothing here yet">
               <span>No posts match this sort. Try another view.</span>
             </FeedMessage>
@@ -685,7 +849,7 @@ export const FeedScreen = ({
               </button>
             </div>
           ) : null}
-          {state.status === "idle" && state.posts.length && !state.after ? (
+          {state.status === "idle" && visible.length && !state.after ? (
             <div className="feed-end">You're all caught up</div>
           ) : null}
         </div>

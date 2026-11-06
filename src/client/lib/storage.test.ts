@@ -45,6 +45,20 @@ test("saves changes automatically", async () => {
   assert.equal("openrelay:prefs" in saved, false);
 });
 
+test("clears a recent set and tells its listeners", async () => {
+  let calls = 0;
+  const stop = storage.readPosts.subscribe(() => calls++);
+  assert.equal(storage.readPosts.size, 2);
+  storage.readPosts.clear();
+  storage.readPosts.clear();
+  stop();
+  assert.equal(calls, 1);
+  assert.equal(storage.readPosts.size, 0);
+  assert.equal(storage.readPosts.has("t3_a"), false);
+  await storage.flushStorage();
+  assert.deepEqual(saved["openrelay:read"], []);
+});
+
 test("follows values saved by another tab", async () => {
   const seen: unknown[] = [];
   const stop = storage.watchKey("prefs", (value) => seen.push(value));

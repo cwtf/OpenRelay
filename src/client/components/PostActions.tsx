@@ -10,7 +10,8 @@ import {
   toast,
 } from "../lib/platform";
 import { currentAccount } from "../lib/account";
-import { hiddenPosts } from "../lib/storage";
+import { hiddenPosts, readPosts } from "../lib/storage";
+import { markRead, markUnread } from "../lib/readState";
 import {
   offlineAvailable,
   offlineMode,
@@ -41,6 +42,7 @@ export const openPostActions = (
         const savedOffline = isSavedOffline(post.id);
         // A hybrid feed's Lemmy post: read and saved on its instance.
         const lemmy = isLemmyItem(post.id);
+        const read = readPosts.has(post.id);
         return (
           <>
             <SheetItem
@@ -103,6 +105,12 @@ export const openPostActions = (
                 onClick={run(() => nav.openCommunity(post.subreddit))}
               />
             ) : null}
+            <SheetItem
+              icon={read ? "mail" : "mailOpen"}
+              label={read ? "Mark as unread" : "Mark as read"}
+              hint="Only on this device"
+              onClick={run(() => (read ? markUnread(post.id) : markRead(post.id)))}
+            />
             {onHide ? (
               <SheetItem
                 icon="hide"

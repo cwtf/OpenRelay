@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { readerHost } from "../../hosts/reader";
 import type { InboxNotifications } from "../../hosts/types";
 import { COMMENT_SORTS, type Prefs } from "../../shared/api";
@@ -7,8 +7,10 @@ import { useNav } from "../app/nav";
 import { canSwitchAccounts } from "../lib/accounts";
 import { AccountsSheet } from "./AccountSheets";
 import { sortLabel } from "../lib/format";
+import { toast } from "../lib/platform";
+import { readPosts } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
-import { Sheet } from "./Sheet";
+import { Sheet, SheetItem } from "./Sheet";
 
 type Option<T extends string> = { value: T; label: string; icon?: IconName };
 
@@ -153,8 +155,30 @@ const PaneSelect = ({
   </select>
 );
 
+const ClearReadSheet = ({ onClosed }: { onClosed: () => void }) => (
+  <Sheet title="Clear read history?" onClosed={onClosed}>
+    {(close) => (
+      <>
+        <SheetItem
+          icon="trash"
+          label="Clear read history"
+          hint="Every post shows as unread again"
+          onClick={() => {
+            close();
+            readPosts.clear();
+            toast("Read history cleared");
+          }}
+        />
+        <SheetItem icon="close" label="Cancel" onClick={close} />
+      </>
+    )}
+  </Sheet>
+);
+
 export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
   const { prefs, update } = usePrefs();
+  useSyncExternalStore(readPosts.subscribe, readPosts.getVersion);
+  const readCount = readPosts.size;
   const set =
     <K extends keyof Prefs>(key: K) =>
     (value: Prefs[K]) =>
@@ -218,6 +242,42 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
             value={prefs.compactCrossposts}
             onChange={set("compactCrossposts")}
           />
+
+          <div className="sheet-section">Read posts</div>
+          <Toggle
+            label="Hide read posts"
+            hint="In every feed. A feed's Hide read chip changes it for that feed"
+            value={prefs.hideRead}
+            onChange={set("hideRead")}
+          />
+          <Toggle
+            label="Mark read on scroll"
+            hint="Also mark posts read once you scroll past them"
+            value={prefs.markReadOnScroll}
+            onChange={set("markReadOnScroll")}
+          />
+          <button
+            type="button"
+            className="sheet-item"
+            data-ripple
+            disabled={!readCount}
+            onClick={() => {
+              close();
+              nav.openSheet((onClearClosed) => (
+                <ClearReadSheet onClosed={onClearClosed} />
+              ));
+            }}
+          >
+            <Icon name="trash" />
+            <span className="label">
+              Clear read history
+              <span className="hint">
+                {readCount
+                  ? `${readCount.toLocaleString()} ${readCount === 1 ? "post" : "posts"} on this device`
+                  : "No read posts on this device"}
+              </span>
+            </span>
+          </button>
 
           <div className="sheet-section">Single or dual pane</div>
           <label className="setting">

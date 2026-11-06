@@ -208,6 +208,16 @@ export class RecentSet {
     return [...this.#load()];
   }
 
+  get size(): number {
+    return this.#load().length;
+  }
+
+  clear(): void {
+    if (!this.#load().length) return;
+    this.#items = [];
+    this.#commit();
+  }
+
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);

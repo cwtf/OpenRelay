@@ -363,6 +363,30 @@
   color: var(--text-2);
 }
 
+/* The feed's app bar stays put and its sort strip and read-posts bar stick
+   just below it. Both are solid: posts scroll under them all the time. */
+.appbar.is-pinned {
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.feed-controls {
+  position: sticky;
+  top: var(--appbar-h);
+  z-index: 10;
+  background: var(--bg);
+  transition: box-shadow 150ms;
+}
+
+.feed-controls.is-stuck {
+  box-shadow: 0 1px 0 var(--divider);
+}
+
+.feed[data-layout='cards'] .feed-controls {
+  margin: 0 -8px;
+}
+
 .sort-strip {
   display: flex;
   gap: 8px;
@@ -372,7 +396,69 @@
 }
 
 .feed[data-layout='cards'] .sort-strip {
-  padding: 2px 8px 6px;
+  padding: 2px 16px 6px;
+}
+
+/* The feed's sorts scroll; "Hide read" stays at the end of the row. The
+   sorts fade out at their right edge while there are more to scroll to. */
+.sort-row {
+  display: flex;
+  padding-right: 16px;
+}
+
+.sort-row > .sort-strip,
+.feed[data-layout='cards'] .sort-row > .sort-strip {
+  flex: 1;
+  min-width: 0;
+  padding-right: 20px;
+  mask-image: linear-gradient(to left, transparent, #000 20px);
+}
+
+.sort-row-end {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 2px 0 10px;
+}
+
+.feed[data-layout='cards'] .sort-row-end {
+  padding-bottom: 6px;
+}
+
+.sort-strip-divider {
+  flex: none;
+  width: 1px;
+  margin: 6px 0;
+  background: var(--outline);
+}
+
+.read-hidden-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--on-primary-soft);
+  font-size: calc(13px * var(--ts));
+}
+
+.feed[data-layout='cards'] .read-hidden-bar {
+  margin-bottom: 6px;
+}
+
+.read-hidden-bar > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.read-hidden-action {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: var(--primary);
 }
 
 .sort-strip::-webkit-scrollbar {
