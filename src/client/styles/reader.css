@@ -399,30 +399,96 @@
   padding: 2px 16px 6px;
 }
 
-/* The feed's sorts scroll; "Hide read" stays at the end of the row. The
-   sorts fade out at their right edge while there are more to scroll to. */
+/* The feed's sort is one chip that opens a menu; "Hide read" sits at the
+   end of the row. */
 .sort-row {
   display: flex;
-  padding-right: 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 16px 10px;
 }
 
-.sort-row > .sort-strip,
-.feed[data-layout='cards'] .sort-row > .sort-strip {
-  flex: 1;
-  min-width: 0;
-  padding-right: 20px;
-  mask-image: linear-gradient(to left, transparent, #000 20px);
+.feed[data-layout='cards'] .sort-row {
+  padding-bottom: 6px;
 }
 
 .sort-row-end {
   flex: none;
+  align-self: stretch;
   display: flex;
   gap: 8px;
-  padding: 2px 0 10px;
+  margin-left: auto;
 }
 
-.feed[data-layout='cards'] .sort-row-end {
-  padding-bottom: 6px;
+.sort-dropdown {
+  position: relative;
+  min-width: 0;
+}
+
+.sort-dropdown > .filter-chip {
+  max-width: 100%;
+  padding-right: 8px;
+}
+
+.sort-dropdown > .filter-chip > .icon:last-child {
+  width: 16px;
+  height: 16px;
+  transition: transform 160ms var(--ease-emph);
+}
+
+.sort-dropdown > .filter-chip.is-open > .icon:last-child {
+  transform: rotate(180deg);
+}
+
+.sort-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1;
+  width: max-content;
+  min-width: 232px;
+  padding: 6px 0;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  box-shadow: var(--shadow-high);
+  transform-origin: top left;
+  animation: sort-menu-in var(--dur-enter) var(--ease-out) both;
+}
+
+.sort-menu .sheet-item {
+  gap: 14px;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: calc(14.5px * var(--ts));
+}
+
+.sort-menu .sheet-item:hover {
+  background: var(--press);
+}
+
+.sort-menu-hint {
+  font-size: calc(12.5px * var(--ts));
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.sort-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px 6px 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--divider);
+  font-size: calc(13.5px * var(--ts));
+  color: var(--text-2);
+}
+
+@keyframes sort-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
 }
 
 .sort-strip-divider {

@@ -10,8 +10,6 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import {
-  FEED_SORTS,
-  TIMEFRAMES,
   type FeedSort,
   type PostSummary,
   type SubredditAbout,
@@ -28,7 +26,7 @@ import {
 } from "../components/CommunityPanels";
 import { SubredditSheet } from "../components/Drawer";
 import { PostCard } from "../components/PostCard";
-import { Sheet, SheetItem } from "../components/Sheet";
+import { SortDropdown } from "../components/SortDropdown";
 import { useAccount } from "../lib/account";
 import { fetchAbout, fetchFeed, site } from "../lib/api";
 import { compact, hueOf, sortLabel, timeframeLabel } from "../lib/format";
@@ -47,14 +45,6 @@ import {
   readAmong,
   setFeedHidesRead,
 } from "../lib/readState";
-
-const SORT_ICONS: Record<FeedSort, IconName> = {
-  hot: "hot",
-  new: "new",
-  top: "top",
-  rising: "rising",
-  controversial: "controversial",
-};
 
 const LAYOUT_ICONS = {
   cards: "cards",
@@ -537,31 +527,6 @@ export const FeedScreen = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deletedVersion, onHide]);
 
-  const chooseSort = (next: FeedSort) => {
-    if (next === "top" || next === "controversial") {
-      nav.openSheet((onClosed) => (
-        <Sheet title={`${sortLabel[next]} posts from…`} onClosed={onClosed}>
-          {(close) =>
-            TIMEFRAMES.map((t) => (
-              <SheetItem
-                key={t}
-                icon="clock"
-                label={timeframeLabel[t]}
-                selected={sort === next && timeframe === t}
-                onClick={() => {
-                  close();
-                  onSort(next, t);
-                }}
-              />
-            ))
-          }
-        </Sheet>
-      ));
-    } else {
-      onSort(next, timeframe);
-    }
-  };
-
   const subtitle =
     sort === "top" || sort === "controversial"
       ? `${sortLabel[sort]} · ${timeframeLabel[timeframe]}`
@@ -720,30 +685,7 @@ export const FeedScreen = ({
             className={`feed-controls${stuck ? " is-stuck" : ""}`}
           >
             <div className="sort-row">
-              <nav className="sort-strip" aria-label="Sort posts">
-                {FEED_SORTS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={`filter-chip${sort === option ? " is-selected" : ""}`}
-                    data-ripple
-                    aria-pressed={sort === option}
-                    onClick={() => chooseSort(option)}
-                  >
-                    <Icon name={sort === option ? "check" : SORT_ICONS[option]} />
-                    {sortLabel[option]}
-                    {(option === "top" || option === "controversial") &&
-                    sort === option ? (
-                      <>
-                        {" · "}
-                        {timeframeLabel[timeframe]}
-                        <Icon name="chevronDown" />
-                      </>
-                    ) : null}
-                  </button>
-                ))}
-              </nav>
-              {/* Outside the scrolling sorts, so it's always in reach. */}
+              <SortDropdown sort={sort} timeframe={timeframe} onSort={onSort} />
               <div className="sort-row-end">
                 <span className="sort-strip-divider" aria-hidden />
                 <button
