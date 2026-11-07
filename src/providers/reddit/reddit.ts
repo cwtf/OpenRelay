@@ -279,6 +279,26 @@ function modInfo(t: Raw): { mod?: ModInfo } {
  */
 const hiddenScore = (c: Raw): { scoreHidden?: true } =>
   c.score_hidden === true ? { scoreHidden: true } : {};
+/**
+ * Comments read from new Reddit's HTML don't say whether their score is
+ * hidden, so apply Reddit's rule: hidden while younger than the community's
+ * `comment_score_hide_mins`.
+ */
+export function hideYoungScores(
+  nodes: CommentNode[],
+  minutes: number,
+  now = Date.now(),
+): CommentNode[] {
+  if (!(minutes > 0)) return nodes;
+  const shownBefore = now - minutes * 60000;
+  const mark = (list: CommentNode[]): CommentNode[] =>
+    list.map((node) => ({
+      ...node,
+      ...(node.createdAt > shownBefore ? { scoreHidden: true as const } : {}),
+      replies: mark(node.replies),
+    }));
+  return mark(nodes);
+}
 const NAME = /^[\w-]{3,20}$/;
 const fullname = (value: unknown, prefix: string) =>
   typeof value === "string" && /^t\d_[a-z0-9]+$/i.test(value)

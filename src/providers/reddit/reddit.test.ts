@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   allowedJsonPath,
   eachItem,
+  hideYoungScores,
   normalizeAccount,
   normalizeFriends,
   normalizeInbox,
@@ -290,6 +291,28 @@ test("marks scores the community hides for now", () => {
   assert.equal(listed?.type === "comment" && listed.comment.scoreHidden, true);
   assert.equal(normalizePost({ id: "p1", title: "T", score: 1, hide_score: true }).scoreHidden, true);
   assert.equal("scoreHidden" in normalizePost({ id: "p2", title: "T", score: 5 }), false);
+});
+test("hides the scores of comments read from HTML while the community hides them", () => {
+  // New Reddit's HTML gives the placeholder score with no hidden flag.
+  const now = Date.UTC(2026, 0, 1);
+  const { comments } = normalizeComments([
+    {
+      kind: "t1",
+      data: {
+        id: "c1", body: "new", score: 1, created_utc: (now - 50 * 60000) / 1000,
+        replies: { data: { children: [
+          { kind: "t1", data: { id: "c2", body: "newer", score: 1, created_utc: (now - 12 * 60000) / 1000 } },
+        ] } },
+      },
+    },
+    { kind: "t1", data: { id: "c3", body: "old", score: 9, created_utc: (now - 7 * 3600000) / 1000 } },
+  ]);
+  const marked = hideYoungScores(comments, 360, now);
+  assert.equal(marked[0]?.scoreHidden, true);
+  assert.equal(marked[0]?.replies[0]?.scoreHidden, true);
+  assert.equal("scoreHidden" in marked[1]!, false);
+  assert.equal(hideYoungScores(comments, 0, now), comments);
+  assert.equal("scoreHidden" in comments[0]!, false);
 });
 test("keeps the stream of a video a comment links to", () => {
   const hls = "https://v.redd.it/link/p1/asset/v1/HLSPlaylist.m3u8?a=1&amp;v=1";

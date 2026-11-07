@@ -30,6 +30,7 @@ import type { ReaderProvider } from "../types";
 import { encodeImage, UPLOAD_TIMEOUT } from "../upload";
 import {
   eachItem,
+  hideYoungScores,
   safeUrl,
   normalizeCommunity,
   normalizeFriends,
@@ -87,6 +88,27 @@ const html = (path: string, cursor?: string) =>
 const htmlPosts = new Map<string, PostSummary>();
 /** Where to load each comment's further replies, from the HTML. */
 const moreReplies = new Map<string, MoreComments>();
+/**
+ * Each community's `comment_score_hide_mins` (0 when it hides none or can't
+ * be read), for comments read from HTML, which don't say they're hidden.
+ */
+const hideMinutes = new Map<string, Promise<number>>();
+function scoreHideMinutes(sub: string | undefined): Promise<number> {
+  if (!sub) return Promise.resolve(0);
+  const key = sub.toLowerCase();
+  let minutes = hideMinutes.get(key);
+  if (!minutes) {
+    minutes = json(prefix(sub) + "/about.json?raw_json=1").then(
+      (result) => {
+        const value = result?.data?.comment_score_hide_mins;
+        return typeof value === "number" && value > 0 ? value : 0;
+      },
+      () => 0,
+    );
+    hideMinutes.set(key, minutes);
+  }
+  return minutes;
+}
 function remember(page: { posts?: PostSummary[]; more?: MoreComments[] }) {
   for (const post of page.posts ?? []) htmlPosts.set(post.id, post);
   for (const more of page.more ?? []) if (more.parent) moreReplies.set(more.parent, more);
@@ -309,10 +331,12 @@ async function htmlPost(
   ]);
   const post = page?.posts.find((p) => p.id === id) ?? known;
   if (!post) throw new ApiFailure("This post is unavailable.");
+  htmlPosts.set(id, post);
+  const hide = scoreHideMinutes(post.subreddit);
   const thread = early ?? (await htmlComments(id, post.subreddit, sort, limit));
   return {
     post,
-    comments: thread.comments,
+    comments: hideYoungScores(thread.comments, await hide),
     moreComments: thread.more,
     ...(page ? {} : { notice: "Reddit refused this post's own page, so its text may be missing." }),
   };
@@ -338,10 +362,11 @@ async function htmlComments(
  * A comment's replies from the "more replies" piece its page left; the rest
  * of a long list follows the last piece.
  */
-async function htmlReplies(comment: string): Promise<RepliesResponse> {
+async function htmlReplies(post: string, comment: string): Promise<RepliesResponse> {
   let next = moreReplies.get(comment);
   if (!next)
     throw new ApiFailure("Reddit did not return this thread. Open it on Reddit to continue.");
+  const hide = scoreHideMinutes(htmlPosts.get(post)?.subreddit);
   const replies: CommentNode[] = [];
   for (let piece = 0; next && piece < 6; piece++) {
     const page: HtmlPage = await html(next.path, next.cursor);
@@ -349,7 +374,7 @@ async function htmlReplies(comment: string): Promise<RepliesResponse> {
     replies.push(...page.comments);
     next = page.more.find((more) => !more.parent);
   }
-  return { replies, more: Boolean(next) };
+  return { replies: hideYoungScores(replies, await hide), more: Boolean(next) };
 }
 const memo = new Map<string, { at: number; value: Promise<PostResponse> }>();
 /** A post and its comments, kept for a minute unless `fresh`. */
@@ -375,7 +400,7 @@ function redditPost(
         if (post)
           return {
             post,
-            comments: loaded.comments,
+            comments: hideYoungScores(loaded.comments, await scoreHideMinutes(post.subreddit)),
             moreComments: false,
             notice:
               "Showing content already loaded on Reddit. Refresh and additional comments require Reddit access.",
@@ -433,7 +458,7 @@ async function fetchReplies(
   sort: CommentSort,
   _op: string,
 ): Promise<RepliesResponse> {
-  return orHtml(() => jsonReplies(post, comment, sort), () => htmlReplies(comment));
+  return orHtml(() => jsonReplies(post, comment, sort), () => htmlReplies(post, comment));
 }
 async function jsonReplies(
   post: string,
