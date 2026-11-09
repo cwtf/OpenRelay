@@ -16,7 +16,9 @@ import {
   commentVideoStream,
   isInlineImage,
   normaliseHref,
+  splitBareUrl,
   unescapeUrl,
+  urlLabel,
 } from './links';
 import { Icon } from '../components/Icon';
 import { site } from './api';
@@ -67,28 +69,6 @@ const MediaContext = createContext<Record<string, InlineMedia> | undefined>(
 type InlineRule = {
   re: RegExp;
   render: (match: RegExpExecArray, key: string) => ReactNode;
-};
-
-const trimUrl = (url: string): string => {
-  let result = url;
-  for (;;) {
-    const last = result[result.length - 1];
-    if (!last) break;
-    if ('.,;:!?\'"*_~'.includes(last)) {
-      result = result.slice(0, -1);
-      continue;
-    }
-    if (last === ')') {
-      const opens = (result.match(/\(/g) ?? []).length;
-      const closes = (result.match(/\)/g) ?? []).length;
-      if (closes > opens) {
-        result = result.slice(0, -1);
-        continue;
-      }
-    }
-    break;
-  }
-  return result;
 };
 
 const Spoiler = ({ children }: { children: ReactNode }) => {
@@ -470,12 +450,14 @@ const RULES: InlineRule[] = [
     render: (m, key) => {
       // `[<url>](<url>)`, as Reddit's editor writes a pasted link, shows
       // like the bare URL.
-      const media =
-        /^https?:\/\//i.test(m[1] ?? '') && linkedMedia(unescapeUrl(m[2] ?? ''));
+      const text = m[1] ?? '';
+      const href = unescapeUrl(m[2] ?? '');
+      const textIsUrl = /^https?:\/\/\S+$/i.test(text);
+      const media = textIsUrl && linkedMedia(href);
       if (media) return <span key={key}>{media}</span>;
       return (
-        <Link key={key} href={m[2] ?? ''}>
-          {inline(m[1] || (m[2] ?? ''), key)}
+        <Link key={key} href={href}>
+          {textIsUrl ? urlLabel(text) : inline(text || href, key)}
         </Link>
       );
     },
@@ -483,9 +465,8 @@ const RULES: InlineRule[] = [
   {
     re: /https?:\/\/[^\s<>[\]]+/,
     render: (m, key) => {
-      const url = trimUrl(m[0]);
-      const rest = m[0].slice(url.length);
-      const media = linkedMedia(unescapeUrl(url));
+      const { url, rest } = splitBareUrl(m[0]);
+      const media = linkedMedia(url);
       if (media) {
         return (
           <span key={key}>
@@ -496,7 +477,7 @@ const RULES: InlineRule[] = [
       }
       return (
         <span key={key}>
-          <Link href={url}>{url.replace(/^https?:\/\/(www\.)?/, '')}</Link>
+          <Link href={url}>{urlLabel(url)}</Link>
           {rest}
         </span>
       );

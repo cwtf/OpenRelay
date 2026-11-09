@@ -7,7 +7,32 @@ import {
   unescapeUrl,
   normaliseHref,
   resolveLink,
+  splitBareUrl,
+  urlLabel,
 } from './links.ts';
+
+void test('drops the escapes Reddit writes into a bare URL', () => {
+  const text =
+    'https://en.wikipedia.org/wiki/India–Singapore\\_Comprehensive\\_Economic\\_Cooperation\\_Agreement';
+  const { url, rest } = splitBareUrl(text);
+  assert.equal(
+    url,
+    'https://en.wikipedia.org/wiki/India–Singapore_Comprehensive_Economic_Cooperation_Agreement'
+  );
+  assert.equal(rest, '');
+  assert.equal(
+    urlLabel(text),
+    'en.wikipedia.org/wiki/India–Singapore_Comprehensive_Economic_Cooperation_Agreement'
+  );
+  assert.deepEqual(splitBareUrl('https://a.example/b\\_c.'), {
+    url: 'https://a.example/b_c',
+    rest: '.',
+  });
+  assert.deepEqual(splitBareUrl('https://a.example/b\\_'), {
+    url: 'https://a.example/b',
+    rest: '_',
+  });
+});
 
 void test('opens Reddit post permalinks in the reader', () => {
   assert.deepEqual(

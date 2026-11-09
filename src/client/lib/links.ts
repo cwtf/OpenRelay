@@ -53,6 +53,43 @@ export const isInlineImage = (href: string): boolean => IMAGE_URL.test(href);
 export const unescapeUrl = (url: string): string =>
   url.replace(/\\([\\`*_{}[\]()#+\-.!>~^|<])/g, '$1');
 
+/** A URL as a link shows it: unescaped, without `https://` and `www.`. */
+export const urlLabel = (url: string): string =>
+  unescapeUrl(url).replace(/^https?:\/\/(www\.)?/i, '');
+
+const trimUrl = (url: string): string => {
+  let result = url;
+  for (;;) {
+    const last = result[result.length - 1];
+    if (!last) break;
+    // The `\` of an escaped trailing mark (`a\_`) goes with it.
+    if ('.,;:!?\'"*_~\\'.includes(last)) {
+      result = result.slice(0, -1);
+      continue;
+    }
+    if (last === ')') {
+      const opens = (result.match(/\(/g) ?? []).length;
+      const closes = (result.match(/\)/g) ?? []).length;
+      if (closes > opens) {
+        result = result.slice(0, -1);
+        continue;
+      }
+    }
+    break;
+  }
+  return result;
+};
+
+/**
+ * A bare URL found in text: the link it makes, unescaped (Reddit's editor
+ * writes `India\_Singapore`, and a browser reads that `\` as `/`), and the
+ * trailing punctuation that isn't part of it.
+ */
+export const splitBareUrl = (text: string): { url: string; rest: string } => {
+  const raw = trimUrl(text);
+  return { url: unescapeUrl(raw), rest: unescapeUrl(text.slice(raw.length)) };
+};
+
 const COMMENT_VIDEO_URL =
   /^https:\/\/(?:www\.)?reddit\.com\/link\/[a-z0-9]+\/video\/([a-z0-9]+)\/player\/?$/i;
 
