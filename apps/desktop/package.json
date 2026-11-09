@@ -1,7 +1,7 @@
 {
   "name": "openrelay-desktop",
   "productName": "OpenRelay",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "OpenRelay for Reddit/Lemmy as a desktop app",
   "author": "cwtf",
