@@ -448,31 +448,69 @@ export async function apiAction(
 /** Where Reddit's upload leases may send a file: its S3 bucket. */
 const UPLOAD_HOST = /^reddit-uploaded-media\.s3(?:-accelerate|[.-][a-z0-9-]+)?\.amazonaws\.com$/;
 
+/** The `mimetype` new Reddit's lease takes for each type a reply can attach. */
+const LEASE_TYPES: Record<string, string> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "image/gif": "GIF",
+  "image/webp": "WEBP",
+};
+
 /**
- * Uploads a reply's image as Reddit's own uploader does (and PRAW): Reddit
- * leases an upload to its S3 bucket and names the asset, the file goes to
- * S3 without credentials, and the reply refers to it as `![img](<asset id>)`.
+ * New Reddit's CSRF token: its `csrf_token` cookie, which its own scripts
+ * send back in the body of each `/svc/shreddit/graphql` request.
+ */
+export const csrfToken = (cookie: string): string | null =>
+  /(?:^|;\s*)csrf_token=([\w-]{8,128})(?:;|$)/.exec(cookie)?.[1] ?? null;
+
+/**
+ * Uploads a reply's image as new Reddit's own composer does: its
+ * `CreateMediaUploadLease` GraphQL call (same-origin, with the session's
+ * cookies and CSRF token) leases an upload to Reddit's S3 bucket and names
+ * the media, the file goes to S3 without credentials, and the reply refers
+ * to it as `![img](<media id>)`. The older `/api/media/asset.json` takes only
+ * OAuth tokens and refuses a browser session with 403.
  */
 export async function apiUpload(
   fetchFn: Fetch,
   origin: string,
   image: ImageFile,
+  csrf: string | null,
 ): Promise<{ id: string }> {
-  // Reddit has answered a signed-in browser session with 403 here (in the
-  // extension and the desktop app) while its other writes work, so a
-  // refusal isn't about signing in.
-  const lease = await post(
-    fetchFn,
-    origin,
-    "/api/media/asset.json",
-    () => ({ filepath: image.name, mimetype: image.type }),
-    "Reddit refused the image upload. Giphy GIFs saved from comments can still be added.",
-  );
-  const id = lease?.asset?.asset_id;
-  const fields: unknown = lease?.args?.fields;
+  const mimetype = Object.hasOwn(LEASE_TYPES, image.type) ? LEASE_TYPES[image.type] : undefined;
+  if (!mimetype) throw new Error("Invalid request");
+  if (!csrf) throw new Error("Sign in to Reddit first.");
+  const response = await fetchFn(new URL("/svc/shreddit/graphql", origin), {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      operation: "CreateMediaUploadLease",
+      variables: { input: { mimetype } },
+      csrf_token: csrf,
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (response.status === 429)
+    throw new Error("Reddit is rate limiting requests. Try again shortly.");
+  if (response.status === 401 || response.status === 403)
+    throw new Error("Reddit refused the image upload. Check that you are signed in.");
+  if (!response.ok) throw new Error(`Reddit could not complete the request (${response.status}).`);
+  const body = await response.json().catch(() => null);
+  const created = body?.data?.createMediaUploadLease;
+  if (created?.ok !== true) {
+    const reason = created?.errors?.[0]?.message ?? body?.errors?.[0]?.message;
+    throw new Error(
+      typeof reason === "string" && reason
+        ? `Reddit refused the image upload: ${reason.slice(0, 200)}`
+        : "Reddit refused the image upload.",
+    );
+  }
+  const id = created.mediaId;
+  const fields: unknown = created.uploadLease?.uploadLeaseHeaders;
   let target: URL | null = null;
   try {
-    target = new URL("https:" + String(lease?.args?.action ?? "").replace(/^https:/, ""));
+    target = new URL(String(created.uploadLease?.uploadLeaseUrl ?? ""));
   } catch {
     // Checked below.
   }
@@ -485,24 +523,25 @@ export async function apiUpload(
     !Array.isArray(fields)
   )
     throw new Error("Reddit did not accept the image upload.");
+  // Despite their name, these are the S3 form's fields; the file goes last.
   const form = new FormData();
   for (const field of fields)
-    if (typeof field?.name === "string" && typeof field?.value === "string")
-      form.append(field.name, field.value);
+    if (typeof field?.header === "string" && typeof field?.value === "string")
+      form.append(field.header, field.value);
   form.append("file", new Blob([image.bytes], { type: image.type }), image.name);
-  const response = await fetchFn(target, {
+  const stored = await fetchFn(target, {
     method: "POST",
     credentials: "omit",
     referrerPolicy: "no-referrer",
     body: form,
     signal: AbortSignal.timeout(80000),
   });
-  if (!response.ok) {
-    const answer = await response.text().catch(() => "");
+  if (!stored.ok) {
+    const answer = await stored.text().catch(() => "");
     throw new Error(
       /EntityTooLarge/.test(answer)
         ? "The image is too large for Reddit."
-        : `Reddit could not store the image (${response.status}).`,
+        : `Reddit could not store the image (${stored.status}).`,
     );
   }
   return { id };

@@ -1,5 +1,5 @@
 import type { PageProvider, PageRequest } from "../types";
-import { apiAction, apiUpload, apiVote } from "./writes";
+import { apiAction, apiUpload, apiVote, csrfToken } from "./writes";
 import { decodeImage } from "../upload";
 import { forwardVote, readNativeVote, isThingId } from "./votes";
 import { allowedJsonPath, normalizeAccount, parseRoute } from "./reddit";
@@ -39,8 +39,8 @@ async function read(path: string, accept: string, form?: URLSearchParams) {
 /** The form new Reddit posts for more comments, with its CSRF cookie if set. */
 function moreCommentsForm(cursor: string) {
   const form = new URLSearchParams({ cursor });
-  const csrf = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
-  if (csrf) form.set("csrf_token", decodeURIComponent(csrf));
+  const csrf = csrfToken(document.cookie);
+  if (csrf) form.set("csrf_token", csrf);
   return form;
 }
 
@@ -88,7 +88,8 @@ async function handle(
   }
   if (action === "upload") {
     if (!active) throw new Error("OpenRelay is not active");
-    return apiUpload(fetch, location.origin, decodeImage(payload?.file));
+    // The CSRF token, like the modhash, stays in the content script.
+    return apiUpload(fetch, location.origin, decodeImage(payload?.file), csrfToken(document.cookie));
   }
   if (action === "me") {
     // Only the name and picture reach the reader, never the session modhash.

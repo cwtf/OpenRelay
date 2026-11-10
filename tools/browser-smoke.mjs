@@ -30,6 +30,10 @@ const context = await chromium.launchPersistentContext(
     viewport: { width: 1280, height: 900 },
   },
 );
+// New Reddit's CSRF cookie, which its image upload lease sends back.
+await context.addCookies([
+  { name: "csrf_token", value: "fixturecsrf1234", domain: "www.reddit.com", path: "/", secure: true, sameSite: "Strict" },
+]);
 const errors = [];
 const post = {
   id: "abc123",
@@ -135,6 +139,27 @@ await context.route(/^https:\/\/(i|preview)\.redd\.it\//, (route) =>
 );
 await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
   const url = new URL(route.request().url());
+  // New Reddit's image upload lease, as its own composer asks for it.
+  if (url.pathname === "/svc/shreddit/graphql") {
+    writes.push({ path: url.pathname, body: JSON.parse(route.request().postData() ?? "null") });
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          createMediaUploadLease: {
+            mediaId: "fixtureasset1",
+            uploadLease: {
+              uploadLeaseUrl: "https://reddit-uploaded-media.s3-accelerate.amazonaws.com/",
+              uploadLeaseHeaders: [{ header: "key", value: "fixtureasset1" }],
+            },
+            ok: true,
+            errors: null,
+          },
+        },
+        errors: [],
+      }),
+    });
+  }
   if (url.pathname.startsWith("/svc/shreddit/") || url.pathname === "/comments/abc123/") {
     const method = route.request().method();
     htmlRequests.push({
@@ -169,7 +194,7 @@ await context.route(/^https:\/\/(www|old)\.reddit\.com\//, async (route) => {
         created_utc: Math.floor(Date.now() / 1000), likes: true,
         permalink: post.permalink + `${id}/`,
         // As Reddit lists a reply with a picture, a Giphy GIF and image links.
-        ...(sent.text === "Look"
+        ...(sent.richtext_json
           ? {
               body: "Look\n\n![img](fixtureasset1) ![gif](giphy|fixturegif)\n\nhttps://i.redd.it/not-an-upload.png\n\nhttps://preview.redd.it/linkedasset1.png?width=216&format=png",
               media_metadata: {
@@ -468,27 +493,46 @@ try {
   assert.equal(await box.inputValue(), "");
   await app.getByRole("button", { name: "Cancel" }).click();
   await app.locator(".sheet").waitFor({ state: "detached" }); // Fully closed.
-  // Uploading images and GIFs is off on Reddit for now: no picker, and a
-  // pasted image is left alone, so nothing reaches Reddit or its S3 bucket.
+  // An attached image is uploaded at once, as new Reddit's composer does it:
+  // a lease from its GraphQL endpoint with the CSRF cookie's token, then the
+  // file to Reddit's S3 bucket, with no cookies and under a generic name.
   box = await openReply();
   await box.fill("Look");
-  assert.equal(await app.getByRole("button", { name: "Add image or GIF" }).count(), 0);
-  assert.equal(await app.locator('input[type="file"]').count(), 0);
-  const pasteWrites = writes.length;
-  await box.evaluate((textarea, bytes) => {
-    const data = new DataTransfer();
-    data.items.add(new File([Uint8Array.from(bytes)], "holiday photo.png", { type: "image/png" }));
-    textarea.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-  }, [...png]);
-  assert.equal(await box.inputValue(), "Look");
-  assert.equal(writes.length, pasteWrites);
-  assert.equal(uploads.length, 0);
+  await app.locator('input[type="file"]').setInputFiles({ name: "holiday photo.png", mimeType: "image/png", buffer: png });
+  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
+  assert.equal(await box.inputValue(), "Look\n\n![img](fixtureasset1)\n\n");
+  assert.deepEqual(writes.at(-1), {
+    path: "/svc/shreddit/graphql",
+    body: {
+      operation: "CreateMediaUploadLease",
+      variables: { input: { mimetype: "PNG" } },
+      csrf_token: "fixturecsrf1234",
+    },
+  });
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].method, "POST");
+  assert.equal(uploads[0].headers.cookie, undefined);
+  assert.equal(uploads[0].headers.referer, undefined);
+  assert.ok(uploads[0].body.includes("fixtureasset1"));
+  assert.ok(uploads[0].body.includes('filename="image.png"'));
+  assert.ok(!uploads[0].body.includes("holiday"));
+  // The preview shows the picked file; the reply goes as richtext.
+  await app.getByRole("button", { name: "Preview" }).click();
+  await app.locator('.reply-preview img[src^="blob:"]').waitFor();
+  await app.getByRole("button", { name: "Edit" }).click();
   await app.getByRole("button", { name: "Send", exact: true }).click();
   // The first reply's toast may still be up: wait for this reply instead.
   await app.locator('[data-cid="t1_mine2"]').waitFor();
+  // Built by the extension: Reddit's converter answers a browser session with 404.
+  assert.ok(!writes.some((write) => write.path === "/api/convert_rte_body_format"));
   assert.deepEqual(writes.at(-1), {
     path: "/api/comment",
-    body: { thing_id: "t1_c1", text: "Look", uh: "fixturemodhash1", api_type: "json" },
+    body: {
+      thing_id: "t1_c1",
+      richtext_json: JSON.stringify({ document: [{ e: "par", c: [{ e: "text", t: "Look" }] }, { e: "img", id: "fixtureasset1" }] }),
+      uh: "fixturemodhash1",
+      api_type: "json",
+    },
   });
   // The posted reply shows the image Reddit lists for it.
   const posted = app.locator('[data-cid="t1_mine2"]');
@@ -1021,7 +1065,7 @@ try {
     {
       method: "POST",
       path: "/svc/shreddit/more-comments/test/t3_abc123?sort=CONFIDENCE&startingDepth=1&commentParentPositions=0",
-      body: { cursor: replyCursor },
+      body: { cursor: replyCursor, csrf_token: "fixturecsrf1234" },
     },
   ]);
   await page.screenshot({ path: resolve(out, "html-fallback.png") });
@@ -1050,7 +1094,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, no image uploads on Reddit (no picker, pasted images ignored), only a comment's GIF saveable from the viewer on Reddit and offered again, as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via new Reddit's GraphQL lease to S3 and sent as richtext, only a comment's GIF saveable from the viewer on Reddit and offered again, as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

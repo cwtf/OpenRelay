@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { apiAction, apiUpload, apiVote, resetWrites } from "./writes.ts";
+import { apiAction, apiUpload, apiVote, csrfToken, resetWrites } from "./writes.ts";
 
 type Call = { url: string; init: RequestInit | undefined };
 const json = (body: unknown, status = 200) =>
@@ -438,64 +438,102 @@ test("looks again for a reply Reddit lists a few seconds late", async () => {
 });
 
 const IMAGE = { name: "image.png", type: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
-const lease = (action: string) => ({
-  args: {
-    action,
-    fields: [
-      { name: "key", value: "rte_images/abc/image.png" },
-      { name: "policy", value: "p0licy" },
-    ],
+const CSRF = "d2149875bcae15a0df3d84a6457cda61";
+/** New Reddit's answer to CreateMediaUploadLease (trimmed). */
+const lease = (url: string) => ({
+  data: {
+    createMediaUploadLease: {
+      mediaId: "media123",
+      uploadLease: {
+        uploadLeaseUrl: url,
+        uploadLeaseHeaders: [
+          { header: "key", value: "media123" },
+          { header: "policy", value: "p0licy" },
+          { header: "Content-Type", value: "image/png" },
+        ],
+      },
+      ok: true,
+      errors: null,
+    },
   },
-  asset: { asset_id: "asset123" },
+  errors: [],
+  operation: "CreateMediaUploadLease",
 });
 
-test("uploads an image to Reddit's S3 bucket without credentials", async () => {
+test("reads new Reddit's CSRF token from its cookie", () => {
+  assert.equal(csrfToken(`loid=x; csrf_token=${CSRF}; pc=td`), CSRF);
+  assert.equal(csrfToken(`csrf_token=${CSRF}`), CSRF);
+  assert.equal(csrfToken("loid=x; not_csrf_token=abcdefgh12"), null);
+  assert.equal(csrfToken("csrf_token=<script>"), null);
+  assert.equal(csrfToken(""), null);
+});
+
+test("uploads an image through new Reddit's lease to its S3 bucket without credentials", async () => {
   resetWrites();
   const { calls, fetchFn } = fakeReddit((url) =>
-    url.pathname === "/api/me.json"
-      ? json({ data: { modhash: "abc123modhash" } })
-      : url.pathname === "/api/media/asset.json"
-        ? json(lease("//reddit-uploaded-media.s3-accelerate.amazonaws.com"))
-        : new Response("", { status: 201 }),
+    url.pathname === "/svc/shreddit/graphql"
+      ? json(lease("https://reddit-uploaded-media.s3-accelerate.amazonaws.com/"))
+      : new Response("", { status: 201 }),
   );
-  assert.deepEqual(await apiUpload(fetchFn, origin, IMAGE), { id: "asset123" });
-  assert.deepEqual(sent(calls[1]!), {
-    filepath: "image.png",
-    mimetype: "image/png",
-    uh: "abc123modhash",
-    api_type: "json",
+  assert.deepEqual(await apiUpload(fetchFn, origin, IMAGE, CSRF), { id: "media123" });
+  // No modhash: the lease is a same-origin GraphQL call with the CSRF token.
+  const leased = calls[0]!;
+  assert.equal(leased.url, "https://www.reddit.com/svc/shreddit/graphql");
+  assert.equal(leased.init?.method, "POST");
+  assert.equal(leased.init?.credentials, "same-origin");
+  assert.equal((leased.init?.headers as Record<string, string>)["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(String(leased.init?.body)), {
+    operation: "CreateMediaUploadLease",
+    variables: { input: { mimetype: "PNG" } },
+    csrf_token: CSRF,
   });
-  const upload = calls[2]!;
+  const upload = calls[1]!;
   assert.equal(upload.url, "https://reddit-uploaded-media.s3-accelerate.amazonaws.com/");
   assert.equal(upload.init?.credentials, "omit");
   assert.equal(upload.init?.headers, undefined);
   const form = upload.init?.body as FormData;
-  assert.deepEqual([...form.keys()], ["key", "policy", "file"]);
-  assert.equal(form.get("key"), "rte_images/abc/image.png");
+  assert.deepEqual([...form.keys()], ["key", "policy", "Content-Type", "file"]);
+  assert.equal(form.get("key"), "media123");
   assert.equal((form.get("file") as File).type, "image/png");
+  assert.equal(calls.length, 2);
+});
+
+test("leases each image type under new Reddit's name for it", async () => {
+  for (const [type, mimetype] of [["image/jpeg", "JPEG"], ["image/gif", "GIF"], ["image/webp", "WEBP"]]) {
+    const { calls, fetchFn } = fakeReddit((url) =>
+      url.pathname === "/svc/shreddit/graphql"
+        ? json(lease("https://reddit-uploaded-media.s3-accelerate.amazonaws.com/"))
+        : new Response("", { status: 201 }),
+    );
+    await apiUpload(fetchFn, origin, { ...IMAGE, type }, CSRF);
+    assert.equal(JSON.parse(String(calls[0]!.init?.body)).variables.input.mimetype, mimetype);
+  }
+});
+
+test("asks to sign in when there is no CSRF token, and sends nothing", async () => {
+  const { calls, fetchFn } = fakeReddit(() => json({}));
+  await assert.rejects(apiUpload(fetchFn, origin, IMAGE, null), /Sign in to Reddit/);
+  assert.equal(calls.length, 0);
 });
 
 test("says so when Reddit refuses the upload lease", async () => {
-  resetWrites();
-  const { calls, fetchFn } = fakeReddit((url) =>
-    url.pathname === "/api/me.json" ? json({ data: { modhash: "abc123modhash" } }) : json({}, 403),
-  );
-  await assert.rejects(apiUpload(fetchFn, origin, IMAGE), /refused the image upload/);
-  // Once more with a fresh modhash, then nothing goes to S3.
-  assert.deepEqual(
-    calls.map((call) => new URL(call.url).pathname),
-    ["/api/me.json", "/api/media/asset.json", "/api/me.json", "/api/media/asset.json"],
-  );
+  for (const respond of [
+    () => json({}, 403),
+    () => json({ data: { createMediaUploadLease: { ok: false, errors: [{ message: "Nope" }] } } }),
+    () => json({ data: null, errors: [{ message: "Bad csrf" }] }),
+  ]) {
+    const { calls, fetchFn } = fakeReddit(respond);
+    await assert.rejects(apiUpload(fetchFn, origin, IMAGE, CSRF), /refused the image upload/);
+    // Nothing goes to S3.
+    assert.equal(calls.length, 1);
+  }
 });
 
 test("sends an upload lease nowhere but Reddit's bucket", async () => {
-  for (const action of ["//evil.example.com", "//reddit-uploaded-media.s3.amazonaws.com.evil.example", "http://reddit-uploaded-media.s3-accelerate.amazonaws.com"]) {
-    resetWrites();
-    const { calls, fetchFn } = fakeReddit((url) =>
-      url.pathname === "/api/me.json" ? json({ data: { modhash: "abc123modhash" } }) : json(lease(action)),
-    );
-    await assert.rejects(apiUpload(fetchFn, origin, IMAGE), /did not accept the image/);
-    assert.equal(calls.length, 2, action);
+  for (const url of ["https://evil.example.com/", "https://reddit-uploaded-media.s3.amazonaws.com.evil.example/", "http://reddit-uploaded-media.s3-accelerate.amazonaws.com/", "//reddit-uploaded-media.s3-accelerate.amazonaws.com"]) {
+    const { calls, fetchFn } = fakeReddit(() => json(lease(url)));
+    await assert.rejects(apiUpload(fetchFn, origin, IMAGE, CSRF), /did not accept the image/);
+    assert.equal(calls.length, 1, url);
   }
 });
 
