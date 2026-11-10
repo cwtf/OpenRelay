@@ -7,6 +7,14 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="color-scheme" content="dark light" />
+    <!--
+      No Referer from anything the reader loads (videos, hls.js, images). The
+      extension's chrome-extension:// page never sends one, but the Android
+      reader is served from https://appassets.androidplatform.net, and hosts
+      with hotlink protection refuse that Referer (RedGIFs' media CDN answers
+      403, so its videos couldn't play on Android).
+    -->
+    <meta name="referrer" content="no-referrer" />
     <title>OpenRelay</title>
   </head>
   <body>
