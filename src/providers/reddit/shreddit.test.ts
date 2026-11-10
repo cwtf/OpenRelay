@@ -69,6 +69,9 @@ test("allows only Reddit's own post and comment pages", () => {
   const cursor = "Y29tbWVudHRyZWU6ODEzMDFiOWQsOjoxOmQxOnQxXzE5czBkOGM4eGhqZHY=";
   // "More comments" is a POST with its cursor, and nothing else is.
   assert.ok(allowedHtmlPath(more, cursor));
+  // Signed in, Reddit puts "r/" before the community.
+  assert.ok(allowedHtmlPath(more.replace("/AskReddit/", "/r/AskReddit/"), cursor));
+  assert.equal(allowedHtmlPath(more.replace("/AskReddit/", "/u/AskReddit/"), cursor), false);
   assert.equal(allowedHtmlPath(more), false);
   assert.equal(allowedHtmlPath(postPagePath("t3_abc"), cursor), false);
   assert.equal(allowedHtmlPath(more, "bad cursor&x=1"), false);

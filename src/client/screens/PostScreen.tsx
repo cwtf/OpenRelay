@@ -64,6 +64,7 @@ import {
   decodeEntities,
   savableInBody,
 } from "../lib/markdown";
+import { withMoreReplies } from "../lib/replies";
 import { isAnimated, type SavedMedia } from "../lib/savedMedia";
 import { isSaved, toggleSaved } from "../lib/savedMediaStore";
 import {
@@ -456,12 +457,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
         captureLayout();
         setTree((current) =>
           current
-            ? mapTree(current, parent.id, (node) => ({
-                ...node,
-                replies: result.replies,
-                moreReplies:
-                  result.more && result.replies.length > node.replies.length,
-              }))
+            ? mapTree(current, parent.id, (node) => withMoreReplies(node, result))
             : current,
         );
       } catch (err) {

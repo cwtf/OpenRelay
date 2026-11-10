@@ -360,7 +360,8 @@ async function htmlComments(
 }
 /**
  * A comment's replies from the "more replies" piece its page left; the rest
- * of a long list follows the last piece.
+ * of a long list follows the last piece. Reddit sends only the replies after
+ * those already shown, so the screen keeps those.
  */
 async function htmlReplies(post: string, comment: string): Promise<RepliesResponse> {
   let next = moreReplies.get(comment);
@@ -374,6 +375,9 @@ async function htmlReplies(post: string, comment: string): Promise<RepliesRespon
     replies.push(...page.comments);
     next = page.more.find((more) => !more.parent);
   }
+  // The next tap carries on from here, not from the first piece again.
+  if (next) moreReplies.set(comment, next);
+  else moreReplies.delete(comment);
   return { replies: hideYoungScores(replies, await hide), more: Boolean(next) };
 }
 const memo = new Map<string, { at: number; value: Promise<PostResponse> }>();

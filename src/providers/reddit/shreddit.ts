@@ -64,7 +64,8 @@ const PAGE_ROUTES = [
   /^\/svc\/shreddit\/comments\/r\/\w+\/t3_[a-z0-9]+\/?$/i,
   /^\/(?:r\/\w+\/)?comments\/[a-z0-9]+\/(?:[\w-]+\/?)?$/i,
 ];
-const MORE_COMMENTS = /^\/svc\/shreddit\/more-comments\/\w+\/t3_[a-z0-9]+\/?$/i;
+/** Signed out it's `/more-comments/<sub>/…`; signed in, `/more-comments/r/<sub>/…`. */
+const MORE_COMMENTS = /^\/svc\/shreddit\/more-comments\/(?:r\/)?\w+\/t3_[a-z0-9]+\/?$/i;
 
 /**
  * A same-origin page of posts or comments: read with GET, or, with a cursor,
