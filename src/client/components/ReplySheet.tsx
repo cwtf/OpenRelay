@@ -18,7 +18,17 @@ import { fetchAbout, runAction, site, uploadImage } from "../lib/api";
 import { Markdown } from "../lib/markdown";
 import { applyFormat, type FormatKind } from "../lib/markdownFormat";
 import { promptLogin, toast } from "../lib/platform";
-import { linkTo, redditTakes, reuseOf, savedKey, withLinks, type SavedMedia } from "../lib/savedMedia";
+import { mediaAccess } from "../lib/offline";
+import {
+  linkTo,
+  redditTakes,
+  reuploads,
+  reuseOf,
+  savedFile,
+  savedKey,
+  withLinks,
+  type SavedMedia,
+} from "../lib/savedMedia";
 import { forgetSaved, useSavedMedia } from "../lib/savedMediaStore";
 import { readJson, writeJson } from "../lib/storage";
 import { Icon, type IconName } from "./Icon";
@@ -200,8 +210,12 @@ export const ReplySheet = ({
     return null;
   };
 
-  /** Uploads a picked image file and inserts it. */
-  const upload = (file: Promise<File>, at: readonly [number, number]) => {
+  /**
+   * Uploads a picked image file and inserts it. A saved image uploaded again
+   * passes its `link`, which goes in instead if the upload fails, and is
+   * sent instead if Reddit refuses the upload's ID.
+   */
+  const upload = (file: Promise<File>, at: readonly [number, number], link?: string) => {
     setUploading(true);
     file
       .then(async (picked) => {
@@ -211,11 +225,15 @@ export const ReplySheet = ({
         const url = URL.createObjectURL(picked);
         uploadUrls.current.push(url);
         setUploads((current) => ({ ...current, [ref]: { url, width: 0, height: 0 } }));
+        if (link) setLinks((current) => ({ ...current, [ref]: link }));
         insert(markdown, at);
       })
-      .catch((error: unknown) =>
-        toast(error instanceof Error ? error.message : `${site.name} could not take the image.`),
-      )
+      .catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : `${site.name} could not take the image.`;
+        if (!link) return toast(reason);
+        insert(link, at);
+        toast(`Added as a link: ${reason}`);
+      })
       .finally(() => setUploading(false));
   };
 
@@ -228,11 +246,28 @@ export const ReplySheet = ({
     upload(Promise.resolve(file), cursor());
   };
 
-  /** A saved GIF or image, inserted as Markdown (see `reuseOf`). */
+  /**
+   * A saved GIF or image: on Reddit, an image from Reddit's image hosts is
+   * fetched and uploaded again as the viewer's own (`reuploads`); anything
+   * else goes in as Markdown (see `reuseOf`).
+   */
   const reuse = (item: SavedMedia) => {
     if (uploading) return;
     const at = cursor();
     setShowSaved(false);
+    if (reuseSite === "Reddit" && canAttach && reuploads(item, allowed)) {
+      // Asked for in the click: the extension may ask for the image hosts.
+      const access = mediaAccess();
+      upload(
+        access.then(async (fetcher) => {
+          if (!fetcher) throw new Error("OpenRelay can't fetch images from Reddit here.");
+          return savedFile(await fetcher.fetch(item.url));
+        }),
+        at,
+        linkTo(item),
+      );
+      return;
+    }
     const way = reuseOf(item, reuseSite, allowed);
     const { ref } = way;
     if (ref) {

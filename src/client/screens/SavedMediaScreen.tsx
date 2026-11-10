@@ -42,9 +42,11 @@ const kindOf = (item: SavedMedia): string => (isAnimated(item) ? "GIF" : "Image"
 /** What a reply on this site does with the item, for its sheet. */
 const reuseNote = (item: SavedMedia): string => {
   if (site.name === "Lemmy") return "Lemmy replies show it inline.";
+  if (item.giphy)
+    return "Reddit replies show it inline where the community takes Giphy GIFs in comments, and link to it elsewhere.";
   return redditTakes(item)
-    ? "Reddit replies show it inline where the community takes Giphy GIFs in comments, and link to it elsewhere."
-    : "Reddit replies don't offer it: for now they take only Giphy GIFs.";
+    ? `Reddit replies upload it again as yours where the community takes ${isAnimated(item) ? "GIFs" : "images"} in comments, and link to it elsewhere.`
+    : "Reddit replies don't offer it: they take only Giphy GIFs and images from Reddit's own hosts.";
 };
 
 /** A Giphy GIF shows only with Load GIFs from Giphy on, as in the composer. */

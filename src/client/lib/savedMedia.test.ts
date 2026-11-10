@@ -7,6 +7,8 @@ import {
   giphyGif,
   isAnimated,
   redditTakes,
+  reuploads,
+  savedFile,
   savableOn,
   savedSource,
   parseSavedMedia,
@@ -174,26 +176,48 @@ test("allowedIn follows the subreddit's allowed comment media", () => {
   assert.equal(allowedIn(still, []), false);
 });
 
-test("reuseOf: only Giphy GIFs on Reddit, by ID; any image URL on Lemmy", () => {
+test("reuseOf: Giphy GIFs by ID and Reddit's images uploaded again on Reddit; any image URL on Lemmy", () => {
   const gif = image("https://i.giphy.com/media/g1/giphy.gif", { giphy: "g1" });
   const still = image("https://i.redd.it/a.png");
   const named = image("https://preview.redd.it/2daurffwhezh1.jpeg?width=1674", { asset: "2daurffwhezh1" });
+  const animated = image("https://preview.redd.it/b.gif?format=gif", { mp4: "https://preview.redd.it/b.gif?format=mp4" });
+  const external = image("https://external-preview.redd.it/c.jpeg?auto=webp");
   const lemmy = image("https://lemmy.world/pictrs/image/abc.jpeg");
   const imgur = image("https://i.imgur.com/c.png");
+  const lookalike = image("https://i.redd.it.evil.example/a.png");
+  const plain = image("http://i.redd.it/a.png");
   assert.deepEqual(reuseOf(gif, "Reddit"), { markdown: "![gif](giphy|g1)", ref: "giphy|g1" });
   assert.deepEqual(reuseOf(gif, "Reddit", ["giphy"]), { markdown: "![gif](giphy|g1)", ref: "giphy|g1" });
   // Linked where the subreddit doesn't take Giphy GIFs in comments.
   assert.deepEqual(reuseOf(gif, "Reddit", ["static", "animated"]), { markdown: "[GIF](https://i.giphy.com/media/g1/giphy.gif)" });
-  // Reddit replies offer no saved image for now: Reddit shows another account's only as a link.
-  for (const item of [still, named, lemmy, imgur]) assert.equal(redditTakes(item), false);
-  assert.equal(redditTakes(gif), true);
-  // Nor does Reddit offer to save them; Lemmy does.
-  assert.equal(savableOn(still, "Reddit"), false);
+  // Reddit's own images are offered and uploaded again (Reddit shows another
+  // account's only as a link); images hosted elsewhere aren't offered.
+  for (const item of [gif, still, named, animated, external]) assert.equal(redditTakes(item), true, item.url);
+  for (const item of [lemmy, imgur, lookalike, plain]) assert.equal(redditTakes(item), false, item.url);
+  for (const item of [still, named, animated, external]) assert.equal(reuploads(item), true, item.url);
+  assert.equal(reuploads(gif), false);
+  // Where the subreddit doesn't take that kind in comments, it's a link.
+  assert.equal(reuploads(still, ["animated"]), false);
+  assert.equal(reuploads(animated, ["static"]), false);
+  assert.equal(reuploads(animated, ["animated"]), true);
+  assert.deepEqual(reuseOf(still, "Reddit", ["animated"]), { markdown: "[Image](https://i.redd.it/a.png)" });
+  // Reddit offers to save them; Lemmy saves anything.
+  assert.equal(savableOn(still, "Reddit"), true);
   assert.equal(savableOn(gif, "Reddit"), true);
+  assert.equal(savableOn(imgur, "Reddit"), false);
   assert.equal(savableOn(still, "Lemmy"), true);
   // Lemmy shows them all.
   for (const item of [gif, still, named, lemmy, imgur])
     assert.deepEqual(reuseOf(item, "Lemmy", []), { markdown: `![](${item.url})` });
+});
+
+test("savedFile turns a fetched image into a file to upload, and refuses anything else", async () => {
+  const file = savedFile({ type: "image/png", data: btoa("\x89PNG\r\n") });
+  assert.equal(file.type, "image/png");
+  assert.equal(file.name, "image");
+  assert.deepEqual([...new Uint8Array(await file.arrayBuffer())], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+  for (const type of ["video/mp4", "image/svg+xml", "text/html"])
+    assert.throws(() => savedFile({ type, data: "" }), /can't take/);
 });
 
 test("withLinks swaps only the saved items' IDs for their links", () => {

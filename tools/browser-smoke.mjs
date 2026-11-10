@@ -538,14 +538,14 @@ try {
   const posted = app.locator('[data-cid="t1_mine2"]');
   await posted.locator('img[src="https://i.redd.it/upload.png"]').waitFor();
   await app.locator(".sheet").waitFor({ state: "detached" });
-  // On Reddit only its Giphy GIF can be saved from the viewer, to reuse in
-  // replies: Reddit shows another account's image only as a link.
+  // On Reddit its Giphy GIF and the images on Reddit's own hosts can be
+  // saved from the viewer, to reuse in replies.
   const linkedUpload = "https://preview.redd.it/linkedasset1.png?width=216&format=png";
   const linkedOther = "https://i.redd.it/not-an-upload.png";
   for (const src of [linkedOther, linkedUpload, "https://i.redd.it/upload.png"]) {
     await posted.locator(`img[src="${src}"]`).click();
     await app.locator(".viewer").waitFor();
-    assert.equal(await app.getByRole("button", { name: "Save for replies" }).count(), 0, src);
+    assert.equal(await app.getByRole("button", { name: "Save for replies" }).count(), 1, src);
     await page.keyboard.press("Escape");
     await app.locator(".viewer").waitFor({ state: "detached" });
   }
@@ -564,12 +564,31 @@ try {
     { asset: "linkedasset1", url: linkedUpload, width: 0, height: 0, savedAt: 2 },
     { url: linkedOther, width: 0, height: 0, savedAt: 1 },
   ]);
-  // Reddit replies offer only the Giphy GIF for now.
+  // Reddit replies offer the Giphy GIF and the Reddit-hosted images.
   box = await openReply();
   await app.getByRole("button", { name: "Saved GIFs and images" }).click();
   await app.locator(".reply-saved-pick").first().waitFor();
-  assert.equal(await app.locator(".reply-saved-pick").count(), 1);
+  assert.equal(await app.locator(".reply-saved-pick").count(), 4);
   await app.getByRole("button", { name: "Saved GIFs and images" }).click();
+  // A saved Reddit image is fetched from Reddit's image host and uploaded
+  // again as the viewer's own, like a picked file. Chrome's prompt for the
+  // image hosts can't be answered here; grant them as chrome://extensions does.
+  const extensions = await context.newPage();
+  await extensions.goto("chrome://extensions/");
+  await extensions.evaluate(async (id) => {
+    for (const host of ["i.redd.it", "preview.redd.it", "external-preview.redd.it", "a.thumbs.redditmedia.com", "b.thumbs.redditmedia.com"])
+      await chrome.developerPrivate.addHostPermission(id, `https://${host}/*`);
+  }, new URL(app.url()).host);
+  await extensions.close();
+  await box.fill("");
+  const uploadsBefore = uploads.length;
+  await app.getByRole("button", { name: "Saved GIFs and images" }).click();
+  await app.locator(".reply-saved-pick").last().click(); // The oldest: linkedOther.
+  await app.waitForFunction(() => document.querySelector("textarea")?.value.includes("![img]("));
+  assert.equal(await box.inputValue(), "![img](fixtureasset1)\n\n");
+  assert.equal(writes.at(-1).path, "/svc/shreddit/graphql");
+  assert.equal(uploads.length, uploadsBefore + 1);
+  assert.ok(uploads.at(-1).body.includes('filename="image.png"'));
   // The Giphy GIF r/test doesn't take goes in as a link.
   await box.fill("");
   await app.getByRole("button", { name: "Saved GIFs and images" }).click();
@@ -1094,7 +1113,7 @@ try {
   assert.equal(await page.locator("body").evaluate((el) => el.inert), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via new Reddit's GraphQL lease to S3 and sent as richtext, only a comment's GIF saveable from the viewer on Reddit and offered again, as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
+    "PASS: real extension injection, loaded-page feed, comments, dual-pane full screen, Relay-style collapse, replying (format bar, preview, drafts, an attached image uploaded via new Reddit's GraphQL lease to S3 and sent as richtext, a comment's GIF and Reddit-hosted images saveable from the viewer on Reddit, a saved Reddit image fetched and uploaded again, the GIF as a link where the community takes no Giphy GIFs), the saved list from the composer's Manage (filter, move to front, remove several, edit as text), Relay swipe actions on posts and comments (drag, swipe back, trackpad, vote, save, parent), settings persistence with third-party storage blocked, navigation drawer, Relay community header (subscribe, sidebar, mods, wiki), subreddit search sheet with subscriptions and live Reddit search, profile and community pictures, post search via Reddit's HTML search when JSON search is refused, direct links, native toggle, excluded routes, signed-out reading from new Reddit's HTML pieces when JSON is blocked (post, comments, deferred comments, replies by cursor, the feed's next page), blocked-JSON fallback; no page errors.",
   );
 } finally {
   await context.close();

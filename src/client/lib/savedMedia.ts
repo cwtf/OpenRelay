@@ -3,6 +3,8 @@
  * Only references are kept (a Giphy ID, or the image's URL), never the files.
  */
 import type { InlineMedia, PostMedia } from "../../shared/api";
+import type { MediaFile } from "../../hosts/types";
+import { IMAGE_TYPES } from "../../providers/upload.ts";
 import { decodeEntities, parseBlocks, type Block } from "./markdownParser.ts";
 
 export type SavedMedia = {
@@ -319,12 +321,49 @@ export const linkTo = (item: SavedMedia): string =>
   `[${isAnimated(item) ? "GIF" : "Image"}](${item.url})`;
 
 /**
- * Whether a Reddit reply offers the item: only a Giphy GIF, for now. Reddit
- * seems to show another account's image only as a link, whether it's
- * referred to by its ID, linked by its URL or uploaded again (from a
- * browser session Reddit refuses the upload), so saved images are left out.
+ * Reddit's image hosts the reader's host can fetch from (as `MEDIA_HOSTS`
+ * in `hosts/types.ts`), so an image there can be uploaded again.
  */
-export const redditTakes = (item: SavedMedia): boolean => !!item.giphy;
+const REDDIT_IMAGE_HOST = /^(?:i|preview|external-preview)\.redd\.it$/i;
+
+/** Whether the item is an image on Reddit's image hosts. */
+export const redditHosted = (item: SavedMedia): boolean => {
+  if (item.giphy) return false;
+  try {
+    const url = new URL(item.url);
+    return url.protocol === "https:" && REDDIT_IMAGE_HOST.test(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Whether a Reddit reply offers the item: a Giphy GIF, by its ID, or an
+ * image on Reddit's image hosts, uploaded again as the viewer's own (Reddit
+ * shows another account's image only as a link, whether it's referred to by
+ * its ID or linked by its URL). Images hosted elsewhere are left out.
+ */
+export const redditTakes = (item: SavedMedia): boolean => !!item.giphy || redditHosted(item);
+
+/**
+ * Whether a Reddit reply uploads the saved item again, rather than inserting
+ * it by ID or as a link: a Reddit-hosted image where the community takes
+ * its kind (still or animated) in comments.
+ */
+export const reuploads = (item: SavedMedia, allowed?: readonly string[]): boolean =>
+  redditHosted(item) && allowedIn(item, allowed);
+
+/**
+ * A saved image as fetched by the host, as a file to upload again. Only the
+ * types a reply takes; Reddit may answer a GIF's URL with a video.
+ */
+export function savedFile(file: MediaFile): File {
+  if (!IMAGE_TYPES.includes(file.type)) throw new Error("Reddit sent this one in a form a reply can't take.");
+  const binary = atob(file.data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], "image", { type: file.type });
+}
 
 /**
  * Whether `site`'s pages offer to save the item: on Reddit only what a
@@ -334,10 +373,11 @@ export const savableOn = (item: SavedMedia, site: string): boolean =>
   site !== "Reddit" || redditTakes(item);
 
 /**
- * How a saved item goes into a reply, as Markdown. Reddit takes a Giphy GIF
- * back by its ID where the community takes Giphy GIFs in comments, and as a
- * link elsewhere (`allowed`, see `allowedIn`); it offers nothing else (see
- * `redditTakes`). Lemmy shows any image URL.
+ * How a saved item goes into a reply, as Markdown, without uploading it.
+ * Reddit takes a Giphy GIF back by its ID where the community takes Giphy
+ * GIFs in comments, and as a link elsewhere (`allowed`, see `allowedIn`); a
+ * Reddit-hosted image is uploaded again where it can be (`reuploads`) and
+ * is a link otherwise. Lemmy shows any image URL.
  */
 export function reuseOf(
   item: SavedMedia,

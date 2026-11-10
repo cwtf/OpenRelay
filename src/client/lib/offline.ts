@@ -70,8 +70,12 @@ async function fetchVideo(page: PostResponse, max: number): Promise<OfflineFile 
   };
 }
 
-/** The host's image fetcher, asked for now (in the click), or null. */
-const mediaAccess = (): Promise<MediaFetcher | null> => {
+/**
+ * The host's fetcher for Reddit's image hosts, asked for now (in the click:
+ * the extension may ask for permission), or null. Also used by the reply
+ * composer to upload a saved Reddit image again.
+ */
+export const mediaAccess = (): Promise<MediaFetcher | null> => {
   try {
     const request = readerHost().media?.();
     if (!request) return Promise.resolve(null);
