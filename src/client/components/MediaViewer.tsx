@@ -11,7 +11,12 @@ import type { ViewerItem, ViewerSpec } from '../app/nav';
 import type Hls from 'hls.js';
 import { providerOf } from '../../providers/hosts';
 import { site } from '../lib/api';
-import { videoPlaybackUrl } from '../lib/video';
+import {
+  redditDashUrl,
+  redditVideoId,
+  streamsFromPlaylist,
+  videoPlaybackUrl,
+} from '../lib/video';
 import {
   copyText,
   downloadImage,
@@ -381,64 +386,101 @@ const VideoPage = ({
     if (!video) return;
     let disposed = false;
     let player: Hls | undefined;
-    const hls = item.hls ? videoPlaybackUrl(item.hls) : undefined;
-    let streaming = Boolean(hls && (!item.isGif || !item.mp4));
+    let rebuiltUrl: string | undefined;
+    // Reddit's stream first; for a v.redd.it video, one rebuilt from its
+    // unsigned DASH playlist next (Reddit refuses a stream whose signature it
+    // doesn't accept, and a post read from its page HTML has no MP4); then
+    // the MP4 file, which has no sound.
+    let phase: 'signed' | 'rebuilt' | 'waiting' | 'file' = 'waiting';
+    let triedStream = false;
+    const id = redditVideoId(item.hls ?? item.mp4);
+    let tracks: Promise<{ master: string; mp4: string } | null> | undefined;
+    const fromDash = () =>
+      (tracks ??= id
+        ? fetch(redditDashUrl(id))
+            .then((response) => (response.ok ? response.text() : ''))
+            .then((mpd) => streamsFromPlaylist(mpd, `https://v.redd.it/${id}/`))
+            .catch(() => null)
+        : Promise.resolve(null));
     setFailed(false);
     setAudioUnavailable(false);
 
     const play = () => {
       if (isActive.current) void video.play().catch(() => undefined);
     };
-    const useMp4 = () => {
-      if (disposed) return;
-      const lostStream = streaming;
-      streaming = false;
+    const useMp4 = async () => {
+      phase = 'waiting';
       player?.destroy();
       player = undefined;
-      if (!item.mp4) {
+      const mp4 = item.mp4 ?? (await fromDash())?.mp4;
+      if (disposed) return;
+      if (!mp4) {
         setFailed(true);
         return;
       }
-      setAudioUnavailable(lostStream);
-      video.src = videoPlaybackUrl(item.mp4);
+      setAudioUnavailable(triedStream);
+      phase = 'file';
+      video.src = videoPlaybackUrl(mp4);
       video.load();
       play();
     };
-    const onError = () => {
-      if (streaming) useMp4();
-      else setFailed(true);
-    };
-    video.addEventListener('error', onError);
-
-    const start = async () => {
-      if (!streaming) return useMp4();
+    const stream = async (url: string, kind: 'signed' | 'rebuilt') => {
+      phase = kind;
+      triedStream = true;
       try {
         // The full build includes separate audio renditions. Load it only
         // for streamed video; keep all executable code in the app bundle.
         const { default: Hls } = await import('hls.js');
-        if (disposed) return;
+        if (disposed || phase !== kind) return;
         if (Hls.isSupported()) {
           // Avoid a blob worker, which the extension and desktop CSP block.
           player = new Hls({ enableWorker: false });
           player.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal && streaming) useMp4();
+            if (data.fatal && phase === kind) void streamFailed();
           });
           player.attachMedia(video);
-          player.loadSource(hls!);
+          player.loadSource(url);
           play();
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = hls!;
+        } else if (
+          kind === 'signed' &&
+          video.canPlayType('application/vnd.apple.mpegurl')
+        ) {
+          video.src = url;
           play();
-        } else useMp4();
+        } else void useMp4();
       } catch {
-        if (!disposed) useMp4();
+        if (!disposed && phase === kind) void streamFailed();
       }
     };
-    void start();
+    const streamFailed = async () => {
+      const failedKind = phase;
+      if (disposed || (failedKind !== 'signed' && failedKind !== 'rebuilt'))
+        return;
+      phase = 'waiting';
+      player?.destroy();
+      player = undefined;
+      const rebuilt = failedKind === 'signed' ? await fromDash() : null;
+      if (disposed) return;
+      if (!rebuilt) return void useMp4();
+      rebuiltUrl = URL.createObjectURL(
+        new Blob([rebuilt.master], { type: 'application/vnd.apple.mpegurl' }),
+      );
+      void stream(rebuiltUrl, 'rebuilt');
+    };
+    const onError = () => {
+      if (phase === 'file') setFailed(true);
+      else void streamFailed();
+    };
+    video.addEventListener('error', onError);
+
+    const signed = item.hls ? videoPlaybackUrl(item.hls) : undefined;
+    if (signed && (!item.isGif || !item.mp4)) void stream(signed, 'signed');
+    else void useMp4();
     return () => {
       disposed = true;
       video.removeEventListener('error', onError);
       player?.destroy();
+      if (rebuiltUrl) URL.revokeObjectURL(rebuiltUrl);
       video.pause();
       video.removeAttribute('src');
       video.load();
