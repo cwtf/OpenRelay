@@ -117,8 +117,11 @@ const target = (url: string) =>
   safeUrl(url).replace(/[()\s]/g, (c) => (c === "(" ? "%28" : c === ")" ? "%29" : "%20"));
 /** A video posted in a comment, which Reddit's Markdown only links to. */
 const VIDEO_LINK = /^https:\/\/(?:www\.)?reddit\.com\/link\/[a-z0-9]+\/video\/[a-z0-9]+\/player\/?$/i;
-/** Its stream, as Reddit's player loads it. */
-const VIDEO_STREAM = /^https:\/\/v\.redd\.it\/([a-z0-9]+)\//i;
+/**
+ * Its stream, as Reddit's player loads it: `v.redd.it/<id>/…`, or from the
+ * post's folder, `v.redd.it/link/<post>/asset/<id>/…`.
+ */
+const VIDEO_STREAM = /^https:\/\/v\.redd\.it\/(?:link\/[a-z0-9]+\/asset\/)?([a-z0-9]+)\//i;
 /** The post whose body `htmlToMarkdown` is reading, which a video's link names. */
 let reading = "";
 /** `**text**`, keeping the spaces around it outside the markers. */

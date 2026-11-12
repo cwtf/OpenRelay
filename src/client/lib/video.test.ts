@@ -58,6 +58,11 @@ test('a silent or older DASH playlist, and unusable ones', () => {
 test('the v.redd.it video a URL belongs to', () => {
   assert.equal(redditVideoId(base + 'HLSPlaylist.m3u8?a=1'), 't7qb6f1uez0i1');
   assert.equal(redditVideoId('https://cf.v.redd.it/abc123/CMAF_720.mp4'), 'abc123');
+  // A comment's video, from its post's folder (as `media_metadata` gives it).
+  assert.equal(
+    redditVideoId('https://v.redd.it/link/1xsonjh/asset/we7w064fts0i1/HLSPlaylist.m3u8?f=sd&a=1'),
+    'we7w064fts0i1',
+  );
   assert.equal(redditVideoId('https://v.redd.it.example.com/abc/x.m3u8'), null);
   assert.equal(redditVideoId('blob:chrome-extension://reader/offline-video'), null);
   assert.equal(redditVideoId(undefined), null);

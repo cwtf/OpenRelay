@@ -144,6 +144,10 @@ test("keeps pictures and videos posted in comments", () => {
     }, h("img", { src: "https://preview.redd.it/p.png", alt: "media poster" }))),
     h("p", {}, h("a", { href: "https://reddit.com/link/xyz/video/vid456/player" },
       h("img", { src: "https://preview.redd.it/q.png", alt: "media poster" }))),
+    // Served from the post's folder, as `media_metadata`'s hlsUrl is.
+    h("figure", {}, h("shreddit-player-2", {
+      src: "https://v.redd.it/link/xyz/asset/vid789/HLSPlaylist.m3u8?f=sd&a=1",
+    })),
   );
   assert.equal(
     htmlToMarkdown(body, "t3_xyz"),
@@ -152,6 +156,7 @@ test("keeps pictures and videos posted in comments", () => {
       `![Comment Image](${picture})`,
       "https://www.reddit.com/link/xyz/video/vid123/player",
       "https://reddit.com/link/xyz/video/vid456/player",
+      "https://www.reddit.com/link/xyz/video/vid789/player",
     ].join("\n\n"),
   );
   // Without the post, the video's poster stands in for it.

@@ -8,7 +8,11 @@
 export const videoPlaybackUrl = (url: string): string =>
   url.replace(/^https:\/\/cf\.v\.redd\.it\//i, 'https://v.redd.it/');
 
-const REDDIT_VIDEO = /^https:\/\/(?:cf\.)?v\.redd\.it\/([a-z0-9]+)\//i;
+// A video posted in a comment is served from its post's folder too
+// (`v.redd.it/link/<post>/asset/<id>/`); its own (`v.redd.it/<id>/`) has the
+// same files.
+const REDDIT_VIDEO =
+  /^https:\/\/(?:cf\.)?v\.redd\.it\/(?:link\/[a-z0-9]+\/asset\/)?([a-z0-9]+)\//i;
 
 /** The v.redd.it video a stream or file URL belongs to. */
 export const redditVideoId = (url: string | undefined): string | null =>
