@@ -34,7 +34,7 @@ import { SaveBodyMediaSheet } from "./SavedMediaScreen";
 import { Sheet, SheetItem } from "../components/Sheet";
 import { VoteLinks } from "../components/VoteLinks";
 import { useAbout } from "./FeedScreen";
-import { currentAccount } from "../lib/account";
+import { currentAccount, useAccount } from "../lib/account";
 import { fetchContext, fetchPost, fetchReplies, entryRoute, site } from "../lib/api";
 import {
   ARCHIVE_NAME,
@@ -86,11 +86,18 @@ type Row =
     }
   | { type: "more"; parent: CommentNode; depth: number };
 
-type NavMode = "top" | "op" | "search";
+type NavMode = "top" | "op" | "me" | "search";
 
-const NAV_MODES: { mode: NavMode; label: string; icon: IconName }[] = [
-  { mode: "top", label: "Threads", icon: "comment" },
-  { mode: "op", label: "OP", icon: "op" },
+const NAV_MODES: {
+  mode: NavMode;
+  label: string;
+  icon: IconName;
+  description: string;
+  none: string;
+}[] = [
+  { mode: "top", label: "Threads", icon: "comment", description: "top-level threads", none: "No comments to jump to" },
+  { mode: "op", label: "OP", icon: "op", description: "OP comments", none: "No comments from OP" },
+  { mode: "me", label: "You", icon: "user", description: "your comments", none: "No comments from you here" },
 ];
 
 const SORT_ICONS: Record<CommentSort, IconName> = {
@@ -246,7 +253,12 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const [notice, setNotice] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(() => new Set());
-  const [navMode, setNavMode] = useState<NavMode>("top");
+  const [chosenNavMode, setNavMode] = useState<NavMode>("top");
+  const account = useAccount();
+  const me = account?.name.toLowerCase();
+  // "You" needs a signed-in account; signed out, the pill cycles Threads/OP.
+  const navMode: NavMode = chosenNavMode === "me" && !me ? "top" : chosenNavMode;
+  const navEntry = NAV_MODES.find((entry) => entry.mode === navMode) ?? NAV_MODES[0]!;
   const [search, setSearch] = useState<{ open: boolean; query: string }>({
     open: false,
     query: "",
@@ -557,9 +569,11 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
     return rows.flatMap((row) => {
       if (row.type !== "comment") return [];
       if (navMode === "op") return row.node.isSubmitter ? [row.node.id] : [];
+      if (navMode === "me")
+        return row.node.author.toLowerCase() === me ? [row.node.id] : [];
       return row.depth === 0 ? [row.node.id] : [];
     });
-  }, [rows, navMode, matches, search.open, highlight]);
+  }, [rows, navMode, me, matches, search.open, highlight]);
 
   const scrollToComment = useCallback((id: string) => {
     const scroller = scrollerRef.current;
@@ -618,9 +632,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
   const jump = (direction: 1 | -1) => {
     const scroller = scrollerRef.current;
     if (!scroller || !targets.length) {
-      toast(
-        navMode === "op" ? "No comments from OP" : "No comments to jump to",
-      );
+      toast(navEntry.none);
       return;
     }
     if (search.open && highlight) {
@@ -1455,7 +1467,7 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
       </div>
 
       <div
-        className={`comment-nav${tree && tree.length ? "" : " is-hidden"}`}
+        className={`comment-nav${tree && tree.length ? "" : " is-hidden"}${navMode === "me" && !(search.open && highlight) ? " is-self" : ""}`}
         role="toolbar"
         aria-label="Comment navigation"
       >
@@ -1477,24 +1489,18 @@ export const PostScreen = ({ postId, seed, focus }: PostScreenProps) => {
             type="button"
             className="mode"
             data-ripple
-            aria-label={`Navigation mode: ${navMode === "op" ? "OP comments" : "top-level threads"}. Tap to switch`}
+            aria-label={`Navigation mode: ${navEntry.description}. Tap to switch`}
             onClick={() => {
-              const next = navMode === "top" ? "op" : "top";
+              const next: NavMode =
+                navMode === "top" ? "op" : navMode === "op" && me ? "me" : "top";
               setNavMode(next);
               toast(
-                next === "op"
-                  ? "Jumping between OP comments"
-                  : "Jumping between threads",
+                `Jumping between ${next === "top" ? "threads" : NAV_MODES.find((entry) => entry.mode === next)!.description}`,
               );
             }}
           >
-            <Icon
-              name={
-                NAV_MODES.find((entry) => entry.mode === navMode)?.icon ??
-                "comment"
-              }
-            />
-            {NAV_MODES.find((entry) => entry.mode === navMode)?.label}
+            <Icon name={navEntry.icon} />
+            {navEntry.label}
           </button>
         )}
         <button

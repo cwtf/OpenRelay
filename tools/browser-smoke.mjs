@@ -493,6 +493,23 @@ try {
   assert.equal(await box.inputValue(), "");
   await app.getByRole("button", { name: "Cancel" }).click();
   await app.locator(".sheet").waitFor({ state: "detached" }); // Fully closed.
+  // Your own name has its own colour; others' don't.
+  assert.ok(await mine.locator(".comment-head .author.is-self").count());
+  assert.equal(await app.locator('[data-cid="t1_c1"] .comment-head .author.is-self').count(), 0);
+  // The navigation pill cycles Threads → OP → You; You jumps to your comments.
+  const navMode = app.locator(".comment-nav .mode");
+  assert.equal((await navMode.textContent())?.trim(), "Threads");
+  await navMode.click();
+  assert.equal((await navMode.textContent())?.trim(), "OP");
+  await navMode.click();
+  assert.equal((await navMode.textContent())?.trim(), "You");
+  await app.locator(".toast", { hasText: "Jumping between your comments" }).waitFor();
+  await app.locator(".comment-nav.is-self").waitFor();
+  await app.getByRole("toolbar", { name: "Comment navigation" }).getByRole("button", { name: "Next" }).click();
+  await app.locator('.comment.is-focus[data-cid="t1_mine1"]').waitFor();
+  await navMode.click();
+  assert.equal((await navMode.textContent())?.trim(), "Threads");
+  assert.equal(await app.locator(".comment-nav.is-self").count(), 0);
   // An attached image is uploaded at once, as new Reddit's composer does it:
   // a lease from its GraphQL endpoint with the CSRF cookie's token, then the
   // file to Reddit's S3 bucket, with no cookies and under a generic name.

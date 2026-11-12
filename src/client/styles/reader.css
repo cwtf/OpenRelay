@@ -1870,6 +1870,11 @@ button.post-action {
   color: var(--admin);
 }
 
+/* Your own comments: after OP/mod/admin, so your colour wins (the badges stay). */
+.comment-head .author.is-self {
+  color: var(--self);
+}
+
 .comment-head .badge {
   font-size: 10px;
   font-weight: 800;
@@ -2030,6 +2035,11 @@ button.post-action {
   transition:
     transform 240ms var(--ease-emph),
     opacity 200ms;
+}
+
+.comment-nav.is-self {
+  background: var(--self-soft);
+  color: var(--on-self-soft);
 }
 
 .comment-nav.is-hidden {

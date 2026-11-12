@@ -110,6 +110,7 @@ export const CommentRow = memo(
       node.isSubmitter ? 'is-op' : '',
       node.distinguished === 'moderator' ? 'is-mod' : '',
       node.distinguished === 'admin' ? 'is-admin' : '',
+      own ? 'is-self' : '',
     ]
       .filter(Boolean)
       .join(' ');

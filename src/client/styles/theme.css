@@ -40,6 +40,11 @@
   --collapsed-badge: #2d9567;
   --mod: #1c8a4e;
   --admin: #c62f3b;
+  /* The signed-in account's own name in threads, and the nav pill's "You"
+   * mode: magenta, apart from OP blue, mod green, admin red and the votes. */
+  --self: #b5368c;
+  --self-soft: #f8dcee;
+  --on-self-soft: #6e1452;
   --nsfw: #c8264f;
   --warn: #9a6a00;
   --link: #1d63c4;
@@ -127,6 +132,9 @@
   --collapsed-badge: #19885b;
   --mod: #62d394;
   --admin: #ff7a83;
+  --self: #f283c9;
+  --self-soft: #46213a;
+  --on-self-soft: #ffd3ee;
   --nsfw: #ff6b8d;
   --warn: #f0c060;
   --link: #8ab8ff;
