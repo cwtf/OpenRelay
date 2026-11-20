@@ -10,6 +10,7 @@ import { fetchModerators, fetchWiki, runAction, site } from "../lib/api";
 import { compact } from "../lib/format";
 import { copyText, toast } from "../lib/platform";
 import { refreshSubscriptions } from "../lib/subscriptions";
+import { isMuted, muteCommunity, unmuteCommunity } from "../lib/muted";
 import { RulesSheet } from "../screens/AccountScreens";
 import { Avatar, updateAbout, useAbout } from "../screens/FeedScreen";
 import { Icon } from "./Icon";
@@ -136,6 +137,27 @@ export const CommunityMenu = ({ sub, onClosed }: { sub: string; onClosed: () => 
                 () => void copyText(site.communityUrl(sub), "Link copied"),
               )}
             />
+            {isMuted(sub) ? (
+              <SheetItem
+                icon="eye"
+                label="Unmute"
+                hint="Show its posts in other feeds again"
+                onClick={run(() => {
+                  unmuteCommunity(sub);
+                  toast(`Unmuted ${site.communityLabel(sub)}`);
+                })}
+              />
+            ) : (
+              <SheetItem
+                icon="block"
+                label="Mute"
+                hint="Leave its posts out of other feeds, only on this device"
+                onClick={run(() => {
+                  muteCommunity(sub);
+                  toast(`Muted ${site.communityLabel(sub)}`);
+                })}
+              />
+            )}
           </>
         );
       }}

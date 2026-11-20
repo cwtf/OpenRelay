@@ -56,6 +56,9 @@ export type Nav = {
   openSavedMedia: () => void;
   /** That list as plain text, one item per line. */
   openSavedMediaText: () => void;
+  /** Muted communities (Settings), and the list as plain text. */
+  openMuted: () => void;
+  openMutedText: () => void;
   openSubmit: (sub?: string, kind?: "self" | "link") => void;
   openCompose: (draft?: { to?: string; subject?: string }) => void;
   back: () => void;

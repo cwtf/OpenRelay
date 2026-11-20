@@ -38,6 +38,8 @@ import {
 } from "../lib/itemAnimator";
 import { isDeleted, useDeletedVersion } from "../lib/deleted";
 import { hiddenPosts, readPosts } from "../lib/storage";
+import { mutedCommunities, useMutedCommunities } from "../lib/muted";
+import { hidesPost, muteKey, mutedSet } from "../lib/muteState";
 import { setOfflineFeed } from "../lib/offline";
 import {
   feedHidesRead,
@@ -215,6 +217,10 @@ export const FeedScreen = ({
       : { posts: [], after: null, status: "loading" };
   });
   const [hidden, setHidden] = useState(() => new Set(hiddenPosts.values()));
+  // Muted communities as this feed applies them: a newly muted one's cards
+  // fade out first (see below), so this follows the stored list a little late.
+  const mutedNames = useMutedCommunities();
+  const [muted, setMuted] = useState(() => mutedSet(mutedCommunities()));
   // Read posts are hidden only if they were read when they arrived (or were
   // marked read from their menu): a post you open stays where it is until the
   // feed reloads, so the list doesn't jump under you.
@@ -402,10 +408,11 @@ export const FeedScreen = ({
       state.posts.filter(
         (post) =>
           !hidden.has(post.id) &&
+          !hidesPost(muted, post.subreddit, sub) &&
           !(hiding && readOnArrival.has(post.id) && readPosts.has(post.id)),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.posts, hidden, hiding, readOnArrival, hidingVersion],
+    [state.posts, hidden, muted, sub, hiding, readOnArrival, hidingVersion],
   );
   const readHiddenCount = useMemo(
     () =>
@@ -413,12 +420,13 @@ export const FeedScreen = ({
         ? state.posts.filter(
             (post) =>
               !hidden.has(post.id) &&
+              !hidesPost(muted, post.subreddit, sub) &&
               readOnArrival.has(post.id) &&
               readPosts.has(post.id),
           ).length
         : 0,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.posts, hidden, hideRead, readOnArrival, readVersion],
+    [state.posts, hidden, muted, sub, hideRead, readOnArrival, readVersion],
   );
   const visibleIds = useMemo(
     () => visible.map((post) => post.id).join(" "),
@@ -481,6 +489,34 @@ export const FeedScreen = ({
         (current) => new Set([...current, ...readAmong(postsRef.current)]),
       );
   }, [hideRead]);
+
+  // Muting a community (from a post's menu, or anywhere else): its cards fade
+  // out together before the list closes up. Unmuting brings them straight back.
+  useEffect(() => {
+    const next = mutedSet(mutedNames);
+    if (next.size === muted.size && [...next].every((key) => muted.has(key)))
+      return;
+    const list = feedRef.current;
+    const leaving = postsRef.current
+      .filter(
+        (post) =>
+          hidesPost(next, post.subreddit, sub) &&
+          !muted.has(muteKey(post.subreddit)),
+      )
+      .map((post) =>
+        list?.querySelector<HTMLElement>(
+          `[data-anim-key="${CSS.escape(post.id)}"]`,
+        ),
+      )
+      .filter((card): card is HTMLElement => Boolean(card));
+    if (!leaving.length) return setMuted(next);
+    void fadeOutRows(leaving).then(() => {
+      if (list) pendingLayout.current = snapshotLayout(list);
+      setMuted(next);
+    });
+    // Only a change to the stored list should run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mutedNames]);
 
   const toggleHideRead = () => {
     setFeedHidesRead(sub, !hideRead, prefs.hideRead);

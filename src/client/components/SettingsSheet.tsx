@@ -9,6 +9,8 @@ import { AccountsSheet } from "./AccountSheets";
 import { sortLabel } from "../lib/format";
 import { toast } from "../lib/platform";
 import { readPosts } from "../lib/storage";
+import { site } from "../lib/api";
+import { useMutedCommunities } from "../lib/muted";
 import { Icon, type IconName } from "./Icon";
 import { Sheet, SheetItem } from "./Sheet";
 
@@ -177,6 +179,7 @@ const ClearReadSheet = ({ onClosed }: { onClosed: () => void }) => (
 
 export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
   const { prefs, update } = usePrefs();
+  const muted = useMutedCommunities();
   useSyncExternalStore(readPosts.subscribe, readPosts.getVersion);
   const readCount = readPosts.size;
   const set =
@@ -275,6 +278,27 @@ export const SettingsSheet = ({ onClosed }: { onClosed: () => void }) => {
                 {readCount
                   ? `${readCount.toLocaleString()} ${readCount === 1 ? "post" : "posts"} on this device`
                   : "No read posts on this device"}
+              </span>
+            </span>
+          </button>
+
+          <div className="sheet-section">Muted communities</div>
+          <button
+            type="button"
+            className="sheet-item"
+            data-ripple
+            onClick={() => {
+              close();
+              nav.openMuted();
+            }}
+          >
+            <Icon name="block" />
+            <span className="label">
+              Muted communities
+              <span className="hint">
+                {muted.length
+                  ? `${muted.length} on ${site.name}, left out of feeds other than their own`
+                  : `None on ${site.name}. Add some here, or mute one from a post's or community's menu`}
               </span>
             </span>
           </button>

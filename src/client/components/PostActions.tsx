@@ -12,6 +12,7 @@ import {
 import { currentAccount } from "../lib/account";
 import { hiddenPosts, readPosts } from "../lib/storage";
 import { markRead, markUnread } from "../lib/readState";
+import { muteCommunity } from "../lib/muted";
 import {
   offlineAvailable,
   offlineMode,
@@ -120,6 +121,17 @@ export const openPostActions = (
                   hiddenPosts.add(post.id);
                   onHide(post.id);
                   toast("Post hidden");
+                })}
+              />
+            ) : null}
+            {post.subreddit.toLowerCase() !== nav.current.toLowerCase() ? (
+              <SheetItem
+                icon="block"
+                label={`Mute ${site.communityLabel(post.subreddit)}`}
+                hint="Leave its posts out of other feeds, only on this device"
+                onClick={run(() => {
+                  muteCommunity(post.subreddit);
+                  toast(`Muted ${site.communityLabel(post.subreddit)}`);
                 })}
               />
             ) : null}

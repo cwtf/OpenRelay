@@ -2913,6 +2913,12 @@ button.post-action {
   border-radius: 18px;
 }
 
+/* Settings → Muted communities: the add field above the list. */
+.drawer-search.user-go.muted-add {
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
 /* Section header: hairline divider, 48px label row, collapse chevron. */
 .sub-header {
   display: flex;

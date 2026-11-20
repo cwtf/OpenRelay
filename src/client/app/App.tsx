@@ -40,6 +40,7 @@ import { SearchScreen } from "../screens/SearchScreen";
 import { OfflineScreen } from "../screens/OfflineScreen";
 import { SavedMediaScreen } from "../screens/SavedMediaScreen";
 import { SavedTextScreen } from "../screens/SavedTextScreen";
+import { MutedScreen, MutedTextScreen } from "../screens/MutedScreen";
 import {
   ComposeScreen,
   FriendsScreen,
@@ -87,6 +88,8 @@ type Route =
   | { kind: "offline" }
   | { kind: "saved-media" }
   | { kind: "saved-media-text" }
+  | { kind: "muted" }
+  | { kind: "muted-text" }
   | { kind: "submit"; sub?: string | undefined; post?: "self" | "link" | undefined }
   | { kind: "compose"; to?: string | undefined; subject?: string | undefined };
 type Entry = {
@@ -614,6 +617,8 @@ const Reader = ({ init }: { init: InitResponse }) => {
       openOffline: () => push({ kind: "offline" }),
       openSavedMedia: () => push({ kind: "saved-media" }),
       openSavedMediaText: () => push({ kind: "saved-media-text" }),
+      openMuted: () => push({ kind: "muted" }),
+      openMutedText: () => push({ kind: "muted-text" }),
       openSubmit: (sub, post) => push({ kind: "submit", sub, post }),
       openCompose: (draft) => push({ kind: "compose", ...draft }),
       openMedia: (spec) => setViewer(spec),
@@ -741,6 +746,10 @@ const Reader = ({ init }: { init: InitResponse }) => {
                 <SavedMediaScreen />
               ) : entry.route.kind === "saved-media-text" ? (
                 <SavedTextScreen />
+              ) : entry.route.kind === "muted" ? (
+                <MutedScreen />
+              ) : entry.route.kind === "muted-text" ? (
+                <MutedTextScreen />
               ) : entry.route.kind === "submit" ? (
                 <SubmitScreen sub={entry.route.sub} kind={entry.route.post} />
               ) : (
